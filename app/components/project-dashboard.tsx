@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
+import { ProjectForm, type ProjectFormState } from "./project-form";
 
 type ProjectSummary = {
   id: string;
@@ -12,14 +13,6 @@ type ProjectSummary = {
   updatedAt?: string;
   completedDepartments: number;
   totalDepartments: number;
-};
-
-type ProjectFormState = {
-  companyName: string;
-  objective: string;
-  contactName: string;
-  industry: string;
-  website: string;
 };
 
 const initialForm: ProjectFormState = {
@@ -176,48 +169,13 @@ export function ProjectDashboard() {
         )}
 
         <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 className="text-xl font-semibold">Start a new project</h2>
-            <form className="mt-4 space-y-4" onSubmit={handleCreate}>
-              <input
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
-                placeholder="Company name"
-                value={form.companyName}
-                onChange={(event) => setForm({ ...form, companyName: event.target.value })}
-                required
-              />
-              <input
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
-                placeholder="Objective"
-                value={form.objective}
-                onChange={(event) => setForm({ ...form, objective: event.target.value })}
-                required
-              />
-              <div className="grid gap-4 md:grid-cols-2">
-                <input
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
-                  placeholder="Contact name"
-                  value={form.contactName}
-                  onChange={(event) => setForm({ ...form, contactName: event.target.value })}
-                />
-                <input
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
-                  placeholder="Industry"
-                  value={form.industry}
-                  onChange={(event) => setForm({ ...form, industry: event.target.value })}
-                />
-              </div>
-              <input
-                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
-                placeholder="Website"
-                value={form.website}
-                onChange={(event) => setForm({ ...form, website: event.target.value })}
-              />
-              <button className="rounded-xl bg-cyan-500 px-4 py-2 font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-60" disabled={isCreating || Boolean(runningProjectId)}>
-                {isCreating ? "Creating..." : "Create project"}
-              </button>
-            </form>
-          </div>
+          <ProjectForm
+            form={form}
+            isCreating={isCreating}
+            isRunInProgress={Boolean(runningProjectId)}
+            onSubmit={handleCreate}
+            onFieldChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+          />
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 className="text-xl font-semibold">Workflow overview</h2>
