@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Consulting OS turns structured AI research into client-ready strategy deliverables.">
+  <title>Consulting OS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">C</div>
+        <div><strong>Consulting OS</strong><span>Strategy workspace</span></div>
+      </div>
+
+      <button class="primary small" id="newProjectButton">+ New engagement</button>
+
+      <nav class="nav">
+        <button class="nav-item active" data-page="projects"><span>◫</span>Projects</button>
+        <button class="nav-item" data-page="method"><span>◇</span>Method</button>
+      </nav>
+
+      <div class="sidebar-section">
+        <div class="eyebrow">Recent projects</div>
+        <div id="projectList" class="project-list"></div>
+      </div>
+
+      <div class="provider-card" id="providerCard">
+        <span class="status-dot"></span>
+        <div><strong>Checking xAI</strong><small>Server connection</small></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">AI consulting workspace</p>
+          <h1 id="pageTitle">Projects</h1>
+        </div>
+        <div class="top-actions">
+          <button class="ghost" id="refreshButton">Refresh</button>
+          <button class="primary" id="headerNewButton">New engagement</button>
+        </div>
+      </header>
+
+      <section id="emptyState" class="hero panel">
+        <div class="hero-copy">
+          <span class="pill">Structured intelligence → client-ready strategy</span>
+          <h2>Build the engagement.<br>Not another AI transcript.</h2>
+          <p>Research, strategy, brand, website, and publishing departments work from one evidence-aware project record.</p>
+          <button class="primary" id="heroNewButton">Create first engagement</button>
+        </div>
+        <div class="workflow-card">
+          <div class="workflow-node done"><span>01</span><b>Research</b><small>Sourced market context</small></div>
+          <div class="workflow-node"><span>02</span><b>Strategy</b><small>Positioning and roadmap</small></div>
+          <div class="workflow-node"><span>03</span><b>Publishing</b><small>Client deliverables</small></div>
+        </div>
+      </section>
+
+      <section id="projectView" class="hidden">
+        <div class="project-heading">
+          <div>
+            <div class="row gap"><span class="status-badge" id="projectStatus">Draft</span><span class="muted" id="projectId"></span></div>
+            <h2 id="projectName">Project</h2>
+            <p id="projectObjective"></p>
+          </div>
+          <div class="row gap wrap">
+            <a class="ghost button-link disabled" id="downloadReport">Download report</a>
+            <a class="ghost button-link" id="downloadJson">Project JSON</a>
+            <button class="primary" id="runProjectButton">Run departments</button>
+          </div>
+        </div>
+
+        <div class="metric-grid">
+          <article class="metric-card"><span>Completion</span><strong id="completionMetric">0%</strong><div class="progress"><i id="completionBar"></i></div></article>
+          <article class="metric-card"><span>Departments</span><strong id="departmentMetric">0 / 7</strong><small>Validated outputs</small></article>
+          <article class="metric-card"><span>Evidence</span><strong id="sourceMetric">0</strong><small>Registered sources</small></article>
+          <article class="metric-card"><span>Review items</span><strong id="unknownMetric">0</strong><small>Open unknowns</small></article>
+        </div>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="overview">Overview</button>
+          <button class="tab" data-tab="client">Client report</button>
+          <button class="tab" data-tab="workspace">Workspace</button>
+          <button class="tab" data-tab="evidence">Evidence</button>
+        </div>
+
+        <section class="tab-panel" id="tab-overview">
+          <div class="content-grid">
+            <article class="panel">
+              <div class="section-heading"><div><p class="eyebrow">Engagement pipeline</p><h3>Department progress</h3></div><span class="muted" id="lastUpdated"></span></div>
+              <div id="departmentTimeline" class="timeline"></div>
+            </article>
+            <article class="panel">
+              <p class="eyebrow">Quality control</p>
+              <h3>Evidence guardrails</h3>
+              <div class="guardrail"><span>✓</span><div><b>Facts require sources</b><small>Unsupported claims cannot validate as facts.</small></div></div>
+              <div class="guardrail"><span>✓</span><div><b>Assumptions stay labeled</b><small>Publishing preserves uncertainty and caveats.</small></div></div>
+              <div class="guardrail"><span>✓</span><div><b>Repair before publish</b><small>Invalid department JSON gets one repair pass.</small></div></div>
+              <div id="warningBox" class="warning hidden"></div>
+            </article>
+          </div>
+        </section>
+
+        <section class="tab-panel hidden" id="tab-client">
+          <div class="report-toolbar">
+            <div><p class="eyebrow">Client-facing output</p><h3>Executive report</h3></div>
+            <button class="ghost" id="printButton">Print / Save PDF</button>
+          </div>
+          <article class="report-paper" id="reportContent"><div class="report-placeholder">Run the project to generate the executive report.</div></article>
+        </section>
+
+        <section class="tab-panel hidden" id="tab-workspace">
+          <div id="workspaceAccordion" class="accordion"></div>
+        </section>
+
+        <section class="tab-panel hidden" id="tab-evidence">
+          <article class="panel">
+            <div class="section-heading"><div><p class="eyebrow">Source register</p><h3>Evidence used by the project</h3></div></div>
+            <div id="sourceTable"></div>
+          </article>
+          <article class="panel top-space">
+            <p class="eyebrow">Open questions</p>
+            <h3>Items requiring validation</h3>
+            <div id="unknownList"></div>
+          </article>
+        </section>
+      </section>
+
+      <section id="methodView" class="hidden">
+        <article class="panel method-panel">
+          <p class="eyebrow">System architecture</p>
+          <h2>One project record. Seven specialist departments.</h2>
+          <p>Each department writes validated JSON into the project. The publishing department receives the complete record and produces a unified client deliverable.</p>
+          <div class="method-grid" id="methodGrid"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="projectDialog">
+    <form method="dialog" id="projectForm">
+      <div class="dialog-header"><div><p class="eyebrow">New engagement</p><h2>Create project</h2></div><button class="icon-button" value="cancel" type="button" id="closeDialog">×</button></div>
+      <div class="form-grid">
+        <label>Company name<input required id="companyName" placeholder="Roaring Pines Motor Club"></label>
+        <label>Industry<input id="industry" placeholder="Private automotive club"></label>
+        <label>Geography<input id="geography" placeholder="Florida"></label>
+        <label>Primary audience<input id="audience" placeholder="Owners, investors, executive team"></label>
+      </div>
+      <label>Engagement objective<textarea required id="objective" rows="3" placeholder="Create a sourced market, growth, brand, and website strategy."></textarea></label>
+      <label>Verified client context<textarea id="context" rows="4" placeholder="Only include facts supplied by the client or confirmed by a source."></textarea></label>
+      <label>Constraints<textarea id="constraints" rows="2" placeholder="Budget, timing, prohibited claims, required deliverables..."></textarea></label>
+      <div class="dialog-actions"><button class="ghost" value="cancel" type="button" id="cancelDialog">Cancel</button><button class="primary" type="submit">Create and open</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
