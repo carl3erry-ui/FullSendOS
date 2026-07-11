@@ -1,111 +1,56 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title FullSendOS
+title FullSendOS Next.js
 
 echo ========================================
-echo            FULLSENDOS STARTUP
+echo        FULLSENDOS - NEXT.JS STARTUP
 echo ========================================
 echo.
 
 where node >nul 2>nul
 if errorlevel 1 (
-    echo ERROR: Node.js is not installed.
-    echo Install Node.js, restart the computer, and try again.
-    pause
-    exit /b 1
+  echo ERROR: Node.js is not installed.
+  echo Install Node.js 20.9 or newer and try again.
+  pause
+  exit /b 1
 )
 
-where npm >nul 2>nul
-if errorlevel 1 (
-    echo ERROR: npm is not installed or is not available.
-    pause
-    exit /b 1
+if not exist ".env.local" (
+  copy /y ".env.example" ".env.local" >nul
+  echo Created .env.local.
+  echo Add your xAI key, save, and close Notepad.
+  notepad ".env.local"
+  pause
 )
 
-echo Node version:
-node --version
-
-echo npm version:
-npm --version
-echo.
-
-REM Fix common Windows environment filename mistakes.
-if not exist ".env" (
-    if exist ".env.env" (
-        ren ".env.env" ".env"
-        echo Renamed .env.env to .env.
-    )
-)
-
-if not exist ".env" (
-    if not exist ".env.example" (
-        echo ERROR: .env.example is missing.
-        echo Create a file named .env.example in this folder.
-        pause
-        exit /b 1
-    )
-
-    copy /y ".env.example" ".env" >nul
-    echo Created the private .env file.
-    echo.
-    echo Add your xAI API key in Notepad.
-    echo Save and close Notepad when finished.
-    echo.
-    notepad ".env"
-    pause
-)
-
-echo Installing and verifying dependencies...
+echo Installing dependencies...
 call npm install
-
 if errorlevel 1 (
-    echo.
-    echo ERROR: npm install failed.
-    echo Review the error shown above.
-    pause
-    exit /b 1
+  echo ERROR: npm install failed.
+  pause
+  exit /b 1
 )
 
-echo.
-echo Running application test...
-call npm test
-
+echo Building FullSendOS...
+call npm run build
 if errorlevel 1 (
-    echo.
-    echo ERROR: The application test failed.
-    echo Review the error shown above.
-    pause
-    exit /b 1
+  echo ERROR: The Next.js build failed. Review the message above.
+  pause
+  exit /b 1
 )
 
-echo.
 echo Starting FullSendOS...
-echo Keep this window open while using the application.
-echo.
-
-start "FullSendOS Server" cmd /k "cd /d "%~dp0" && npm start"
+start "FullSendOS Server" cmd /k "cd /d ""%~dp0"" && npm start"
 
 echo Waiting for the server...
-
-powershell -NoProfile -Command ^
-  "$ready = $false; for ($i = 0; $i -lt 30; $i++) { try { $r = Invoke-WebRequest -Uri 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ready = $true; break } } catch {}; Start-Sleep -Seconds 1 }; if (-not $ready) { exit 1 }"
-
+powershell -NoProfile -Command "$ok=$false; 1..40 | %% { try { $r=Invoke-WebRequest 'http://localhost:3000/api/health' -UseBasicParsing -TimeoutSec 2; if($r.StatusCode -eq 200){$ok=$true;break} } catch {}; Start-Sleep 1 }; if(-not $ok){exit 1}"
 if errorlevel 1 (
-    echo.
-    echo ERROR: The server did not respond at:
-    echo http://localhost:3000/api/health
-    echo.
-    echo Review the separate FullSendOS Server window.
-    pause
-    exit /b 1
+  echo ERROR: Server did not become ready. Check the FullSendOS Server window.
+  pause
+  exit /b 1
 )
 
-echo.
-echo FullSendOS is ready.
 start "" "http://localhost:3000"
-
-echo.
-echo Your browser should now be open.
-echo Keep the FullSendOS Server window open.
+echo FullSendOS is running. Keep the server window open.
 pause

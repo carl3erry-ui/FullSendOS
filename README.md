@@ -1,91 +1,52 @@
-# Consulting OS — Full-Send Foundation
+# FullSendOS — Next.js Migration
 
-A local, runnable consulting workflow that converts a client brief into structured, validated department outputs and a unified client report.
+A full-stack AI consulting workspace built with Next.js App Router, React, TypeScript, Zod, and xAI.
 
-## Included
+## What changed
 
-- Master project schema and evidence registry
-- Seven strict department contracts
-- Dependency-aware xAI orchestrator
-- Automated JSON repair pass
-- Local project persistence
-- Project dashboard and navigation
-- Live department progress by polling
-- Internal workspace vs. client report views
-- Source and unknowns review screens
-- Markdown, JSON, print/PDF export paths
-- Server-side API key handling
+- Replaced Express + static HTML with Next.js App Router
+- Replaced browser log output with a project dashboard
+- Preserved the master project schema and seven department contracts
+- Preserved validation, JSON repair, evidence controls, local persistence, and downloads
+- Moved API endpoints into Next.js Route Handlers
+- Added project detail pages, live polling, internal/client views, and export center
 
-## Requirements
+## Run on Windows
 
-- Node.js 20 or later
-- An xAI API key with access to the configured model
+1. Double-click `start-windows.bat`.
+2. Add your xAI key to `.env.local` when Notepad opens.
+3. Keep the server window open.
 
-## Start the application
-
-### Windows PowerShell
+Or manually:
 
 ```powershell
-Expand-Archive consulting-os-full-send.zip
-cd consulting-os-full-send
-Copy-Item .env.example .env
-notepad .env
+Copy-Item .env.example .env.local
+notepad .env.local
 npm install
-npm start
+npm run dev
 ```
 
-### macOS or Linux
+Open `http://localhost:3000`.
 
-```bash
-unzip consulting-os-full-send.zip
-cd consulting-os-full-send
-cp .env.example .env
-# Edit .env and add the API key
-npm install
-npm start
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-## Environment file
+## Environment
 
 ```env
-XAI_API_KEY=your_real_xai_key
+XAI_API_KEY=your_real_key
 XAI_MODEL=grok-4.5
-PORT=3000
 ```
 
-The API key stays on the server and is never stored in the browser.
+Never commit `.env.local`.
 
-## Product workflow
+## Current architecture
 
-1. Create an engagement.
-2. Enter only verified client context.
-3. Run the departments.
-4. Watch outputs validate and populate the project record.
-5. Review open unknowns and evidence.
-6. Open the client report.
-7. Download Markdown, save a PDF through Print, or export the project JSON.
+- `src/app` — pages and server Route Handlers
+- `src/components` — dashboard and project workspace
+- `src/lib/contracts` — strict department output contracts
+- `src/lib/schemas` — project and evidence schemas
+- `src/lib/orchestrator` — sequential AI workflow and repair pass
+- `src/lib/storage` — local JSON project persistence
+- `data/projects` — generated locally and ignored by Git
 
-## Architecture
+## Important production note
 
-```text
-Client brief
-  -> Master project object
-  -> Research
-  -> Competitors
-  -> Customers
-  -> Strategy
-  -> Brand
-  -> Website
-  -> Publishing
-  -> Client report + one-page summary + deck outline
-```
-
-## Important limitation
-
-This build does not yet perform independent live web research. The model receives the project evidence register and must label unsupported information as an estimate, assumption, recommendation, or unknown. The next production layer should add a controlled research connector and capture retrieved sources before analysis.
+The local file store is appropriate for this stage. Before deploying to a serverless production host, move project persistence and background jobs to a durable database and job queue.
