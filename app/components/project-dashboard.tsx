@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
 
 type ProjectSummary = {
@@ -156,24 +157,12 @@ export function ProjectDashboard() {
           </p>
         </header>
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Projects</p>
-            <p className="mt-2 text-3xl font-semibold">{projects.length}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Running</p>
-            <p className="mt-2 text-3xl font-semibold text-amber-300">{runningCount}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Needs Review</p>
-            <p className="mt-2 text-3xl font-semibold text-orange-300">{reviewCount}</p>
-          </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Avg Progress</p>
-            <p className="mt-2 text-3xl font-semibold text-cyan-300">{avgProgress}%</p>
-          </div>
-        </section>
+        <DashboardSummary
+          projectCount={projects.length}
+          runningCount={runningCount}
+          reviewCount={reviewCount}
+          avgProgress={avgProgress}
+        />
 
         {(error || notice) && (
           <section className="space-y-3">
