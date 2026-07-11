@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProjectCard } from "./project-card";
 
 type ProjectSummary = {
   id: string;
@@ -31,21 +32,50 @@ const initialForm: ProjectFormState = {
 export function ProjectDashboard() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [form, setForm] = useState(initialForm);
-  const [busy, setBusy] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [runningProjectId, setRunningProjectId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function loadProjects() {
-    const response = await fetch("/api/projects");
+    setError(null);
+    const response = await fetch("/api/projects", { cache: "no-store" });
     const data = await response.json();
-    setProjects(data);
+
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to load projects.");
+    }
+
+    setProjects(Array.isArray(data) ? data : []);
   }
 
   useEffect(() => {
-    loadProjects();
+    let active = true;
+
+    (async () => {
+      try {
+        await loadProjects();
+      } catch (loadError) {
+        if (!active) return;
+        const message = loadError instanceof Error ? loadError.message : "Unable to load projects.";
+        setError(message);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
+    setIsCreating(true);
+    setError(null);
+    setNotice(null);
+
     try {
       const response = await fetch("/api/projects", {
         method: "POST",
@@ -58,28 +88,62 @@ export function ProjectDashboard() {
           objective: form.objective,
         }),
       });
+
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Unable to create project");
+        throw new Error(data?.error || "Unable to create project.");
       }
+
       setForm(initialForm);
       await loadProjects();
+      setNotice(`Project ${data?.id || "created"} successfully.`);
+    } catch (createError) {
+      const message = createError instanceof Error ? createError.message : "Unable to create project.";
+      setError(message);
     } finally {
-      setBusy(false);
+      setIsCreating(false);
     }
   }
 
   async function handleRun(projectId: string) {
-    setBusy(true);
+    setRunningProjectId(projectId);
+    setError(null);
+    setNotice(null);
+
     try {
       const response = await fetch(`/api/projects/${projectId}/run`, { method: "POST" });
+
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error("Workflow could not be started");
+        throw new Error(data?.error || "Workflow could not be started.");
       }
+
       await loadProjects();
+      setNotice(`Workflow started for ${projectId}.`);
+    } catch (runError) {
+      const message = runError instanceof Error ? runError.message : "Workflow could not be started.";
+      setError(message);
     } finally {
-      setBusy(false);
+      setRunningProjectId(null);
     }
   }
+
+  const completeCount = projects.filter((project) => project.status === "complete").length;
+  const runningCount = projects.filter((project) => project.status === "running").length;
+  const reviewCount = projects.filter((project) => project.status === "needs-review").length;
+  const avgProgress =
+    projects.length > 0
+      ? Math.round(
+          projects.reduce((sum, project) => {
+            if (!project.totalDepartments) return sum;
+            return sum + project.completedDepartments / project.totalDepartments;
+          }, 0) /
+            projects.length *
+            100,
+        )
+      : 0;
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
@@ -91,6 +155,36 @@ export function ProjectDashboard() {
             Create a new engagement, launch the workflow, and monitor where the system stands across research, strategy, and publishing.
           </p>
         </header>
+
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Projects</p>
+            <p className="mt-2 text-3xl font-semibold">{projects.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Running</p>
+            <p className="mt-2 text-3xl font-semibold text-amber-300">{runningCount}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Needs Review</p>
+            <p className="mt-2 text-3xl font-semibold text-orange-300">{reviewCount}</p>
+          </div>
+          <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Avg Progress</p>
+            <p className="mt-2 text-3xl font-semibold text-cyan-300">{avgProgress}%</p>
+          </div>
+        </section>
+
+        {(error || notice) && (
+          <section className="space-y-3">
+            {error && (
+              <div className="rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{error}</div>
+            )}
+            {notice && (
+              <div className="rounded-xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{notice}</div>
+            )}
+          </section>
+        )}
 
         <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -130,8 +224,8 @@ export function ProjectDashboard() {
                 value={form.website}
                 onChange={(event) => setForm({ ...form, website: event.target.value })}
               />
-              <button className="rounded-xl bg-cyan-500 px-4 py-2 font-medium text-slate-950" disabled={busy}>
-                {busy ? "Working..." : "Create project"}
+              <button className="rounded-xl bg-cyan-500 px-4 py-2 font-medium text-slate-950 disabled:cursor-not-allowed disabled:opacity-60" disabled={isCreating || Boolean(runningProjectId)}>
+                {isCreating ? "Creating..." : "Create project"}
               </button>
             </form>
           </div>
@@ -150,32 +244,47 @@ export function ProjectDashboard() {
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Recent projects</h2>
-            <span className="text-sm text-slate-400">{projects.length} tracked</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-slate-400">{projects.length} tracked</span>
+              <button
+                className="rounded-lg border border-slate-700 px-3 py-1 text-sm text-slate-300 hover:border-slate-500"
+                onClick={async () => {
+                  setIsLoading(true);
+                  try {
+                    await loadProjects();
+                  } catch (refreshError) {
+                    const message = refreshError instanceof Error ? refreshError.message : "Unable to refresh projects.";
+                    setError(message);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                disabled={isLoading}
+              >
+                {isLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
           <div className="mt-6 space-y-3">
+            {isLoading && <p className="text-sm text-slate-400">Loading projects...</p>}
             {projects.map((project) => (
-              <div key={project.id} className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h3 className="font-medium">{project.companyName}</h3>
-                    <p className="text-sm text-slate-400">{project.objective || "No objective provided yet"}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
-                      {project.status}
-                    </span>
-                    <button className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300" onClick={() => handleRun(project.id)} disabled={busy}>
-                      Run
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
-                  <span>{project.completedDepartments}/{project.totalDepartments} departments</span>
-                  <span>{project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Just created"}</span>
-                </div>
-              </div>
+              <ProjectCard
+                key={project.id}
+                id={project.id}
+                companyName={project.companyName}
+                objective={project.objective}
+                status={project.status}
+                updatedAt={project.updatedAt}
+                completedDepartments={project.completedDepartments}
+                totalDepartments={project.totalDepartments}
+                runningProjectId={runningProjectId}
+                onRun={handleRun}
+              />
             ))}
-            {!projects.length && <p className="text-sm text-slate-400">No projects yet. Create your first engagement to begin.</p>}
+            {!isLoading && !projects.length && <p className="text-sm text-slate-400">No projects yet. Create your first engagement to begin.</p>}
+            {!isLoading && completeCount > 0 && (
+              <p className="text-sm text-emerald-300">{completeCount} project{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
+            )}
           </div>
         </section>
       </div>
