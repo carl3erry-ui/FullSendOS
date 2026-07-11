@@ -8,6 +8,8 @@ type ProjectCardProps = {
   totalDepartments: number;
   runningProjectId: string | null;
   onRun: (projectId: string) => void;
+  onOpen: (projectId: string) => void;
+  isSelected: boolean;
 };
 
 export function ProjectCard({
@@ -20,9 +22,11 @@ export function ProjectCard({
   totalDepartments,
   runningProjectId,
   onRun,
+  onOpen,
+  isSelected,
 }: ProjectCardProps) {
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+    <div className={`rounded-xl border p-4 ${isSelected ? "border-cyan-600 bg-slate-900/80" : "border-slate-800 bg-slate-950/70"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h3 className="font-medium">{companyName}</h3>
@@ -32,6 +36,12 @@ export function ProjectCard({
           <span className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
             {status}
           </span>
+          <button
+            className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200"
+            onClick={() => onOpen(id)}
+          >
+            Workspace
+          </button>
           <button
             className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => onRun(id)}

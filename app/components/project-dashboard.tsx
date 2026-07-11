@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
 import { ProjectForm, type ProjectFormState } from "./project-form";
+import { ProjectWorkspace } from "./project-workspace";
 
 type ProjectSummary = {
   id: string;
@@ -29,6 +30,7 @@ export function ProjectDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [runningProjectId, setRunningProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -42,6 +44,10 @@ export function ProjectDashboard() {
     }
 
     setProjects(Array.isArray(data) ? data : []);
+
+    if (!selectedProjectId && Array.isArray(data) && data.length > 0) {
+      setSelectedProjectId(data[0].id);
+    }
   }
 
   useEffect(() => {
@@ -139,6 +145,8 @@ export function ProjectDashboard() {
         )
       : 0;
 
+  const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
@@ -188,6 +196,8 @@ export function ProjectDashboard() {
           </div>
         </section>
 
+        <ProjectWorkspace project={selectedProject} runningProjectId={runningProjectId} onRun={handleRun} />
+
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Recent projects</h2>
@@ -226,6 +236,8 @@ export function ProjectDashboard() {
                 totalDepartments={project.totalDepartments}
                 runningProjectId={runningProjectId}
                 onRun={handleRun}
+                onOpen={setSelectedProjectId}
+                isSelected={project.id === selectedProjectId}
               />
             ))}
             {!isLoading && !projects.length && <p className="text-sm text-slate-400">No projects yet. Create your first engagement to begin.</p>}
