@@ -21,6 +21,7 @@ export const ProjectStatusSchema = z.enum([
 export const ProjectSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   id: z.string().min(1),
+  clientId: z.string().min(1).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   status: ProjectStatusSchema,
@@ -102,6 +103,7 @@ export function createEmptyProject(input) {
   return ProjectSchema.parse({
     schemaVersion: "1.0.0",
     id: `${slug}-${Date.now()}`,
+    clientId: input.clientId,
     createdAt: now,
     updatedAt: now,
     status: "draft",

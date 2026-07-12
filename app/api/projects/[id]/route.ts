@@ -4,6 +4,7 @@ import { loadProject } from "../../../../src/storage/projectStore.js";
 function toDetailResponse(project: Record<string, any>) {
   return {
     id: project.id,
+    clientId: project.clientId || null,
     status: project.status,
     createdAt: project.createdAt,
     updatedAt: project.updatedAt,

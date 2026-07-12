@@ -71,6 +71,7 @@ export async function listProjects() {
       const project = JSON.parse(await fs.readFile(path.join(storageDir, name), "utf8"));
       return {
         id: project.id,
+        clientId: project.clientId || null,
         companyName: project.client?.companyName || "Untitled Project",
         objective: project.brief?.objective || "",
         status: project.status,
