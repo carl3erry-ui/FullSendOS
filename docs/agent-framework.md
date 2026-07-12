@@ -179,17 +179,16 @@ Agents in this slice hold only low-risk permissions.
 
 ---
 
-## Current Limitations
+## Current Limitations (Slices 1-3)
 
-This covers foundation (Slice 1) and execution (Slice 2). The following are **not yet implemented**:
+This covers foundation (Slice 1), execution (Slice 2), and API routes (Slice 3). The following are **not yet implemented**:
 
-- API routes for agent tasks (`/api/agents/...`)
-- Approval UI and review workflow
-- Workflow integration (agents cannot yet be triggered by workflow steps)
-- Tool permission enforcement at runtime (permissions are modelled, not enforced at the tool call level)
+- Approval UI and review workflow (Slice 4)
+- Workflow integration (agents cannot yet be triggered by workflow steps) (Slice 5)
+- Tool permission enforcement at runtime (permissions are modelled, not enforced at the tool call level) (Slice 6)
 - Live usage tracking from provider responses (captured in AgentExecution but not yet extracted from NormalizedAIResponse)
 - Exact cost accounting (estimatedCost is always null — pricing data not configured)
-- Background/async task execution queue
+- Background/async task execution queue (Slice 7)
 - Task retry policy (each task runs once; rerun = new task)
 
 ---
@@ -325,11 +324,355 @@ The mock provider returns deterministic, schema-conformant outputs for all three
 
 ---
 
+## REST API Routes (Slice 3)
+
+Agent tasks can be created, listed, and executed through REST API endpoints.
+
+### GET /api/agents
+
+Returns public-safe metadata for all enabled agents.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "orchestrator",
+      "name": "Orchestrator",
+      "description": "Plans consulting engagements...",
+      "role": "engagement-planner",
+      "version": "1.0.0",
+      "capabilities": ["engagement-planning"],
+      "allowedTools": ["read_project", "read_engagement"],
+      "defaultProvider": "mock",
+      "defaultModel": "mock-1.0",
+      "requiresApproval": false,
+      "maximumIterations": 3,
+      "timeoutMs": 30000,
+      "enabled": true,
+      "createdAt": "2025-01-01T00:00:00Z",
+      "updatedAt": "2025-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+**Security:** `systemPrompt` is never included. System prompts are internal implementation details.
+
+---
+
+### POST /api/agent-tasks
+
+Create a new agent task.
+
+**Request:**
+```json
+{
+  "agentId": "orchestrator",
+  "title": "Plan engagement",
+  "objective": "Develop consulting plan for RP Motors",
+  "projectId": "project-123",
+  "engagementId": "eng-456",
+  "instructions": "Focus on market dynamics",
+  "input": {},
+  "context": {},
+  "provider": "mock",
+  "model": "mock-1.0"
+}
+```
+
+**Required fields:** `agentId`, `title`, `objective`
+
+**Optional fields:** `projectId`, `engagementId`, `workflowRunId`, `departmentId`, `instructions`, `input`, `context`, `priority`, `provider`, `model`, `requestedBy`, `approvalStatus`
+
+**Defaults:**
+- `provider`: agent's defaultProvider
+- `model`: agent's defaultModel
+- `priority`: "medium"
+- `approvalStatus`: "pending" if agent.requiresApproval, else "not_required"
+- `status`: "queued"
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-orchestrator-1721345678",
+    "agentId": "orchestrator",
+    "title": "Plan engagement",
+    "objective": "Develop consulting plan for RP Motors",
+    "status": "queued",
+    "approvalStatus": "not_required",
+    "provider": "mock",
+    "model": "mock-1.0",
+    "createdAt": "2025-01-01T00:00:00Z",
+    "updatedAt": "2025-01-01T00:00:00Z"
+  }
+}
+```
+
+**Error Response (422 - Validation):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Agent task validation failed.",
+    "fieldErrors": [
+      { "path": "agentId", "message": "agentId is required" }
+    ]
+  }
+}
+```
+
+**Error Response (404 - Agent Not Found):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "AGENT_NOT_FOUND",
+    "message": "Agent \"unknown\" not found.",
+    "fieldErrors": []
+  }
+}
+```
+
+---
+
+### GET /api/agent-tasks
+
+List agent tasks with optional filtering.
+
+**Query Parameters:**
+- `projectId`: Filter by project
+- `engagementId`: Filter by engagement
+- `workflowRunId`: Filter by workflow run
+- `agentId`: Filter by agent
+- `status`: Filter by status (queued, running, waiting_for_approval, completed, failed, cancelled)
+
+**Example:** `GET /api/agent-tasks?agentId=orchestrator&status=queued`
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "task-orchestrator-1721345678",
+      "agentId": "orchestrator",
+      "status": "queued",
+      ...
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/agent-tasks/[id]
+
+Retrieve a specific task with executions and output.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "task": {
+      "id": "task-orchestrator-1721345678",
+      "agentId": "orchestrator",
+      "title": "Plan engagement",
+      "status": "completed",
+      "approvalStatus": "approved",
+      "output": "Strategic plan document...",
+      "structuredOutput": {
+        "tasks": [...],
+        "risks": [...]
+      }
+    },
+    "executions": [
+      {
+        "id": "exec-task-orchestrator-1721345678-1-1721345679",
+        "agentTaskId": "task-orchestrator-1721345678",
+        "status": "completed",
+        "attempt": 1,
+        "usage": { "inputTokens": 150, "outputTokens": 200 },
+        "estimatedCost": null,
+        "completedAt": "2025-01-01T00:01:00Z"
+      }
+    ],
+    "approvalStatus": "approved",
+    "evidence": [],
+    "usage": { "inputTokens": 150, "outputTokens": 200 },
+    "cost": null
+  }
+}
+```
+
+**Security:** `rawResponse` is omitted from execution records to prevent leaking provider logs or other sensitive data.
+
+**Error Response (404):**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "TASK_NOT_FOUND",
+    "message": "Agent task not found.",
+    "fieldErrors": []
+  }
+}
+```
+
+---
+
+### POST /api/agent-tasks/[id]/run
+
+Execute the task synchronously through AgentExecutor.
+
+**Request:** (empty body accepted)
+
+**Response (200 - Success):**
+```json
+{
+  "success": true,
+  "data": {
+    "task": { ... },
+    "execution": { ... },
+    "output": { "tasks": [...], "risks": [...] }
+  }
+}
+```
+
+**Error Responses:**
+
+| Error Code | HTTP Status | Meaning |
+|-----------|-----------|---------|
+| AGENT_NOT_FOUND | 404 | Agent not registered |
+| TASK_NOT_FOUND | 404 | Task not found |
+| PROVIDER_NOT_FOUND | 404 | Provider not registered |
+| PROVIDER_NOT_CONFIGURED | 503 | Provider missing (e.g., no API key) |
+| MISSING_API_KEY | 503 | xAI API key missing |
+| APPROVAL_REQUIRED | 403 | Task pending approval |
+| AGENT_DISABLED | 403 | Agent is disabled |
+| PERMISSION_DENIED | 403 | Agent lacks required permissions |
+| TASK_ALREADY_RUNNING | 409 | Duplicate execution attempt |
+| TASK_ALREADY_COMPLETED | 409 | Task already completed |
+| INVALID_TASK_INPUT | 422 | Task input failed validation |
+| OUTPUT_PARSING_FAILED | 422 | Output could not be parsed |
+| OUTPUT_VALIDATION_FAILED | 422 | Output failed schema validation |
+| PROVIDER_REQUEST_FAILED | 502 | Provider error |
+| PROVIDER_TIMEOUT | 504 | Provider timeout |
+
+---
+
+### POST /api/agent-tasks/[id]/approve
+
+Mark a task as approved.
+
+**Request:**
+```json
+{
+  "reviewerNotes": "Looks good"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-orchestrator-1721345678",
+    "approvalStatus": "approved",
+    ...
+  }
+}
+```
+
+---
+
+### POST /api/agent-tasks/[id]/reject
+
+Mark a task as rejected.
+
+**Request:**
+```json
+{
+  "reviewerNotes": "Need more detail"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-orchestrator-1721345678",
+    "approvalStatus": "rejected",
+    ...
+  }
+}
+```
+
+---
+
+### POST /api/agent-tasks/[id]/request-revision
+
+Request revision of a task.
+
+**Request:**
+```json
+{
+  "reviewerNotes": "Please revise and resubmit"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "task-orchestrator-1721345678",
+    "approvalStatus": "revision_requested",
+    ...
+  }
+}
+```
+
+---
+
+## Slice 3 API Response Format
+
+All API responses follow a consistent success/error shape:
+
+**Success:**
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message",
+    "fieldErrors": [
+      { "path": "field", "message": "Validation error" }
+    ]
+  }
+}
+```
+
+---
+
 ## Future Slices
 
 | Slice | Capability |
 |-------|-----------|
-| **Slice 3** | API routes — create, list, and retrieve agent tasks via REST (`/api/agents/tasks`) |
 | **Slice 4** | Approval UI — review and action ApprovalGate records in the dashboard |
 | **Slice 5** | Workflow integration — trigger agents from workflow department steps |
 | **Slice 6** | Tool permissions — enforce allowedTools at execution time |
