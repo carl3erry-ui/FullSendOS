@@ -1,5 +1,71 @@
 # Roadmap
 
+This roadmap derives from [PROJECT_CONTEXT](PROJECT_CONTEXT.md).
+
+If this file conflicts with [PROJECT_CONTEXT](PROJECT_CONTEXT.md), [PROJECT_CONTEXT](PROJECT_CONTEXT.md) wins.
+
+## Constitution-Derived Phases
+
+Phase 1: Alpha one engagement
+
+- Create engagement
+- Run departments
+- Generate validated work product
+- Persist engagement state
+- Review deliverables
+
+Phase 2: Client intelligence
+
+- Client memory
+- Brand and voice continuity
+- Historical research reuse
+- Cross-engagement context
+
+Phase 3: Department library
+
+- Intelligence
+- Finance
+- Marketing
+- Operations
+- Creative
+- Website
+- Legal
+
+Phase 4: Industry packs
+
+- Restaurant
+- Brewery
+- Healthcare
+- Hospitality
+- Commercial real estate
+- Construction
+- Professional services
+
+Phase 5: Team collaboration
+
+- Multi-consultant workflow
+- Approvals
+- Comments
+- Version history
+- Client portal
+
+Phase 6: Automation
+
+- Scheduled monitoring
+- Weekly executive briefings
+- Competitor tracking
+- News and review monitoring
+- Financial alerts
+
+Phase 7: Marketplace
+
+- Third-party departments
+- Industry packs
+- Templates
+- Prompt packs
+- Model packs
+- Extensions
+
 ## Sprint 2: AI Engine Foundation
 
 - Issue #5: Project Domain Model
