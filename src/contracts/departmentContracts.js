@@ -213,6 +213,27 @@ export function buildDepartmentPrompt({ department, project }) {
     contract.dependsOn.map(key => [key, project.departments[key]])
   );
 
+  const researchShapeInstruction = department === "research"
+    ? `
+RESEARCH JSON SHAPE (MUST MATCH EXACTLY)
+- summary: string
+- claims: array of { statement: string, classification: "fact"|"estimate"|"assumption"|"recommendation", confidence: number 0..1, sourceIds: string[], caveat?: string }
+- unknowns: array of { question: string, whyItMatters: string, recommendedMethod: string }
+- sourceIdsUsed: string[]
+- industryDefinition: string
+- marketContext: string[]
+- trends: array of { name: string, direction: "growing"|"stable"|"declining"|"uncertain", implication: string, sourceIds: string[] }
+- metrics: array of { name: string, value: string|number, unit?: string, period?: string, classification: "fact"|"estimate"|"assumption", confidence: number 0..1, sourceIds: string[] }
+- opportunities: string[]
+- risks: string[]
+
+STRICT TYPE RULES
+- Do not return objects where a string[] is required.
+- Do not return "unknown" for metrics.classification.
+- Do not omit unknowns.question, unknowns.whyItMatters, or unknowns.recommendedMethod.
+`
+    : "";
+
   return `You are the ${contract.role}.
 
 OBJECTIVE
@@ -226,6 +247,7 @@ NON-NEGOTIABLE RULES
 5. Keep sourceIdsUsed limited to source IDs that actually appear in the supplied project.
 6. Prefer explicit uncertainty over false precision.
 7. Produce data that is useful in a client deliverable, not internal chain-of-thought.
+${researchShapeInstruction}
 
 PROJECT
 ${JSON.stringify({

@@ -47,9 +47,15 @@ function redactForLog(value) {
 
 function parseAndValidateDepartmentOutput({ department, schema, text }) {
   const raw = parseJsonObject(text);
-  const redacted = redactForLog(raw);
-  console.log(`workflow-raw-output ${department}`, JSON.stringify(redacted).slice(0, 2000));
   const normalized = normalizeDepartmentOutput(department, raw);
+
+  if (process.env.NODE_ENV !== "production" && department === "research") {
+    const redactedRaw = redactForLog(raw);
+    const redactedNormalized = redactForLog(normalized);
+    console.log(`workflow-raw-output ${department}`, JSON.stringify(redactedRaw).slice(0, 2000));
+    console.log(`workflow-normalized-output ${department}`, JSON.stringify(redactedNormalized).slice(0, 2000));
+  }
+
   return schema.parse(normalized);
 }
 
