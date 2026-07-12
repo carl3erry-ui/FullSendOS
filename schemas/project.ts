@@ -9,19 +9,17 @@ export const ProjectStatusSchema = z.enum([
 ]);
 
 export const WorkflowStageSchema = z.enum([
-  "draft",
-  "research",
+  "intelligence",
   "strategy",
   "creative",
   "publishing",
-  "completed",
-  "failed",
 ]);
 
-export const WorkflowStepStatusSchema = z.enum(["pending", "running", "completed", "failed"]);
+export const WorkflowStepStatusSchema = z.enum(["pending", "running", "completed", "failed", "skipped"]);
 
 export const WorkflowStepSchema = z.object({
-  stage: WorkflowStageSchema,
+  id: WorkflowStageSchema,
+  label: z.string().min(1),
   status: WorkflowStepStatusSchema,
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
@@ -29,9 +27,16 @@ export const WorkflowStepSchema = z.object({
 });
 
 export const WorkflowStateSchema = z.object({
-  currentStage: WorkflowStageSchema,
-  steps: z.array(WorkflowStepSchema),
-  lastRunAt: z.string().optional(),
+  initializedAt: z.string(),
+  currentStageId: WorkflowStageSchema.optional(),
+  stages: z.array(WorkflowStepSchema).length(4),
+  stageResults: z.record(
+    z.string(),
+    z.unknown(),
+  ).refine(
+    (value) => Object.keys(value).every((key) => WorkflowStageSchema.options.includes(key as typeof WorkflowStageSchema.options[number])),
+    { message: "stageResults keys must be valid workflow stage ids" },
+  ),
 });
 
 export const ProjectSourceSchema = z.object({
@@ -96,7 +101,7 @@ export const ProjectSchema = z.object({
   deliverables: DeliverableSetSchema,
   evidence: EvidenceBundleSchema,
   departments: z.object({
-    research: DepartmentResultSchema,
+    intelligence: DepartmentResultSchema,
     strategy: DepartmentResultSchema,
     creative: DepartmentResultSchema,
     publishing: DepartmentResultSchema,

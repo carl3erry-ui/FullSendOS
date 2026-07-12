@@ -5,29 +5,29 @@ export type ProjectStatus =
   | "completed"
   | "failed";
 
-export type WorkflowStage =
-  | "draft"
-  | "research"
-  | "strategy"
-  | "creative"
-  | "publishing"
+export type WorkflowStageId = "intelligence" | "strategy" | "creative" | "publishing";
+
+export type WorkflowStageStatus =
+  | "pending"
+  | "running"
   | "completed"
-  | "failed";
+  | "failed"
+  | "skipped";
 
-export type WorkflowStepStatus = "pending" | "running" | "completed" | "failed";
-
-export type WorkflowStep = {
-  stage: WorkflowStage;
-  status: WorkflowStepStatus;
+export type WorkflowStage = {
+  id: WorkflowStageId;
+  label: string;
+  status: WorkflowStageStatus;
   startedAt?: string;
   completedAt?: string;
   error?: string;
 };
 
 export type WorkflowState = {
-  currentStage: WorkflowStage;
-  steps: WorkflowStep[];
-  lastRunAt?: string;
+  initializedAt: string;
+  currentStageId?: WorkflowStageId;
+  stages: WorkflowStage[];
+  stageResults: Partial<Record<WorkflowStageId, unknown>>;
 };
 
 export type ProjectSource = {
@@ -52,7 +52,7 @@ export type EvidenceBundle = {
 };
 
 export type DepartmentResult = {
-  status: WorkflowStepStatus;
+  status: WorkflowStageStatus;
   summary?: string;
   outputs: Record<string, unknown>;
   unknowns: string[];
@@ -92,7 +92,7 @@ export type Project = {
   deliverables: DeliverableSet;
   evidence: EvidenceBundle;
   departments: {
-    research: DepartmentResult;
+    intelligence: DepartmentResult;
     strategy: DepartmentResult;
     creative: DepartmentResult;
     publishing: DepartmentResult;
