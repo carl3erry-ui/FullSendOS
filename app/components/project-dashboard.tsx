@@ -5,6 +5,7 @@ import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
 import { ProjectForm, type ProjectFormState } from "./project-form";
 import { ProjectWorkspace } from "./project-workspace";
+import { getApiErrorMessage } from "./api-error";
 
 type ProjectSummary = {
   id: string;
@@ -92,7 +93,7 @@ export function ProjectDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Unable to create project.");
+        throw new Error(getApiErrorMessage(data, "Unable to create project."));
       }
 
       setForm(initialForm);
@@ -117,7 +118,7 @@ export function ProjectDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data?.error || "Workflow could not be started.");
+        throw new Error(getApiErrorMessage(data, "Workflow could not be started."));
       }
 
       await loadProjects();

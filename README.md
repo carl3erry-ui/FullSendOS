@@ -56,10 +56,12 @@ http://localhost:3000
 ```env
 XAI_API_KEY=your_real_xai_key
 XAI_MODEL=grok-4.5
+XAI_DEV_FALLBACK=true
 PORT=3000
 ```
 
 The API key stays on the server and is never stored in the browser.
+When `XAI_API_KEY` is missing in local development, `XAI_DEV_FALLBACK=true` enables a deterministic workflow fallback so the run interaction remains testable. In production, `XAI_API_KEY` is still required.
 
 ## Product workflow
 
