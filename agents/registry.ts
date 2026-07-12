@@ -1,3 +1,4 @@
+import type { BaseAgent } from "./base-agent";
 import type { AgentDefinition } from "./types";
 
 /**
@@ -70,3 +71,48 @@ export class AgentRegistry {
  * Call registerAllAgents() in your application entry point to populate it.
  */
 export const globalAgentRegistry = new AgentRegistry();
+
+// ---------------------------------------------------------------------------
+// AgentInstanceRegistry
+// ---------------------------------------------------------------------------
+
+/**
+ * AgentInstanceRegistry holds live agent instances keyed by definition id.
+ *
+ * The AgentExecutor uses this registry to retrieve the agent implementation
+ * for a given task without importing concrete agent classes directly.
+ */
+export class AgentInstanceRegistry {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private readonly instances = new Map<string, BaseAgent<any>>();
+
+  /** Register an agent instance. Throws if the id is already registered. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  register(agent: BaseAgent<any>): void {
+    if (this.instances.has(agent.definition.id)) {
+      throw new Error(
+        `Agent instance "${agent.definition.id}" is already registered.`,
+      );
+    }
+    this.instances.set(agent.definition.id, agent);
+  }
+
+  /** Retrieve an agent instance by id, or undefined. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  get(id: string): BaseAgent<any> | undefined {
+    return this.instances.get(id);
+  }
+
+  /** Return all registered agent instances. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  listAll(): BaseAgent<any>[] {
+    return Array.from(this.instances.values());
+  }
+
+  get size(): number {
+    return this.instances.size;
+  }
+}
+
+/** Global instance registry. */
+export const globalInstanceRegistry = new AgentInstanceRegistry();

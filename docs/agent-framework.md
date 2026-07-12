@@ -181,16 +181,147 @@ Agents in this slice hold only low-risk permissions.
 
 ## Current Limitations
 
-This is the foundation slice. The following are **not yet implemented**:
+This covers foundation (Slice 1) and execution (Slice 2). The following are **not yet implemented**:
 
-- Agent task persistence (no database or file store for tasks)
-- Agent executor service (no background queue or task runner)
 - API routes for agent tasks (`/api/agents/...`)
 - Approval UI and review workflow
 - Workflow integration (agents cannot yet be triggered by workflow steps)
-- Tool permission enforcement at runtime
-- Cost tracking and budget limits
-- Retry and timeout handling in the executor
+- Tool permission enforcement at runtime (permissions are modelled, not enforced at the tool call level)
+- Live usage tracking from provider responses (captured in AgentExecution but not yet extracted from NormalizedAIResponse)
+- Exact cost accounting (estimatedCost is always null — pricing data not configured)
+- Background/async task execution queue
+- Task retry policy (each task runs once; rerun = new task)
+
+---
+
+## Task Persistence (Slice 2)
+
+### AgentTaskStore
+
+File-based persistence for `AgentTask` records at `data/agent-tasks/<task-id>.json`.
+
+```typescript
+import { AgentTaskStore } from "./agents/task-store";
+
+const store = new AgentTaskStore(); // uses data/agent-tasks/ by default
+// or: new AgentTaskStore("/custom/path") for test isolation
+
+await store.saveTask(task);           // create or update
+const task = await store.loadTask(id); // throws task_not_found if missing
+const tasks = await store.listTasks({ agentId: "researcher", status: "queued" });
+```
+
+Supported filters: `projectId`, `engagementId`, `workflowRunId`, `agentId`, `status`.
+
+### AgentExecutionStore
+
+File-based persistence for `AgentExecution` records at `data/agent-executions/<execution-id>.json`.
+
+```typescript
+import { AgentExecutionStore } from "./agents/execution-store";
+
+const store = new AgentExecutionStore();
+await store.saveExecution(execution);
+const exec = await store.loadExecution(id);
+const all = await store.listByTaskId(taskId); // ordered by attempt
+```
+
+Security: the execution record must never contain authorization headers or API keys. The `sanitizeRawResponse` utility in the executor strips any field whose key matches authorization/api-key patterns before storage.
+
+---
+
+## AgentExecutor (Slice 2)
+
+The `AgentExecutor` is the coordination service that runs a queued task end-to-end.
+
+### Construction
+
+```typescript
+import { AgentExecutor } from "./agents/executor";
+
+const executor = new AgentExecutor({
+  taskStore,
+  executionStore,
+  agentRegistry,       // AgentRegistry (definitions)
+  instanceRegistry,    // AgentInstanceRegistry (instances)
+  providerRegistry,    // AIProviderRegistry
+});
+
+const result = await executor.execute(taskId);
+if (!result.ok) {
+  console.error(result.error.code, result.error.message);
+} else {
+  console.log(result.task.status, result.output);
+}
+```
+
+### Executor lifecycle
+
+```
+loadTask → resolve definition → resolve instance → check enabled
+  → validate task → check approval → check duplicate
+  → check high-risk permissions → resolve provider
+  → create execution record → update task to running
+  → call agent.execute(task, provider)
+  → on success: persist output, mark completed
+  → on failure: persist error, mark failed
+  → return ExecutorResult
+```
+
+### Error codes
+
+| Code | Meaning |
+|------|---------|
+| `agent_not_found` | No agent definition or instance registered for the id |
+| `agent_disabled` | Agent definition has `enabled: false` |
+| `task_not_found` | No task file found for the given id |
+| `invalid_task_input` | Agent's `validateTask()` returned errors |
+| `provider_not_found` | Provider name not registered in AIProviderRegistry |
+| `missing_api_key` | Provider rejected with authentication error |
+| `approval_required` | Task needs human approval before execution |
+| `task_already_running` | Duplicate execution rejected |
+| `task_already_completed` | Completed task rerun rejected |
+| `provider_request_failed` | Provider threw an unexpected error |
+| `provider_timeout` | Provider timed out |
+| `output_parsing_failed` | Could not parse provider text as JSON |
+| `output_validation_failed` | Output did not pass the agent's Zod schema |
+| `permission_denied` | Agent holds high-risk tools without approval |
+
+---
+
+## Approval Enforcement (Slice 2)
+
+Current behavior:
+- `task.approvalStatus === "pending"` → executor returns `approval_required` immediately
+- `definition.requiresApproval === true` AND `approvalStatus` is not `"approved"` or `"not_required"` → task is moved to `"waiting_for_approval"` status, executor returns `approval_required`
+
+The ApprovalGate schema is defined (`agents/types.ts`) but ApprovalGate creation, storage, and review API are not yet implemented.
+
+---
+
+## Duplicate-Run Protection (Slice 2)
+
+- Task with `status: "running"` → executor returns `task_already_running`
+- Task with `status: "completed"` → executor returns `task_already_completed`
+
+To rerun a completed task, create a new `AgentTask` record.
+
+---
+
+## Mock Execution
+
+Use the mock provider for tests and demos:
+
+```typescript
+import { createMockProvider } from "./ai/mock-provider";
+import { AIProviderRegistry } from "./ai/provider-registry";
+
+const providerRegistry = new AIProviderRegistry();
+providerRegistry.register("mock", createMockProvider());
+// Set task.provider = "mock" and task.model = "mock-1.0"
+```
+
+The mock provider returns deterministic, schema-conformant outputs for all three agents without network calls. Tests must use mock mode only.
 
 ---
 
@@ -198,10 +329,8 @@ This is the foundation slice. The following are **not yet implemented**:
 
 | Slice | Capability |
 |-------|-----------|
-| **Slice 2** | Agent task persistence — store and retrieve AgentTask records |
-| **Slice 3** | Agent executor — run tasks against providers, store AgentExecution records |
-| **Slice 4** | API routes — create, list, and retrieve agent tasks via REST |
-| **Slice 5** | Approval UI — review and action ApprovalGate records in the dashboard |
-| **Slice 6** | Workflow integration — trigger agents from workflow department steps |
-| **Slice 7** | Tool permissions — enforce allowedTools at execution time |
-| **Slice 8** | Background queue — async task execution with progress streaming |
+| **Slice 3** | API routes — create, list, and retrieve agent tasks via REST (`/api/agents/tasks`) |
+| **Slice 4** | Approval UI — review and action ApprovalGate records in the dashboard |
+| **Slice 5** | Workflow integration — trigger agents from workflow department steps |
+| **Slice 6** | Tool permissions — enforce allowedTools at execution time |
+| **Slice 7** | Background queue — async task execution with progress streaming |

@@ -146,7 +146,7 @@ export const AgentExecutionSchema = z.object({
     })
     .optional(),
   usage: AgentUsageSchema.optional(),
-  estimatedCost: z.number().optional(),
+  estimatedCost: z.number().nullable().optional(),
   error: z.string().optional(),
   startedAt: z.string().optional(),
   completedAt: z.string().optional(),
