@@ -18,8 +18,8 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
   if (!project) {
     return (
       <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-        <h2 className="text-xl font-semibold">Project workspace</h2>
-        <p className="mt-4 text-sm text-slate-400">Select a project from the list below to view workspace details.</p>
+        <h2 className="text-xl font-semibold">Engagement workspace</h2>
+        <p className="mt-4 text-sm text-slate-400">Select an engagement from the list below to view workspace details.</p>
       </section>
     );
   }
@@ -30,7 +30,7 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
     <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Project workspace</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Engagement workspace</p>
           <h2 className="mt-2 text-2xl font-semibold">{project.companyName}</h2>
           <p className="mt-2 text-sm text-slate-300">{project.objective || "No objective defined."}</p>
         </div>
@@ -41,7 +41,7 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Project ID</p>
+          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Engagement ID</p>
           <p className="mt-2 break-all text-sm text-slate-200">{project.id}</p>
         </div>
         <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
@@ -62,7 +62,7 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
           onClick={() => onRun(project.id)}
           disabled={Boolean(runningProjectId) || project.status === "running"}
         >
-          {runningProjectId === project.id ? "Running..." : project.status === "running" ? "In Progress" : "Run workflow"}
+          {runningProjectId === project.id ? "Running..." : project.status === "running" ? "In Progress" : "Run engagement workflow"}
         </button>
       </div>
     </section>

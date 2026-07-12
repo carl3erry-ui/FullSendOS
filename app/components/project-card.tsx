@@ -40,7 +40,7 @@ export function ProjectCard({
             className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200"
             onClick={() => onOpen(id)}
           >
-            Workspace
+            Open
           </button>
           <button
             className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"

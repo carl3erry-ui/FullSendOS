@@ -52,7 +52,7 @@ export function ProjectDashboard() {
   async function loadProjects(options: { clearError?: boolean } = {}) {
     const shouldClearError = options.clearError ?? true;
     if (shouldClearError) setError(null);
-    const response = await fetch("/api/projects", { cache: "no-store" });
+    const response = await fetch("/api/engagements", { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok) {
@@ -135,7 +135,7 @@ export function ProjectDashboard() {
     setNotice(null);
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await fetch("/api/engagements", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -150,14 +150,14 @@ export function ProjectDashboard() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Unable to create project."));
+        throw new Error(getApiErrorMessage(data, "Unable to create engagement."));
       }
 
       setForm(initialForm);
       await loadProjects({ clearError: true });
-      setNotice(`Project ${data?.id || "created"} successfully.`);
+      setNotice(`Engagement ${data?.id || "created"} successfully.`);
     } catch (createError) {
-      const message = createError instanceof Error ? createError.message : "Unable to create project.";
+      const message = createError instanceof Error ? createError.message : "Unable to create engagement.";
       setError(message);
     } finally {
       setIsCreating(false);
@@ -174,7 +174,7 @@ export function ProjectDashboard() {
       const timeout = setTimeout(() => controller.abort(), WORKFLOW_POST_TIMEOUT_MS);
       let response: Response;
       try {
-        response = await fetch(`/api/projects/${projectId}/run`, { method: "POST", signal: controller.signal });
+        response = await fetch(`/api/engagements/${projectId}/run`, { method: "POST", signal: controller.signal });
       } finally {
         clearTimeout(timeout);
       }
@@ -326,9 +326,9 @@ export function ProjectDashboard() {
                 isSelected={project.id === selectedProjectId}
               />
             ))}
-            {!isLoading && !projects.length && <p className="text-sm text-slate-400">No projects yet. Create your first engagement to begin.</p>}
+            {!isLoading && !projects.length && <p className="text-sm text-slate-400">No engagements yet. Create your first engagement to begin.</p>}
             {!isLoading && completeCount > 0 && (
-              <p className="text-sm text-emerald-300">{completeCount} project{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
+              <p className="text-sm text-emerald-300">{completeCount} engagement{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
             )}
           </div>
         </section>
