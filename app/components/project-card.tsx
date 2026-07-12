@@ -25,6 +25,17 @@ export function ProjectCard({
   onOpen,
   isSelected,
 }: ProjectCardProps) {
+  const statusStyle =
+    status === "complete"
+      ? "border-emerald-700 bg-emerald-950/30 text-emerald-200"
+      : status === "running"
+        ? "border-cyan-700 bg-cyan-950/30 text-cyan-200"
+        : status === "needs-review"
+          ? "border-amber-700 bg-amber-950/30 text-amber-200"
+          : status === "failed"
+            ? "border-rose-700 bg-rose-950/30 text-rose-200"
+            : "border-slate-700 text-slate-300";
+
   return (
     <div className={`rounded-xl border p-4 ${isSelected ? "border-cyan-600 bg-slate-900/80" : "border-slate-800 bg-slate-950/70"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -33,7 +44,7 @@ export function ProjectCard({
           <p className="text-sm text-slate-400">{objective || "No objective provided yet"}</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
+          <span className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${statusStyle}`}>
             {status}
           </span>
           <button
@@ -47,7 +58,7 @@ export function ProjectCard({
             onClick={() => onRun(id)}
             disabled={Boolean(runningProjectId) || status === "running"}
           >
-            {runningProjectId === id ? "Running..." : status === "running" ? "In Progress" : "Run"}
+            {runningProjectId === id ? "Running..." : status === "running" ? "Running" : "Run"}
           </button>
         </div>
       </div>

@@ -65,7 +65,7 @@ function parseAndValidateDepartmentOutput({ department, schema, text }) {
   return schema.parse(normalized);
 }
 
-async function runDepartment({ department, project, model, onProgress }) {
+async function runDepartment({ department, project, model, onProgress, invokeModel }) {
   const contract = DepartmentContracts[department];
   const audit = {
     department,
@@ -82,7 +82,8 @@ async function runDepartment({ department, project, model, onProgress }) {
   onProgress?.({ type: "department-started", department, project });
 
   const prompt = buildDepartmentPrompt({ department, project });
-  let result = await callXai({ prompt, model });
+  const maxOutputTokens = department === "publishing" ? 7000 : 5000;
+  let result = await invokeModel({ prompt, model, department, phase: "primary", projectId: project.id, maxOutputTokens });
   let parsed;
 
   try {
@@ -113,12 +114,22 @@ ${JSON.stringify(project.evidence.sources.map((source) => source.id))}
 BROKEN OUTPUT
 ${result.text}`;
 
-    result = await callXai({ prompt: repairPrompt, model });
-    parsed = parseAndValidateDepartmentOutput({
-      department,
-      schema: contract.schema,
-      text: result.text
-    });
+    result = await invokeModel({ prompt: repairPrompt, model, department, phase: "repair", projectId: project.id, maxOutputTokens });
+    try {
+      parsed = parseAndValidateDepartmentOutput({
+        department,
+        schema: contract.schema,
+        text: result.text
+      });
+    } catch (repairError) {
+      if (department === "publishing" && typeof repairError === "object" && repairError && "issues" in repairError && Array.isArray(repairError.issues)) {
+        const field = repairError.issues[0]?.path?.[0] || "unknown field";
+        const fieldName = typeof field === "string" ? field : String(field);
+        throw new Error(`Publishing validation failed: ${fieldName} is required.`);
+      }
+
+      throw repairError;
+    }
   }
 
   project.departments[department] = parsed;
@@ -138,6 +149,7 @@ ${result.text}`;
 export async function runExistingProject(project, options = {}) {
   const model = options.model || process.env.XAI_MODEL || "grok-4.5";
   const onProgress = options.onProgress;
+  const invokeModel = options.invokeModel || callXai;
 
   if (!options.skipRunStart) {
     await beginWorkflowRun(project, { model, runId: options.runId });
@@ -145,7 +157,7 @@ export async function runExistingProject(project, options = {}) {
 
   try {
     for (const department of PIPELINE) {
-      await runDepartment({ department, project, model, onProgress });
+      await runDepartment({ department, project, model, onProgress, invokeModel });
     }
 
     const publishing = project.departments.publishing;

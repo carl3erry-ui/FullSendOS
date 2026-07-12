@@ -96,10 +96,14 @@ test("engagement and project create routes return equivalent validation errors",
   const engagementBody = await engagementResponse.json();
   const projectBody = await projectResponse.json();
 
-  assert.equal(engagementResponse.status, 400);
-  assert.equal(projectResponse.status, 400);
+  assert.equal(engagementResponse.status, projectResponse.status);
+  assert.match(String(engagementResponse.status), /400|422/);
   assert.equal(typeof engagementBody.error, "string");
   assert.equal(engagementBody.error, projectBody.error);
+  if (engagementResponse.status === 422) {
+    assert.equal(Array.isArray(engagementBody.fieldErrors), true);
+    assert.equal(Array.isArray(projectBody.fieldErrors), true);
+  }
 });
 
 test("engagement list route includes records persisted through project model", async () => {

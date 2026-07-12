@@ -230,9 +230,13 @@ function buildDevFallbackResponse({ prompt, model }) {
   };
 }
 
-export async function callXai({ prompt, model = process.env.XAI_MODEL || "grok-4.5" }) {
+export async function callXai({ prompt, model = process.env.XAI_MODEL || "grok-4.5", maxOutputTokens }) {
   const apiKey = process.env.XAI_API_KEY;
   const allowDevFallback = process.env.NODE_ENV !== "production" && process.env.XAI_DEV_FALLBACK !== "false";
+  const configuredMaxOutputTokens = Number(process.env.XAI_MAX_OUTPUT_TOKENS || 5000);
+  const resolvedMaxOutputTokens = Number.isFinite(maxOutputTokens)
+    ? maxOutputTokens
+    : configuredMaxOutputTokens;
 
   if (!apiKey) {
     if (allowDevFallback) {
@@ -252,7 +256,8 @@ export async function callXai({ prompt, model = process.env.XAI_MODEL || "grok-4
       model,
       input: prompt,
       store: false,
-      temperature: 0.2
+      temperature: 0.2,
+      max_output_tokens: Math.max(1000, Math.floor(resolvedMaxOutputTokens))
     })
   });
 
