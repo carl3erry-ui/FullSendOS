@@ -156,9 +156,9 @@ export const PublisherOutputSchema = z.object({
   onePageSummary: z.string().min(1, "Publishing must include onePageSummary."),
   deckOutline: z.array(z.object({
     slide: z.number().int().positive(),
-    title: z.string(),
-    purpose: z.string(),
-    keyPoints: z.array(z.string())
+    title: z.string().min(1),
+    purpose: z.string().min(1),
+    keyPoints: z.array(z.string().min(1)).min(1)
   })).min(1, "Publishing must include deckOutline with at least one slide.")
 });
 
@@ -213,6 +213,76 @@ export function buildDepartmentPrompt({ department, project }) {
     contract.dependsOn.map(key => [key, project.departments[key]])
   );
 
+  const compactPublishingDependencies = department === "publishing"
+    ? {
+        research: {
+          summary: dependencies.research?.summary,
+          opportunities: dependencies.research?.opportunities || [],
+          risks: dependencies.research?.risks || [],
+          unknowns: dependencies.research?.unknowns || []
+        },
+        competitors: {
+          summary: dependencies.competitors?.summary,
+          whitespace: dependencies.competitors?.whitespace || [],
+          recommendedPosition: dependencies.competitors?.recommendedPosition,
+          unknowns: dependencies.competitors?.unknowns || []
+        },
+        customers: {
+          summary: dependencies.customers?.summary,
+          personas: (dependencies.customers?.personas || []).slice(0, 5),
+          unknowns: dependencies.customers?.unknowns || []
+        },
+        strategy: {
+          summary: dependencies.strategy?.summary,
+          strategicThesis: dependencies.strategy?.strategicThesis,
+          strategicPillars: dependencies.strategy?.strategicPillars || [],
+          ninetyDayPlan: dependencies.strategy?.ninetyDayPlan || [],
+          unknowns: dependencies.strategy?.unknowns || []
+        },
+        brand: {
+          summary: dependencies.brand?.summary,
+          brandEssence: dependencies.brand?.brandEssence,
+          messaging: dependencies.brand?.messaging || {},
+          unknowns: dependencies.brand?.unknowns || []
+        },
+        website: {
+          summary: dependencies.website?.summary,
+          primaryGoal: dependencies.website?.primaryGoal,
+          targetActions: dependencies.website?.targetActions || [],
+          sitemap: dependencies.website?.sitemap || [],
+          unknowns: dependencies.website?.unknowns || []
+        }
+      }
+    : dependencies;
+
+  const promptProject = department === "publishing"
+    ? {
+        client: project.client,
+        brief: {
+          objective: project.brief?.objective,
+          audience: project.brief?.audience || [],
+          requestedDeliverables: project.brief?.requestedDeliverables || [],
+          constraints: project.brief?.constraints || [],
+          knownFacts: project.brief?.knownFacts || [],
+        },
+        evidence: {
+          sourcePolicy: project.evidence?.sourcePolicy,
+          sources: (project.evidence?.sources || []).map((source) => ({
+            id: source.id,
+            title: source.title,
+            publisher: source.publisher,
+            sourceType: source.sourceType,
+          }))
+        },
+        dependencies: compactPublishingDependencies
+      }
+    : {
+        client: project.client,
+        brief: project.brief,
+        evidence: project.evidence,
+        dependencies
+      };
+
   const researchShapeInstruction = department === "research"
     ? `
 RESEARCH JSON SHAPE (MUST MATCH EXACTLY)
@@ -234,6 +304,32 @@ STRICT TYPE RULES
 `
     : "";
 
+  const publishingShapeInstruction = department === "publishing"
+    ? `
+PUBLISHING JSON SHAPE (MUST MATCH EXACTLY)
+- summary: string (non-empty)
+- claims: array
+- unknowns: array
+- sourceIdsUsed: string[]
+- reportTitle: string (non-empty)
+- subtitle: string (non-empty)
+- executiveSummary: string (non-empty)
+- keyFindings: string[]
+- recommendations: array of { priority: "immediate"|"near-term"|"long-term", recommendation: string, rationale: string, successMeasure: string }
+- reportMarkdown: string (non-empty markdown)
+- onePageSummary: string (non-empty executive decision brief)
+- deckOutline: array with at least 1 item
+  each item: { slide: positive integer, title: string, purpose: string, keyPoints: string[] }
+
+PUBLISHING STRICT RULES
+- Return exactly one JSON object and nothing else.
+- Do not omit required fields, even when evidence is limited.
+- Do not use alternate field names for required deliverables.
+- Disclose uncertainty and evidence gaps within the required fields instead of omitting fields.
+- Never invent unsupported facts.
+`
+    : "";
+
   return `You are the ${contract.role}.
 
 OBJECTIVE
@@ -248,14 +344,10 @@ NON-NEGOTIABLE RULES
 6. Prefer explicit uncertainty over false precision.
 7. Produce data that is useful in a client deliverable, not internal chain-of-thought.
 ${researchShapeInstruction}
+${publishingShapeInstruction}
 
 PROJECT
-${JSON.stringify({
-    client: project.client,
-    brief: project.brief,
-    evidence: project.evidence,
-    dependencies
-  }, null, 2)}
+${JSON.stringify(promptProject, null, 2)}
 
 Return an object matching the required contract for department: ${department}.`;
 }

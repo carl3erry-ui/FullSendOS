@@ -405,10 +405,10 @@ function normalizePublishingOutput(raw) {
     }),
     reportMarkdown: toStringValue(raw.reportMarkdown ?? raw.executiveReport, "").trim(),
     onePageSummary: toStringValue(raw.onePageSummary, "").trim(),
-    deckOutline: toObjectArray(rawDeckOutline).map((item, index) => ({
-      slide: Number.isFinite(item.slide) ? Math.max(1, Math.floor(item.slide)) : index + 1,
-      title: toStringValue(item.title, "Slide"),
-      purpose: toStringValue(item.purpose, "Purpose requires validation."),
+    deckOutline: toObjectArray(rawDeckOutline).map((item) => ({
+      slide: item.slide,
+      title: toStringValue(item.title, "").trim(),
+      purpose: toStringValue(item.purpose, "").trim(),
       keyPoints: toStringArray(item.keyPoints)
     }))
   };
