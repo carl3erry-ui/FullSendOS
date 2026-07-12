@@ -73,6 +73,12 @@ export const ProjectSchema = z.object({
   }),
 
   audit: z.object({
+    activeRun: z.object({
+      id: z.string(),
+      startedAt: z.string(),
+      updatedAt: z.string(),
+      model: z.string()
+    }).nullable().default(null),
     runs: z.array(z.object({
       department: z.string(),
       startedAt: z.string(),
@@ -132,6 +138,6 @@ export function createEmptyProject(input) {
       publishing: null
     },
     deliverables: { deckOutline: [] },
-    audit: { runs: [], warnings: [] }
+    audit: { activeRun: null, runs: [], warnings: [] }
   });
 }

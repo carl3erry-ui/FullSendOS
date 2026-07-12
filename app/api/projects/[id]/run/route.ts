@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { beginWorkflowRun, getActiveRunSnapshot, isActiveRun, markRunStaleAsFailed } from "../../../../../src/orchestrator/runLifecycle.js";
 import { runExistingProject } from "../../../../../src/orchestrator/orchestrator.js";
 import { loadProject } from "../../../../../src/storage/projectStore.js";
 
@@ -47,17 +48,47 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { id } = await params;
     const project = await loadProject(id);
 
+    await markRunStaleAsFailed(project);
+
+    if (isActiveRun(project)) {
+      const active = getActiveRunSnapshot(project);
+      return NextResponse.json(
+        {
+          error: "Workflow is already running for this project.",
+          status: project.status,
+          activeRunId: active?.id || null,
+          activeRunUpdatedAt: active?.updatedAt || null,
+        },
+        { status: 409 },
+      );
+    }
+
     if (process.env.NODE_ENV === "production" && !process.env.XAI_API_KEY) {
       return NextResponse.json({ error: "XAI_API_KEY is not configured in .env." }, { status: 503 });
     }
 
-    await runExistingProject(project, {
+    const model = process.env.XAI_MODEL || "grok-4.5";
+    const activeRun = await beginWorkflowRun(project, { model });
+
+    void runExistingProject(project, {
+      skipRunStart: true,
+      model,
       onProgress: (event: { type: string; department?: string }) => {
         console.log("workflow-progress", event.type, event.department || project.id);
       },
+    }).catch((backgroundError) => {
+      const message = backgroundError instanceof Error ? backgroundError.message : "Unknown background workflow error";
+      console.error("workflow-run-background-error", project.id, message);
     });
 
-    return NextResponse.json({ id: project.id, status: project.status });
+    return NextResponse.json(
+      {
+        id: project.id,
+        status: "running",
+        activeRunId: activeRun.id,
+      },
+      { status: 202 },
+    );
   } catch (error) {
     const normalized = normalizeRouteError(error);
     return NextResponse.json(

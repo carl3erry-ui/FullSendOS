@@ -1,11 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
 import { ProjectForm, type ProjectFormState } from "./project-form";
 import { ProjectWorkspace } from "./project-workspace";
-import { getApiErrorMessage } from "./api-error";
+import { getApiErrorMessage, getApiFieldErrors } from "./api-error";
+import {
+  createPollController,
+  hasRunningProjects,
+  resolveRunTimeoutMessage,
+  shouldStopPolling,
+  WORKFLOW_POLL_INTERVAL_MS,
+  WORKFLOW_POST_TIMEOUT_MS,
+} from "./workflow-recovery";
 
 type ProjectSummary = {
   id: string;
@@ -13,6 +21,9 @@ type ProjectSummary = {
   objective: string;
   status: string;
   updatedAt?: string;
+  activeRunId?: string | null;
+  activeRunUpdatedAt?: string | null;
+  lastRunError?: string | null;
   completedDepartments: number;
   totalDepartments: number;
 };
@@ -35,8 +46,12 @@ export function ProjectDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function loadProjects() {
-    setError(null);
+  const pollControllerRef = useRef<ReturnType<typeof createPollController> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function loadProjects(options: { clearError?: boolean } = {}) {
+    const shouldClearError = options.clearError ?? true;
+    if (shouldClearError) setError(null);
     const response = await fetch("/api/projects", { cache: "no-store" });
     const data = await response.json();
 
@@ -44,11 +59,14 @@ export function ProjectDashboard() {
       throw new Error(data?.error || "Unable to load projects.");
     }
 
-    setProjects(Array.isArray(data) ? data : []);
+    const nextProjects = Array.isArray(data) ? data : [];
+    setProjects(nextProjects);
 
-    if (!selectedProjectId && Array.isArray(data) && data.length > 0) {
-      setSelectedProjectId(data[0].id);
+    if (!selectedProjectId && nextProjects.length > 0) {
+      setSelectedProjectId(nextProjects[0].id);
     }
+
+    return nextProjects;
   }
 
   useEffect(() => {
@@ -56,7 +74,7 @@ export function ProjectDashboard() {
 
     (async () => {
       try {
-        await loadProjects();
+        await loadProjects({ clearError: true });
       } catch (loadError) {
         if (!active) return;
         const message = loadError instanceof Error ? loadError.message : "Unable to load projects.";
@@ -70,6 +88,45 @@ export function ProjectDashboard() {
       active = false;
     };
   }, []);
+
+  const hasRunning = useMemo(() => hasRunningProjects(projects), [projects]);
+
+  useEffect(() => {
+    if (!hasRunning) {
+      pollControllerRef.current?.stop();
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      return;
+    }
+
+    const controller = createPollController(async () => {
+      const refreshed = await loadProjects({ clearError: false });
+      if (shouldStopPolling(refreshed)) {
+        controller.stop();
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      }
+    });
+
+    pollControllerRef.current = controller;
+    pollTimerRef.current = setInterval(() => {
+      void controller.tick().catch(() => {
+        // Keep polling active even if one cycle fails.
+      });
+    }, WORKFLOW_POLL_INTERVAL_MS);
+
+    return () => {
+      controller.stop();
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, [hasRunning]);
 
   async function handleCreate(event: React.FormEvent) {
     event.preventDefault();
@@ -97,7 +154,7 @@ export function ProjectDashboard() {
       }
 
       setForm(initialForm);
-      await loadProjects();
+      await loadProjects({ clearError: true });
       setNotice(`Project ${data?.id || "created"} successfully.`);
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Unable to create project.";
@@ -113,19 +170,47 @@ export function ProjectDashboard() {
     setNotice(null);
 
     try {
-      const response = await fetch(`/api/projects/${projectId}/run`, { method: "POST" });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), WORKFLOW_POST_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(`/api/projects/${projectId}/run`, { method: "POST", signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Workflow could not be started."));
+        const details = getApiFieldErrors(data);
+        const base = getApiErrorMessage(data, "Workflow could not be started.");
+        const detailSuffix = details.length ? ` ${details.slice(0, 3).join(" | ")}` : "";
+        throw new Error(`${base}${detailSuffix}`);
       }
 
-      await loadProjects();
-      setNotice(`Workflow started for ${projectId}.`);
+      await loadProjects({ clearError: false });
+      setNotice(`Workflow running for ${projectId}.`);
     } catch (runError) {
-      const message = runError instanceof Error ? runError.message : "Workflow could not be started.";
-      setError(message);
+      const isTimeoutAbort = runError instanceof Error && runError.name === "AbortError";
+
+      if (isTimeoutAbort) {
+        try {
+          const refreshedProjects = await loadProjects({ clearError: false });
+          const refreshedProject = refreshedProjects.find((project) => project.id === projectId) || null;
+          const recoveryMessage = resolveRunTimeoutMessage(refreshedProject);
+
+          if (recoveryMessage) {
+            setError(recoveryMessage);
+          } else {
+            setNotice(`Workflow running for ${projectId}.`);
+          }
+        } catch {
+          setError("Workflow request timed out and project state could not be retrieved.");
+        }
+      } else {
+        const message = runError instanceof Error ? runError.message : "Workflow could not be started.";
+        setError(message);
+      }
     } finally {
       setRunningProjectId(null);
     }

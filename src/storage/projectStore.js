@@ -39,10 +39,21 @@ function computeCompletedDepartments(project) {
   return Object.values(project?.departments || {}).filter(Boolean).length;
 }
 
+function getLastRunError(project) {
+  const failedRun = [...(project?.audit?.runs || [])].reverse().find((run) => run?.status === "failed" && typeof run?.error === "string");
+  if (failedRun?.error) return failedRun.error;
+
+  const warnings = Array.isArray(project?.audit?.warnings) ? project.audit.warnings : [];
+  const warning = warnings[warnings.length - 1];
+  return typeof warning === "string" ? warning : null;
+}
+
 export async function saveProject(project) {
   await fs.mkdir(storageDir, { recursive: true });
   const file = path.join(storageDir, `${project.id}.json`);
-  await fs.writeFile(file, JSON.stringify(project, null, 2), "utf8");
+  const tempFile = `${file}.tmp-${process.pid}-${Date.now()}`;
+  await fs.writeFile(tempFile, JSON.stringify(project, null, 2), "utf8");
+  await fs.rename(tempFile, file);
   return file;
 }
 
@@ -65,6 +76,9 @@ export async function listProjects() {
         status: project.status,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
+        activeRunId: project.audit?.activeRun?.id || null,
+        activeRunUpdatedAt: project.audit?.activeRun?.updatedAt || null,
+        lastRunError: getLastRunError(project),
         completedDepartments: computeCompletedDepartments(project),
         totalDepartments: Object.keys(project.departments || {}).length
       };

@@ -4,6 +4,12 @@ import { callXai } from "../services/xaiClient.js";
 import { normalizeDepartmentOutput } from "./outputNormalizer.js";
 import { parseJsonObject } from "../utils/json.js";
 import { saveProject } from "../storage/projectStore.js";
+import {
+  beginWorkflowRun,
+  completeWorkflowRun,
+  failWorkflowRun,
+  heartbeatWorkflowRun,
+} from "./runLifecycle.js";
 
 export const PIPELINE = [
   "research",
@@ -69,6 +75,9 @@ async function runDepartment({ department, project, model, onProgress }) {
   };
   project.audit.runs.push(audit);
   project.updatedAt = now();
+  if (project.audit.activeRun) {
+    project.audit.activeRun.updatedAt = project.updatedAt;
+  }
   await saveProject(project);
   onProgress?.({ type: "department-started", department, project });
 
@@ -86,6 +95,9 @@ async function runDepartment({ department, project, model, onProgress }) {
     const validationMessage = error?.issues ? formatValidationError(error) : error.message;
     audit.status = "repaired";
     project.updatedAt = now();
+    if (project.audit.activeRun) {
+      project.audit.activeRun.updatedAt = project.updatedAt;
+    }
     await saveProject(project);
     onProgress?.({ type: "department-repairing", department, project, message: validationMessage });
 
@@ -111,10 +123,14 @@ ${result.text}`;
 
   project.departments[department] = parsed;
   project.updatedAt = now();
+  if (project.audit.activeRun) {
+    project.audit.activeRun.updatedAt = project.updatedAt;
+  }
   audit.completedAt = now();
   if (audit.status === "running") audit.status = "complete";
 
   await saveProject(project);
+  await heartbeatWorkflowRun(project);
   onProgress?.({ type: "department-completed", department, project });
   return parsed;
 }
@@ -122,9 +138,10 @@ ${result.text}`;
 export async function runExistingProject(project, options = {}) {
   const model = options.model || process.env.XAI_MODEL || "grok-4.5";
   const onProgress = options.onProgress;
-  project.status = "running";
-  project.updatedAt = now();
-  await saveProject(project);
+
+  if (!options.skipRunStart) {
+    await beginWorkflowRun(project, { model, runId: options.runId });
+  }
 
   try {
     for (const department of PIPELINE) {
@@ -137,25 +154,14 @@ export async function runExistingProject(project, options = {}) {
     project.deliverables.deckOutline = publishing.deckOutline;
 
     const hasUnknowns = PIPELINE.some((name) => project.departments[name]?.unknowns?.length > 0);
-    project.status = hasUnknowns ? "needs-review" : "complete";
-    project.updatedAt = now();
-    await saveProject(project);
+    const nextStatus = hasUnknowns ? "needs-review" : "complete";
+    await completeWorkflowRun(project, nextStatus);
     onProgress?.({ type: "project-completed", project });
     return ProjectSchema.parse(project);
   } catch (error) {
-    project.status = "failed";
-    project.updatedAt = now();
-    project.audit.warnings.push(error.message);
-
-    const activeRun = [...project.audit.runs].reverse().find((run) => run.status === "running");
-    if (activeRun) {
-      activeRun.status = "failed";
-      activeRun.completedAt = now();
-      activeRun.error = error.message;
-    }
-
-    await saveProject(project);
-    onProgress?.({ type: "project-failed", project, error: error.message });
+    const message = error instanceof Error ? error.message : "Unknown workflow error";
+    await failWorkflowRun(project, message);
+    onProgress?.({ type: "project-failed", project, error: message });
     throw error;
   }
 }

@@ -5,6 +5,7 @@ import test from "node:test";
 import { POST } from "../app/api/projects/[id]/run/route";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
+import { RUN_STALE_MS } from "../src/orchestrator/runLifecycle.js";
 
 const storageDir = path.resolve("data/projects");
 
@@ -17,7 +18,22 @@ async function cleanupProject(id: string) {
   await fs.rm(file, { force: true });
 }
 
-test("workflow run route succeeds in development fallback mode when API key is absent", async () => {
+async function waitForTerminalProjectStatus(id: string, timeoutMs = 6000) {
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    const project = await loadProject(id);
+    if (project.status !== "running") {
+      return project;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`Timed out waiting for project ${id} to reach terminal status.`);
+}
+
+test("workflow run route persists running state before async execution and eventually completes", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousApiKey = process.env.XAI_API_KEY;
   const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
@@ -37,15 +53,21 @@ test("workflow run route succeeds in development fallback mode when API key is a
     const response = await POST(buildRequest(), { params: Promise.resolve({ id: project.id }) });
     const body = await response.json();
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 202);
     assert.equal(body.id, project.id);
-    assert.match(body.status, /needs-review|complete/);
+    assert.equal(body.status, "running");
+    assert.equal(typeof body.activeRunId, "string");
 
-    const updated = await loadProject(project.id);
-    assert.equal(updated.status, body.status);
-    assert.ok(updated.departments.publishing);
-    assert.ok(Array.isArray(updated.audit.runs));
-    assert.ok(updated.audit.runs.length >= 7);
+    const runningState = await loadProject(project.id);
+    assert.equal(runningState.status, "running");
+    assert.equal(runningState.audit.activeRun?.id, body.activeRunId);
+
+    const terminal = await waitForTerminalProjectStatus(project.id);
+    assert.match(terminal.status, /needs-review|complete/);
+    assert.equal(terminal.audit.activeRun, null);
+    assert.ok(terminal.departments.publishing);
+    assert.ok(Array.isArray(terminal.audit.runs));
+    assert.ok(terminal.audit.runs.length >= 7);
   } finally {
     await cleanupProject(project.id);
     process.env.NODE_ENV = previousNodeEnv;
@@ -65,7 +87,92 @@ test("workflow run route returns 404 with structured error for unknown project i
   assert.equal(body.error, "Project not found.");
 });
 
-test("workflow run route returns 503 with structured error when fallback disabled and API key missing", async () => {
+test("workflow run route returns 409 for duplicate active run and does not start another run", async () => {
+  const project = createEmptyProject({
+    companyName: "Duplicate Lock Co",
+    objective: "Ensure duplicate requests are rejected",
+  });
+
+  const now = new Date().toISOString();
+  project.status = "running";
+  project.audit.activeRun = {
+    id: "run-duplicate-lock",
+    startedAt: now,
+    updatedAt: now,
+    model: "grok-4.5",
+  };
+
+  await saveProject(project);
+
+  try {
+    const before = await loadProject(project.id);
+
+    const response = await POST(buildRequest(), { params: Promise.resolve({ id: project.id }) });
+    const body = await response.json();
+
+    assert.equal(response.status, 409);
+    assert.equal(body.status, "running");
+    assert.equal(body.activeRunId, "run-duplicate-lock");
+
+    const after = await loadProject(project.id);
+    assert.equal(after.audit.runs.length, before.audit.runs.length);
+    assert.equal(after.audit.activeRun?.id, "run-duplicate-lock");
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("stale active run is marked failed before a new run is accepted", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousApiKey = process.env.XAI_API_KEY;
+  const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
+
+  process.env.NODE_ENV = "development";
+  delete process.env.XAI_API_KEY;
+  delete process.env.XAI_DEV_FALLBACK;
+
+  const project = createEmptyProject({
+    companyName: "Stale Run Co",
+    objective: "Recover stale run and restart safely",
+  });
+
+  const staleDate = new Date(Date.now() - RUN_STALE_MS - 60_000).toISOString();
+  project.status = "running";
+  project.audit.activeRun = {
+    id: "run-stale-old",
+    startedAt: staleDate,
+    updatedAt: staleDate,
+    model: "grok-4.5",
+  };
+
+  await saveProject(project);
+
+  try {
+    const response = await POST(buildRequest(), { params: Promise.resolve({ id: project.id }) });
+    const body = await response.json();
+
+    assert.equal(response.status, 202);
+    assert.equal(body.status, "running");
+    assert.notEqual(body.activeRunId, "run-stale-old");
+
+    const after = await loadProject(project.id);
+    assert.equal(after.status, "running");
+    assert.equal(after.audit.activeRun?.id, body.activeRunId);
+    assert.ok(after.audit.warnings.some((warning: string) => warning.includes("stale inactivity")));
+
+    const terminal = await waitForTerminalProjectStatus(project.id);
+    assert.match(terminal.status, /needs-review|complete/);
+  } finally {
+    await cleanupProject(project.id);
+    process.env.NODE_ENV = previousNodeEnv;
+    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
+    else process.env.XAI_API_KEY = previousApiKey;
+    if (previousFallbackFlag === undefined) delete process.env.XAI_DEV_FALLBACK;
+    else process.env.XAI_DEV_FALLBACK = previousFallbackFlag;
+  }
+});
+
+test("workflow run route persists terminal failure when fallback is disabled and API key is missing", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   const previousApiKey = process.env.XAI_API_KEY;
   const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
@@ -85,9 +192,14 @@ test("workflow run route returns 503 with structured error when fallback disable
     const response = await POST(buildRequest(), { params: Promise.resolve({ id: project.id }) });
     const body = await response.json();
 
-    assert.equal(response.status, 503);
-    assert.equal(typeof body.error, "string");
-    assert.match(body.error, /XAI_API_KEY is not configured/);
+    assert.equal(response.status, 202);
+    assert.equal(body.status, "running");
+
+    const terminal = await waitForTerminalProjectStatus(project.id);
+    assert.equal(terminal.status, "failed");
+    assert.ok(
+      terminal.audit.warnings.some((warning: string) => warning.includes("XAI_API_KEY is not configured")),
+    );
   } finally {
     await cleanupProject(project.id);
     process.env.NODE_ENV = previousNodeEnv;

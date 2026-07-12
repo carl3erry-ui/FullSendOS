@@ -13,3 +13,21 @@ export function getApiErrorMessage(payload: unknown, fallback: string): string {
 
   return fallback;
 }
+
+export function getApiFieldErrors(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+
+  const fieldErrors = (payload as { fieldErrors?: unknown }).fieldErrors;
+  if (!Array.isArray(fieldErrors)) return [];
+
+  return fieldErrors
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const path = typeof (item as { path?: unknown }).path === "string" ? (item as { path: string }).path : "root";
+      const message = typeof (item as { message?: unknown }).message === "string"
+        ? (item as { message: string }).message
+        : "Invalid value";
+      return `${path}: ${message}`;
+    })
+    .filter((item): item is string => Boolean(item));
+}
