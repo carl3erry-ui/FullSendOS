@@ -440,19 +440,22 @@ export function ProjectDashboard() {
   }
 
   const completeCount = projects.filter((project) => project.status === "complete").length;
-  const runningCount = projects.filter((project) => project.status === "running").length;
-  const reviewCount = projects.filter((project) => project.status === "needs-review").length;
-  const avgProgress =
-    projects.length > 0
-      ? Math.round(
-          projects.reduce((sum, project) => {
-            if (!project.totalDepartments) return sum;
-            return sum + project.completedDepartments / project.totalDepartments;
-          }, 0) /
-            projects.length *
-            100,
-        )
-      : 0;
+  const readyForReviewProjects = projects.filter(
+    (project) => project.status === "needs-review" || project.status === "complete",
+  );
+  const actionRequiredProjects = projects.filter((project) => project.status === "failed" || project.status === "draft");
+  const latestExecutiveBriefs = [...readyForReviewProjects]
+    .sort((left, right) => {
+      const leftTime = left.updatedAt ? new Date(left.updatedAt).getTime() : 0;
+      const rightTime = right.updatedAt ? new Date(right.updatedAt).getTime() : 0;
+      return rightTime - leftTime;
+    })
+    .slice(0, 3);
+  const recentWorkProducts = readyForReviewProjects.filter((project) => {
+    if (!project.updatedAt) return false;
+    const ageMs = Date.now() - new Date(project.updatedAt).getTime();
+    return ageMs <= 1000 * 60 * 60 * 24 * 7;
+  }).length;
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
   const selectedProjectStep = selectedProject ? Math.max(0, Math.min(selectedProject.completedDepartments, executivePipeline.length)) : 0;
@@ -466,17 +469,17 @@ export function ProjectDashboard() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
         <header className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-2xl shadow-slate-950/40">
           <p className="text-sm uppercase tracking-[0.35em] text-cyan-400">FullSendOS Alpha</p>
-          <h1 className="mt-3 text-4xl font-semibold">Executive workspace</h1>
+          <h1 className="mt-3 text-4xl font-semibold">Consulting command center</h1>
           <p className="mt-3 max-w-2xl text-slate-300">
-            Select a client, launch an engagement, and follow workflow progress from intake to publishing without leaving this workspace.
+            Manage active clients, triage action-required engagements, and review decision-ready executive work products in one place.
           </p>
         </header>
 
         <DashboardSummary
-          projectCount={projects.length}
-          runningCount={runningCount}
-          reviewCount={reviewCount}
-          avgProgress={avgProgress}
+          activeClients={clients.length}
+          readyForReview={readyForReviewProjects.length}
+          actionRequired={actionRequiredProjects.length}
+          recentWorkProducts={recentWorkProducts}
         />
 
         {(error || notice) && (
@@ -491,14 +494,6 @@ export function ProjectDashboard() {
         )}
 
         <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <ProjectForm
-            form={form}
-            isCreating={isCreating}
-            isRunInProgress={Boolean(runningProjectId)}
-            onSubmit={handleCreate}
-            onFieldChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
-          />
-
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 className="text-xl font-semibold">Executive office</h2>
             <p className="mt-2 text-sm text-slate-400">
@@ -534,12 +529,53 @@ export function ProjectDashboard() {
               })}
             </div>
           </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+            <h2 className="text-xl font-semibold">Decision queue</h2>
+            <p className="mt-2 text-sm text-slate-400">Focus first on work products that are ready for leadership review, then clear blockers.</p>
+
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">Ready for review</p>
+                <div className="mt-2 space-y-2">
+                  {!latestExecutiveBriefs.length && <p className="text-sm text-slate-400">No executive briefs are ready yet.</p>}
+                  {latestExecutiveBriefs.map((project) => (
+                    <button
+                      key={`brief-${project.id}`}
+                      className="w-full rounded-lg border border-emerald-900/70 bg-emerald-950/20 px-3 py-2 text-left hover:border-emerald-700"
+                      onClick={() => setSelectedProjectId(project.id)}
+                    >
+                      <p className="text-sm font-medium text-emerald-100">{project.companyName}</p>
+                      <p className="mt-1 text-xs text-emerald-200/80">{project.id}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-amber-300">Action required</p>
+                <div className="mt-2 space-y-2">
+                  {!actionRequiredProjects.length && <p className="text-sm text-slate-400">No action-required engagements.</p>}
+                  {actionRequiredProjects.slice(0, 3).map((project) => (
+                    <button
+                      key={`action-${project.id}`}
+                      className="w-full rounded-lg border border-amber-900/70 bg-amber-950/20 px-3 py-2 text-left hover:border-amber-700"
+                      onClick={() => setSelectedProjectId(project.id)}
+                    >
+                      <p className="text-sm font-medium text-amber-100">{project.companyName}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.12em] text-amber-200/80">{project.status}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Select client</h2>
+              <h2 className="text-xl font-semibold">Active clients</h2>
               <span className="text-sm text-slate-400">{clients.length} total</span>
             </div>
 
@@ -603,6 +639,9 @@ export function ProjectDashboard() {
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 className="text-xl font-semibold">Client workspace</h2>
+            <p className="mt-2 text-xs uppercase tracking-[0.18em] text-cyan-300">
+              Select client → create engagement → run consulting workflow → review executive brief
+            </p>
             {isClientLoading && <p className="mt-4 text-sm text-slate-400">Loading client workspace...</p>}
             {!isClientLoading && !selectedClient && (
               <p className="mt-4 text-sm text-slate-400">Select a client to view associated engagements.</p>
@@ -762,6 +801,23 @@ export function ProjectDashboard() {
             {!isLoading && completeCount > 0 && (
               <p className="text-sm text-emerald-300">{completeCount} engagement{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
             )}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+          <h2 className="text-xl font-semibold">Secondary intake</h2>
+          <p className="mt-2 text-sm text-slate-400">
+            Use quick engagement only when work cannot be attached to an existing client.
+          </p>
+          <div className="mt-4">
+            <ProjectForm
+              form={form}
+              isCreating={isCreating}
+              isRunInProgress={Boolean(runningProjectId)}
+              isSecondary
+              onSubmit={handleCreate}
+              onFieldChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+            />
           </div>
         </section>
       </div>

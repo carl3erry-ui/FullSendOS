@@ -48,6 +48,7 @@ export type EngagementDetail = {
       title?: string;
       purpose?: string;
       keyPoints?: string[];
+      visualSuggestion?: string;
     }>;
   };
   audit?: {

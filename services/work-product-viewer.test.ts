@@ -91,13 +91,22 @@ test("executive deliverables are the default completed view", () => {
 
 test("executive deliverables render when present", () => {
   const html = renderViewer({ activeSection: "executive" });
-  assert.match(html, /Executive Deliverables/);
+  assert.match(html, /Executive Brief/);
+  assert.match(html, /Executive Decision Center/);
   assert.match(html, /Structured executive report/);
   assert.match(html, /One-page decision brief/);
 });
 
-test("department navigation renders configured departments", () => {
+test("top-level navigation uses executive, analysis, department, and evidence sections", () => {
   const html = renderViewer();
+  assert.match(html, /Executive Brief/);
+  assert.match(html, /Supporting Analysis/);
+  assert.match(html, /Department Work Product/);
+  assert.match(html, /Evidence and Unknowns/);
+});
+
+test("department selector renders configured departments in department view", () => {
+  const html = renderViewer({ activeSection: "department:research" });
   for (const department of WORKFLOW_DEPARTMENTS) {
     const label = department === "publishing" ? "Executive Review" : department.charAt(0).toUpperCase() + department.slice(1);
     assert.match(html, new RegExp(label));
@@ -121,7 +130,8 @@ test("deck outline renders slide structure", () => {
   const html = renderViewer({ activeSection: "executive" });
   assert.match(html, /Slide 1/);
   assert.match(html, /Situation/);
-  assert.match(html, /Key message: Set context/);
+  assert.match(html, /Key Message/);
+  assert.match(html, /Set context/);
 });
 
 test("not-started state is explicit", () => {

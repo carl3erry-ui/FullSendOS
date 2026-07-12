@@ -21,6 +21,8 @@ type WorkProductViewerProps = {
   onRun: (projectId: string) => void;
 };
 
+type TopLevelSection = "executive" | "analysis" | "department" | "evidence";
+
 const INTERNAL_FIELD_PATTERN = /(debug|diagnostic|raw|provider|prompt|token|secret|api.?key|stack)/i;
 
 function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -177,21 +179,31 @@ function DeckOutline({ deck }: { deck?: unknown }) {
   return (
     <section className="space-y-2">
       <SectionHeading title="Presentation Deck Outline" />
-      <div className="space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
         {deck.map((slide, index) => {
           if (!slide || typeof slide !== "object") return null;
-          const item = slide as { slide?: number; title?: string; purpose?: string; keyPoints?: string[] };
+          const item = slide as { slide?: number; title?: string; purpose?: string; keyPoints?: string[]; visualSuggestion?: string };
           return (
-            <article className="rounded-lg border border-slate-800 bg-slate-950/60 p-3" key={`slide-${index}`}>
+            <article className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" key={`slide-${index}`}>
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Slide {item.slide ?? index + 1}</p>
-              <p className="mt-1 text-sm font-medium text-slate-100">{item.title || "Untitled slide"}</p>
-              <p className="mt-2 text-sm text-slate-300">Key message: {item.purpose || "No key message provided."}</p>
+              <p className="mt-1 text-base font-medium text-slate-100">{item.title || "Untitled slide"}</p>
+              <p className="mt-3 text-xs uppercase tracking-[0.14em] text-cyan-300">Key Message</p>
+              <p className="mt-1 text-sm text-slate-300">{item.purpose || "No key message provided."}</p>
               {Array.isArray(item.keyPoints) && item.keyPoints.length > 0 && (
-                <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
-                  {item.keyPoints.map((point, keyPointIndex) => (
-                    <li key={`key-point-${index}-${keyPointIndex}`}>{point}</li>
-                  ))}
-                </ul>
+                <>
+                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">Supporting Points</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-slate-300">
+                    {item.keyPoints.map((point, keyPointIndex) => (
+                      <li key={`key-point-${index}-${keyPointIndex}`}>{point}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {item.visualSuggestion && (
+                <>
+                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-slate-400">Visual Suggestion</p>
+                  <p className="mt-1 text-sm text-slate-300">{item.visualSuggestion}</p>
+                </>
               )}
             </article>
           );
@@ -199,6 +211,67 @@ function DeckOutline({ deck }: { deck?: unknown }) {
       </div>
     </section>
   );
+}
+
+function collectUnknowns(detail: EngagementDetail): Array<{ department: string; question: string; whyItMatters?: string; method?: string }> {
+  const collected: Array<{ department: string; question: string; whyItMatters?: string; method?: string }> = [];
+
+  for (const department of WORKFLOW_DEPARTMENTS) {
+    const output = detail.departments?.[department] as Record<string, unknown> | null | undefined;
+    const unknowns = Array.isArray(output?.unknowns) ? output.unknowns : [];
+
+    for (const item of unknowns) {
+      if (!item || typeof item !== "object") continue;
+      const unknown = item as { question?: string; whyItMatters?: string; recommendedMethod?: string };
+      if (!unknown.question) continue;
+
+      collected.push({
+          department: formatDepartmentName(department),
+          question: unknown.question,
+          whyItMatters: unknown.whyItMatters,
+          method: unknown.recommendedMethod,
+      });
+    }
+  }
+
+  return collected;
+}
+
+function collectClaims(detail: EngagementDetail): Array<{ department: string; statement: string; confidence?: number; caveat?: string }> {
+  const collected: Array<{ department: string; statement: string; confidence?: number; caveat?: string }> = [];
+
+  for (const department of WORKFLOW_DEPARTMENTS) {
+    const output = detail.departments?.[department] as Record<string, unknown> | null | undefined;
+    const claims = Array.isArray(output?.claims) ? output.claims : [];
+
+    for (const item of claims) {
+      if (!item || typeof item !== "object") continue;
+      const claim = item as { statement?: string; confidence?: number; caveat?: string };
+      if (!claim.statement) continue;
+
+      collected.push({
+          department: formatDepartmentName(department),
+          statement: claim.statement,
+          confidence: claim.confidence,
+          caveat: claim.caveat,
+      });
+    }
+  }
+
+  return collected;
+}
+
+function getTopLevelSection(section: string): TopLevelSection {
+  if (section.startsWith("department:")) return "department";
+  if (section === "analysis") return "analysis";
+  if (section === "evidence") return "evidence";
+  return "executive";
+}
+
+function getDepartmentSection(section: string): DepartmentName {
+  if (!section.startsWith("department:")) return "research";
+  const department = section.replace("department:", "") as DepartmentName;
+  return WORKFLOW_DEPARTMENTS.includes(department) ? department : "research";
 }
 
 function RenderUnformatted({ output, knownKeys }: { output: Record<string, unknown>; knownKeys: string[] }) {
@@ -318,6 +391,25 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
   const deckOutline = detail.deliverables?.deckOutline;
   const publishing = detail.departments?.publishing as Record<string, unknown> | null | undefined;
   const recommendations = Array.isArray(publishing?.recommendations) ? publishing.recommendations : [];
+  const firstRecommendation = recommendations.find((item) => item && typeof item === "object") as
+    | { recommendation?: string; rationale?: string }
+    | undefined;
+  const claims = collectClaims(detail);
+  const claimsWithConfidence = claims.filter((claim) => typeof claim.confidence === "number");
+  const confidencePercent =
+    claimsWithConfidence.length > 0
+      ? Math.round(
+          claimsWithConfidence.reduce((sum, claim) => sum + (claim.confidence as number), 0) /
+            claimsWithConfidence.length *
+            100,
+        )
+      : null;
+  const confidenceLabel = confidencePercent === null ? "Pending" : confidencePercent >= 75 ? "High" : confidencePercent >= 55 ? "Medium" : "Low";
+  const unknowns = collectUnknowns(detail);
+  const immediateActions = unknowns
+    .slice(0, 4)
+    .map((item) => item.method || item.question)
+    .filter((item): item is string => Boolean(item));
 
   if (!report && !onePageSummary && (!Array.isArray(deckOutline) || deckOutline.length === 0)) {
     return (
@@ -330,21 +422,61 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
   return (
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
       <SectionHeading
-        title="Executive Deliverables"
+        title="Executive Brief"
         subtitle="Final consulting outputs synthesized from validated department work product."
       />
 
-      {report && (
-        <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-          <h5 className="text-sm uppercase tracking-[0.14em] text-cyan-300">Executive Report</h5>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{report}</p>
-        </article>
-      )}
+      <section className="space-y-4 rounded-xl border border-cyan-900/60 bg-cyan-950/20 p-4">
+        <SectionHeading
+          title="Executive Decision Center"
+          subtitle="Scan this first: recommendation, confidence, key reason, and immediate actions."
+        />
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <article className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Recommendation</p>
+            <p className="mt-2 text-sm text-slate-100">{firstRecommendation?.recommendation || "Complete publishing synthesis to finalize recommendation."}</p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-900/50 p-3">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Confidence</p>
+            <p className="mt-2 text-sm text-slate-100">
+              {confidenceLabel}
+              {confidencePercent !== null ? ` (${confidencePercent}%)` : ""}
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-900/50 p-3 md:col-span-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Top Reason</p>
+            <p className="mt-2 text-sm text-slate-100">{firstRecommendation?.rationale || "Primary rationale not yet available."}</p>
+          </article>
+        </div>
+
+        {immediateActions.length > 0 && (
+          <section className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Immediate Actions</p>
+            <ol className="space-y-2 text-sm text-slate-100">
+              {immediateActions.map((action, index) => (
+                <li className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2" key={`immediate-action-${index}`}>
+                  {index + 1}. {action}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+      </section>
 
       {onePageSummary && (
         <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
           <h5 className="text-sm uppercase tracking-[0.14em] text-cyan-300">One-Page Summary</h5>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{onePageSummary}</p>
+        </article>
+      )}
+
+      {report && (
+        <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <h5 className="text-sm uppercase tracking-[0.14em] text-cyan-300">Executive Report</h5>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-200">{report}</p>
         </article>
       )}
 
@@ -373,6 +505,83 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
   );
 }
 
+function AnalysisPanel({ detail }: { detail: EngagementDetail }) {
+  const publishing = detail.departments?.publishing as Record<string, unknown> | null | undefined;
+  const keyFindings = Array.isArray(publishing?.keyFindings) ? publishing.keyFindings : [];
+  const recommendations = Array.isArray(publishing?.recommendations) ? publishing.recommendations : [];
+
+  return (
+    <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+      <SectionHeading
+        title="Supporting Analysis"
+        subtitle="Condensed synthesis supporting the executive recommendation."
+      />
+
+      <StringList title="Key Findings" items={keyFindings} />
+
+      {recommendations.length > 0 && (
+        <section className="space-y-2">
+          <SectionHeading title="Recommendation Stack" />
+          <div className="space-y-2">
+            {recommendations.map((item, index) => {
+              if (!item || typeof item !== "object") return null;
+              const rec = item as { priority?: string; recommendation?: string; rationale?: string; successMeasure?: string };
+              return (
+                <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3" key={`analysis-rec-${index}`}>
+                  <p className="text-sm font-medium text-slate-100">{rec.recommendation || "Recommendation"}</p>
+                  {rec.priority && <p className="mt-1 text-xs uppercase tracking-[0.12em] text-cyan-300">{rec.priority}</p>}
+                  {rec.rationale && <p className="mt-1 text-sm text-slate-300">Why it matters: {rec.rationale}</p>}
+                  {rec.successMeasure && <p className="mt-1 text-sm text-slate-400">Success measure: {rec.successMeasure}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function EvidencePanel({ detail }: { detail: EngagementDetail }) {
+  const unknowns = collectUnknowns(detail);
+  const claims = collectClaims(detail);
+  return (
+    <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+      <SectionHeading
+        title="Evidence and Unknowns"
+        subtitle="Validate assumptions and close unknowns before final decisions."
+      />
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Open Validation Questions</p>
+          <p className="mt-2 text-2xl font-semibold text-amber-200">{unknowns.length}</p>
+        </article>
+        <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Claims Logged</p>
+          <p className="mt-2 text-2xl font-semibold text-cyan-200">{claims.length}</p>
+        </article>
+      </div>
+
+      {unknowns.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-[0.14em] text-amber-300">Action-Blocking Unknowns</p>
+          <div className="space-y-2">
+            {unknowns.slice(0, 8).map((unknown, index) => (
+              <article className="rounded-lg border border-amber-900/70 bg-amber-950/30 p-3" key={`evidence-unknown-${index}`}>
+                <p className="text-sm text-amber-100">{unknown.question}</p>
+                <p className="mt-1 text-xs text-amber-200/90">Department: {unknown.department}</p>
+                {unknown.whyItMatters && <p className="mt-1 text-sm text-amber-200/90">Why it matters: {unknown.whyItMatters}</p>}
+                {unknown.method && <p className="mt-1 text-sm text-amber-200/90">Recommended method: {unknown.method}</p>}
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function WorkProductViewer({
   project,
   detail,
@@ -386,6 +595,8 @@ export function WorkProductViewer({
   const progressText = `${project.completedDepartments}/${project.totalDepartments} departments`;
   const runFailure = getLastPersistedFailure(detail);
   const isRunActive = project.status === "running" || runningProjectId === project.id;
+  const topSection = getTopLevelSection(activeSection);
+  const selectedDepartment = getDepartmentSection(activeSection);
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -443,42 +654,72 @@ export function WorkProductViewer({
 
       {(project.status === "needs-review" || project.status === "complete") && (
         <div className="mt-6 rounded-xl border border-emerald-800 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
-          Ready for review. Executive deliverables are shown first, followed by department work product.
+          Ready for review. Executive brief leads, supporting analysis follows, then department work product and evidence details.
         </div>
       )}
 
       <section className="mt-8 space-y-4">
         <div className="flex flex-wrap gap-2">
           <button
-            className={`rounded-lg border px-3 py-2 text-sm ${activeSection === "executive" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "executive" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
             onClick={() => onSectionChange("executive")}
             type="button"
           >
-            Executive Deliverables
+            Executive Brief
           </button>
-          {WORKFLOW_DEPARTMENTS.map((department) => (
-            <button
-              className={`rounded-lg border px-3 py-2 text-sm ${activeSection === `department:${department}` ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
-              key={department}
-              onClick={() => onSectionChange(`department:${department}`)}
-              type="button"
-            >
-              {formatDepartmentName(department)}
-            </button>
-          ))}
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "analysis" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("analysis")}
+            type="button"
+          >
+            Supporting Analysis
+          </button>
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "department" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange(`department:${selectedDepartment}`)}
+            type="button"
+          >
+            Department Work Product
+          </button>
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "evidence" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("evidence")}
+            type="button"
+          >
+            Evidence and Unknowns
+          </button>
         </div>
+
+        {topSection === "department" && (
+          <div className="flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+            {WORKFLOW_DEPARTMENTS.map((department) => (
+              <button
+                className={`rounded-lg border px-3 py-2 text-sm ${selectedDepartment === department ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+                key={department}
+                onClick={() => onSectionChange(`department:${department}`)}
+                type="button"
+              >
+                {formatDepartmentName(department)}
+              </button>
+            ))}
+          </div>
+        )}
 
         {isLoading && <p className="text-sm text-slate-400">Loading engagement work product...</p>}
         {loadError && <p className="rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{loadError}</p>}
 
-        {!isLoading && !loadError && detail && activeSection === "executive" && <ExecutiveDeliverables detail={detail} />}
+        {!isLoading && !loadError && detail && topSection === "executive" && <ExecutiveDeliverables detail={detail} />}
+
+        {!isLoading && !loadError && detail && topSection === "analysis" && <AnalysisPanel detail={detail} />}
+
+        {!isLoading && !loadError && detail && topSection === "evidence" && <EvidencePanel detail={detail} />}
 
         {!isLoading &&
           !loadError &&
           detail &&
-          activeSection.startsWith("department:") &&
+          topSection === "department" &&
           (() => {
-            const department = activeSection.replace("department:", "") as DepartmentName;
+            const department = selectedDepartment;
             if (!WORKFLOW_DEPARTMENTS.includes(department)) {
               return (
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-400">
