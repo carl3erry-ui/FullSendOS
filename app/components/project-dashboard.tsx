@@ -56,7 +56,7 @@ export function ProjectDashboard() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data?.error || "Unable to load projects.");
+      throw new Error(data?.error || "Unable to load engagements.");
     }
 
     const nextProjects = Array.isArray(data) ? data : [];
@@ -77,7 +77,7 @@ export function ProjectDashboard() {
         await loadProjects({ clearError: true });
       } catch (loadError) {
         if (!active) return;
-        const message = loadError instanceof Error ? loadError.message : "Unable to load projects.";
+        const message = loadError instanceof Error ? loadError.message : "Unable to load engagements.";
         setError(message);
       } finally {
         if (active) setIsLoading(false);
@@ -286,7 +286,7 @@ export function ProjectDashboard() {
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Recent projects</h2>
+            <h2 className="text-xl font-semibold">Recent engagements</h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-400">{projects.length} tracked</span>
               <button
@@ -296,7 +296,7 @@ export function ProjectDashboard() {
                   try {
                     await loadProjects();
                   } catch (refreshError) {
-                    const message = refreshError instanceof Error ? refreshError.message : "Unable to refresh projects.";
+                    const message = refreshError instanceof Error ? refreshError.message : "Unable to refresh engagements.";
                     setError(message);
                   } finally {
                     setIsLoading(false);
@@ -309,7 +309,7 @@ export function ProjectDashboard() {
             </div>
           </div>
           <div className="mt-6 space-y-3">
-            {isLoading && <p className="text-sm text-slate-400">Loading projects...</p>}
+            {isLoading && <p className="text-sm text-slate-400">Loading engagements...</p>}
             {projects.map((project) => (
               <ProjectCard
                 key={project.id}

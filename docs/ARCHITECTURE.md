@@ -73,3 +73,11 @@ Canonical domain target remains Engagement.
 - Legacy compatibility routes: /api/projects
 - Engagement routes should delegate to shared existing handlers during this phase.
 - Internal project schema, store, and orchestrator modules remain in place until an approved migration milestone.
+
+## Work Product Review Layer
+
+- Engagement workspace renders validated persisted work product.
+- Executive deliverables are presented above department outputs.
+- Viewer reads persisted records via engagement detail API; it does not invoke model execution.
+- Rendering favors structured sections over raw JSON.
+- Exportable artifacts beyond the current markdown-backed deliverables remain later roadmap milestones.

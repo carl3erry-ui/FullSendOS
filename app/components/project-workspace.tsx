@@ -1,20 +1,70 @@
-type WorkspaceProject = {
-  id: string;
-  companyName: string;
-  objective: string;
-  status: string;
-  updatedAt?: string;
-  completedDepartments: number;
-  totalDepartments: number;
-};
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import WorkProductViewer from "./work-product-viewer";
+import {
+  getDefaultWorkspaceSection,
+  type EngagementDetail,
+  type WorkspaceProjectSummary,
+} from "./work-product-model";
 
 type ProjectWorkspaceProps = {
-  project: WorkspaceProject | null;
+  project: WorkspaceProjectSummary | null;
   runningProjectId: string | null;
   onRun: (projectId: string) => void;
 };
 
 export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWorkspaceProps) {
+  const [detail, setDetail] = useState<EngagementDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("executive");
+
+  const detailFetchKey = useMemo(() => {
+    if (!project) return "none";
+    return `${project.id}:${project.updatedAt || ""}:${project.status}`;
+  }, [project]);
+
+  useEffect(() => {
+    if (!project) {
+      setDetail(null);
+      setLoadError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const response = await fetch(`/api/engagements/${project.id}`, { cache: "no-store" });
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data?.error || "Unable to load engagement detail.");
+        }
+
+        if (cancelled) return;
+        setDetail(data as EngagementDetail);
+        setActiveSection((current) => (current === "executive" ? getDefaultWorkspaceSection(data as EngagementDetail) : current));
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Unable to load engagement detail.";
+        setLoadError(message);
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailFetchKey, project]);
+
   if (!project) {
     return (
       <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -24,47 +74,16 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
     );
   }
 
-  const progressText = `${project.completedDepartments}/${project.totalDepartments} departments`;
-
   return (
-    <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Engagement workspace</p>
-          <h2 className="mt-2 text-2xl font-semibold">{project.companyName}</h2>
-          <p className="mt-2 text-sm text-slate-300">{project.objective || "No objective defined."}</p>
-        </div>
-        <span className="inline-flex w-fit rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
-          {project.status}
-        </span>
-      </div>
-
-      <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Engagement ID</p>
-          <p className="mt-2 break-all text-sm text-slate-200">{project.id}</p>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Progress</p>
-          <p className="mt-2 text-sm text-slate-200">{progressText}</p>
-        </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3">
-          <p className="text-xs uppercase tracking-[0.15em] text-slate-400">Last update</p>
-          <p className="mt-2 text-sm text-slate-200">
-            {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Not available"}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button
-          className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-          onClick={() => onRun(project.id)}
-          disabled={Boolean(runningProjectId) || project.status === "running"}
-        >
-          {runningProjectId === project.id ? "Running..." : project.status === "running" ? "In Progress" : "Run engagement workflow"}
-        </button>
-      </div>
-    </section>
+    <WorkProductViewer
+      project={project}
+      detail={detail}
+      isLoading={isLoading}
+      loadError={loadError}
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+      runningProjectId={runningProjectId}
+      onRun={onRun}
+    />
   );
 }

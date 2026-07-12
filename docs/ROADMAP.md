@@ -13,6 +13,7 @@ Phase 1: Alpha one engagement
 - Generate validated work product
 - Persist engagement state
 - Review deliverables
+- Structured consulting work-product viewer
 
 Phase 2: Client intelligence
 
@@ -81,6 +82,8 @@ Phase 7: Marketplace
 - Word export
 - PDF export
 - PowerPoint export
+
+Note: richer export artifact generation remains deferred until after validated in-product review workflows.
 
 ## Sprint 4
 
