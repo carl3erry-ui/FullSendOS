@@ -3,6 +3,42 @@ import path from "node:path";
 
 const storageDir = path.resolve("data/projects");
 
+function computeCompletedDepartments(project) {
+  const runs = Array.isArray(project?.audit?.runs) ? project.audit.runs : [];
+  const departmentKeys = Object.keys(project?.departments || {});
+
+  if (!runs.length) {
+    return Object.values(project?.departments || {}).filter(Boolean).length;
+  }
+
+  let latestAttemptStart = runs.length - 1;
+  for (let index = runs.length - 1; index >= 0; index -= 1) {
+    if (runs[index]?.department === "research") {
+      latestAttemptStart = index;
+      break;
+    }
+  }
+
+  const latestAttemptRuns = runs.slice(latestAttemptStart);
+  const latestStatusByDepartment = {};
+
+  for (const run of latestAttemptRuns) {
+    if (!run?.department) continue;
+    latestStatusByDepartment[run.department] = run.status;
+  }
+
+  const counted = departmentKeys.filter((department) => {
+    const status = latestStatusByDepartment[department];
+    return status === "complete" || status === "repaired";
+  }).length;
+
+  if (counted > 0 || project?.status === "failed" || project?.status === "running") {
+    return counted;
+  }
+
+  return Object.values(project?.departments || {}).filter(Boolean).length;
+}
+
 export async function saveProject(project) {
   await fs.mkdir(storageDir, { recursive: true });
   const file = path.join(storageDir, `${project.id}.json`);
@@ -29,7 +65,7 @@ export async function listProjects() {
         status: project.status,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
-        completedDepartments: Object.values(project.departments || {}).filter(Boolean).length,
+        completedDepartments: computeCompletedDepartments(project),
         totalDepartments: Object.keys(project.departments || {}).length
       };
     } catch {

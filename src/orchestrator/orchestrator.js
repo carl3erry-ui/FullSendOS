@@ -1,6 +1,7 @@
 import { DepartmentContracts, buildDepartmentPrompt } from "../contracts/departmentContracts.js";
 import { ProjectSchema, createEmptyProject } from "../schemas/projectSchema.js";
 import { callXai } from "../services/xaiClient.js";
+import { normalizeDepartmentOutput } from "./outputNormalizer.js";
 import { parseJsonObject } from "../utils/json.js";
 import { saveProject } from "../storage/projectStore.js";
 
@@ -24,6 +25,34 @@ function formatValidationError(error) {
     .join("; ");
 }
 
+function redactForLog(value) {
+  if (!value || typeof value !== "object") return value;
+
+  if (Array.isArray(value)) {
+    return value.map((item) => redactForLog(item));
+  }
+
+  const redacted = {};
+  for (const [key, nestedValue] of Object.entries(value)) {
+    if (/api.?key|token|secret|authorization|password/i.test(key)) {
+      redacted[key] = "[REDACTED]";
+      continue;
+    }
+
+    redacted[key] = redactForLog(nestedValue);
+  }
+
+  return redacted;
+}
+
+function parseAndValidateDepartmentOutput({ department, schema, text }) {
+  const raw = parseJsonObject(text);
+  const redacted = redactForLog(raw);
+  console.log(`workflow-raw-output ${department}`, JSON.stringify(redacted).slice(0, 2000));
+  const normalized = normalizeDepartmentOutput(department, raw);
+  return schema.parse(normalized);
+}
+
 async function runDepartment({ department, project, model, onProgress }) {
   const contract = DepartmentContracts[department];
   const audit = {
@@ -42,7 +71,11 @@ async function runDepartment({ department, project, model, onProgress }) {
   let parsed;
 
   try {
-    parsed = contract.schema.parse(parseJsonObject(result.text));
+    parsed = parseAndValidateDepartmentOutput({
+      department,
+      schema: contract.schema,
+      text: result.text
+    });
   } catch (error) {
     const validationMessage = error?.issues ? formatValidationError(error) : error.message;
     audit.status = "repaired";
@@ -63,7 +96,11 @@ BROKEN OUTPUT
 ${result.text}`;
 
     result = await callXai({ prompt: repairPrompt, model });
-    parsed = contract.schema.parse(parseJsonObject(result.text));
+    parsed = parseAndValidateDepartmentOutput({
+      department,
+      schema: contract.schema,
+      text: result.text
+    });
   }
 
   project.departments[department] = parsed;
