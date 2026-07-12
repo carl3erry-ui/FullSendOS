@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CompetitorOutputSchema } from "../src/contracts/departmentContracts.js";
+import { PublisherOutputSchema } from "../src/contracts/departmentContracts.js";
 import { ResearchOutputSchema } from "../src/contracts/departmentContracts.js";
 import { normalizeDepartmentOutput } from "../src/orchestrator/outputNormalizer.js";
 
@@ -74,4 +75,64 @@ test("normalizes competitor payload shape mismatches into schema-compatible stru
   assert.equal(parsed.competitors[0].name, "TrackMax");
   assert.equal(parsed.competitors[0].pricing.classification, "unknown");
   assert.equal(parsed.recommendedPosition, "Own premium beginner transition");
+});
+
+function buildValidPublishingRaw() {
+  return {
+    summary: "Publishing summary",
+    claims: [],
+    unknowns: [],
+    sourceIdsUsed: [],
+    reportTitle: "Executive report",
+    subtitle: "Quarterly growth plan",
+    executiveSummary: "Top-line findings and recommendations.",
+    keyFindings: ["Finding one"],
+    recommendations: [
+      {
+        priority: "immediate",
+        recommendation: "Ship executive package",
+        rationale: "Supports decision making",
+        successMeasure: "Stakeholder approval",
+      },
+    ],
+    reportMarkdown: "# Executive report\n\nBody",
+    onePageSummary: "One-page summary",
+    deckOutline: [{ slide: 1, title: "Situation", purpose: "Context", keyPoints: ["Point"] }],
+  };
+}
+
+test("normalizes publishing deliverableOutline alias into deckOutline", () => {
+  const raw = buildValidPublishingRaw();
+  delete raw.deckOutline;
+  raw.deliverableOutline = [{ slide: 1, title: "Situation", purpose: "Context", keyPoints: ["Point"] }];
+
+  const normalized = normalizeDepartmentOutput("publishing", raw);
+  const parsed = PublisherOutputSchema.parse(normalized);
+
+  assert.equal(parsed.deckOutline.length, 1);
+  assert.equal(parsed.deckOutline[0].title, "Situation");
+});
+
+test("publishing validation rejects missing executive report markdown", () => {
+  const raw = buildValidPublishingRaw();
+  delete raw.reportMarkdown;
+
+  const normalized = normalizeDepartmentOutput("publishing", raw);
+  assert.throws(() => PublisherOutputSchema.parse(normalized), /reportMarkdown/i);
+});
+
+test("publishing validation rejects missing one-page summary", () => {
+  const raw = buildValidPublishingRaw();
+  delete raw.onePageSummary;
+
+  const normalized = normalizeDepartmentOutput("publishing", raw);
+  assert.throws(() => PublisherOutputSchema.parse(normalized), /onePageSummary/i);
+});
+
+test("publishing validation rejects missing deck outline", () => {
+  const raw = buildValidPublishingRaw();
+  delete raw.deckOutline;
+
+  const normalized = normalizeDepartmentOutput("publishing", raw);
+  assert.throws(() => PublisherOutputSchema.parse(normalized), /deckOutline/i);
 });

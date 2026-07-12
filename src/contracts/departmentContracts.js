@@ -152,14 +152,14 @@ export const PublisherOutputSchema = z.object({
     rationale: z.string(),
     successMeasure: z.string()
   })),
-  reportMarkdown: z.string(),
-  onePageSummary: z.string(),
+  reportMarkdown: z.string().min(1, "Publishing must include reportMarkdown."),
+  onePageSummary: z.string().min(1, "Publishing must include onePageSummary."),
   deckOutline: z.array(z.object({
     slide: z.number().int().positive(),
     title: z.string(),
     purpose: z.string(),
     keyPoints: z.array(z.string())
-  }))
+  })).min(1, "Publishing must include deckOutline with at least one slide.")
 });
 
 export const DepartmentContracts = {

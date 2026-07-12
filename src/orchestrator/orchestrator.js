@@ -159,7 +159,11 @@ export async function runExistingProject(project, options = {}) {
     onProgress?.({ type: "project-completed", project });
     return ProjectSchema.parse(project);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown workflow error";
+    const message = typeof error === "object" && error && "issues" in error && Array.isArray(error.issues)
+      ? formatValidationError(error)
+      : error instanceof Error
+        ? error.message
+        : "Unknown workflow error";
     await failWorkflowRun(project, message);
     onProgress?.({ type: "project-failed", project, error: message });
     throw error;
