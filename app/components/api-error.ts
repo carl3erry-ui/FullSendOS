@@ -31,3 +31,13 @@ export function getApiFieldErrors(payload: unknown): string[] {
     })
     .filter((item): item is string => Boolean(item));
 }
+
+export function formatApiError(payload: unknown, fallback: string, options: { includeFieldErrors?: boolean } = {}): string {
+  const base = getApiErrorMessage(payload, fallback);
+  if (!options.includeFieldErrors) return base;
+
+  const fieldErrors = getApiFieldErrors(payload);
+  if (!fieldErrors.length) return base;
+
+  return `${base} ${fieldErrors.slice(0, 3).join(" | ")}`;
+}
