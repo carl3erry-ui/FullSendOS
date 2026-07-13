@@ -58,7 +58,8 @@ export function recordAgentStepInAudit(
   return {
     ...project,
     audit: {
-      ...project.audit,
+      activeRun: project.audit?.activeRun ?? null,
+      warnings: project.audit?.warnings ?? [],
       runs: [...(project.audit?.runs || []), auditEntry as any],
       updatedAt: new Date().toISOString(),
     },
