@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { randomBytes } from "node:crypto";
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 import { DataRoomSchema, DataRoomFolderSchema, DataRoomFileSchema } from "./schemas/dataRoomSchema.js";
@@ -21,7 +20,6 @@ import {
 // ── Default folders ──────────────────────────────────────────────────────────
 import { DEFAULT_FOLDERS } from "./utils/defaultFolders.js";
 
-const TEMP_DIR = path.resolve("data/test-data-room-" + randomBytes(4).toString("hex"));
 const TEST_CLIENT_ID = "TEST-CLIENT-DRTEST";
 
 let passed = 0;

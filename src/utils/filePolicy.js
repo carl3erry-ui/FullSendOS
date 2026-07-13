@@ -79,7 +79,7 @@ export function sanitizeFilename(originalFilename) {
     .replace(/[/\\:*?"<>|]/g, "_")   // replace path separators and shell-special chars with underscores
     .replace(/\.\./g, "_")            // neutralize directory traversal sequences
     .replace(/^\./, "_")              // prevent hidden-file leading dot
-    .replace(/[^\w\-. ]/g, "_")       // keep only word chars, dash, dot, space
+    .replace(/[^a-zA-Z0-9\-. ]/g, "_")       // keep only ASCII alphanumerics, dash, dot, space
     .replace(/\s+/g, "_")             // collapse whitespace to underscore
     .slice(0, 200) || "unnamed";
 }

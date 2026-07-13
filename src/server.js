@@ -326,7 +326,7 @@ app.post("/api/projects/:clientId/data-room/files", async (req, res) => {
       sizeBytes = fileBuffer.length;
     } else {
       // JSON metadata registration (no binary content)
-      const body = req.body || {};
+      const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
       originalFilename = String(body.originalFilename || body.filename || "unnamed");
       folderId = String(body.folderId || "");
       displayName = String(body.displayName || "");

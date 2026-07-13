@@ -44,6 +44,7 @@ export async function deleteFileFromStorage(storagePath) {
   }
 }
 
+/** Computes a SHA-256 hex digest of the provided buffer for file integrity verification. */
 export function computeChecksum(buffer) {
   return createHash("sha256").update(buffer).digest("hex");
 }
