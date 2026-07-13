@@ -750,16 +750,314 @@ All output is sanitized before rendering.
 
 ### Current Limitation
 
-Agents do not yet drive the core consulting workflow. Workflow integration (Slice 6)
-will allow agents to be triggered from workflow department steps. For now, agents
-operate as independent tools within the engagement workspace.
+Workflow continuation after agent step approval is fully functional for configured
+agent-step workflows. Automatic insertion of agent steps into every department
+run is not yet implemented; departments remain deterministic. See "Workflow Pipeline
+Continuation After Resume" below.
 
 ---
 
-## Future Slices
+## Workflow Agent Step Support (Slice 6)
+
+Agent steps can be executed as part of an engagement workflow, alongside existing
+department execution.
+
+### How It Works
+
+An agent step is created via `executeWorkflowAgentStep()`:
+
+```typescript
+const entry = await executeWorkflowAgentStep({
+  project,
+  step: {
+    agentId: "researcher",
+    title: "Pre-workflow Research",
+    objective: "Analyze market context",
+    requiresApproval: true,
+  },
+  workflowRunId: "run-xxx",
+  departmentId: "research",
+});
+```
+
+The returned `WorkflowAgentAuditEntry` contains:
+- `type: "agent"` — identifies it as an agent step in the audit trail
+- `status` — `"waiting-for-approval"` | `"completed"` | `"failed"`
+- `pauseStateId` — set when `status === "waiting-for-approval"`
+- `agentId`, `taskId`, `title`, `startedAt`, `completedAt`, `provider`, `model`, `error`
+
+### Engagement Linking
+
+All workflow-created agent tasks have:
+- `projectId = project.id`
+- `engagementId = project.id`
+
+This ensures they automatically appear in:
+- The Engagement Agent Tasks panel (filtered by `engagementId`)
+- The Global AI Workforce dashboard
+
+No additional UI is required.
+
+### Audit Trail
+
+Agent steps are recorded in `project.audit.runs[]` alongside department runs:
+
+```json
+{
+  "type": "agent",
+  "department": "agent-step",
+  "agentId": "researcher",
+  "taskId": "task-researcher-1234567890",
+  "title": "Pre-workflow Research",
+  "status": "completed",
+  "pauseStateId": null,
+  "startedAt": "...",
+  "completedAt": "..."
+}
+```
+
+Unsafe fields are never written to the audit trail.
+
+---
+
+## Formal Workflow Step Model (Slice 7)
+
+Three formal step types are defined in `services/workflow-step-schema.ts`:
+
+| Type | Purpose |
+|------|---------|
+| `automation` | Deterministic department execution (existing PIPELINE) |
+| `agent` | AI agent task with optional pre-execution approval gate |
+| `human_approval` | Explicit human decision gate (defined but not yet wired) |
+
+### Approval Pause Behavior
+
+When `requiresApproval: true`:
+1. `AgentTask` is created with `approvalStatus: "pending"`
+2. Task is saved to `data/agent-tasks/`
+3. A `PausedWorkflowState` record is saved to `data/workflow-pauses/`
+4. `status: "waiting-for-approval"` is returned — **task does not execute**
+5. Workflow must check `shouldPauseWorkflow(project)` and stop if gates exist
+
+### Pause State Persistence
+
+`PausedWorkflowState` persisted to `data/workflow-pauses/{pauseId}.json`:
+
+```json
+{
+  "id": "pause-task-researcher-xxx",
+  "workflowRunId": "run-xxx",
+  "projectId": "ACME-123",
+  "engagementId": "ACME-123",
+  "currentStepId": "step-researcher",
+  "pausedAt": "...",
+  "agentTaskId": "task-researcher-xxx",
+  "requiredApprovalTarget": "agent_task:task-researcher-xxx",
+  "status": "waiting_for_approval",
+  "pendingStepIds": ["publishing"],
+  "completedStepIds": ["research"],
+  "failedStepIds": []
+}
+```
+
+### Resume After Approval
+
+After the human approves via `POST /api/agent-tasks/[id]/approve`:
+
+1. Call `POST /api/engagements/[id]/workflow/resume`
+2. Route validates engagement + pause state + approval status
+3. `resumeWorkflowAfterApproval()` executes the agent task
+4. Task status → `"completed"`, `output` stored as JSON string
+5. Pause state → `"resumed"`
+6. If `pendingStepIds` non-empty, pipeline continuation is triggered (Slice 8)
+
+### Resume UI
+
+The **Resume Workflow** button appears in the Task Detail Panel when:
+- `task.approvalStatus === "approved"`
+- `task.hasPausedWorkflow === true`
+- `task.engagementId` is present
+
+Hidden for: `rejected`, `revision_requested`, `pending`, non-workflow tasks.
+
+### Rejected/Revision Safety
+
+- `rejected` → `resumeWorkflowAfterApproval()` returns `{ code: "approval_not_granted" }`
+- `revision_requested` → same result
+- Workflow does not continue, no fake success
+
+---
+
+## Workflow Pipeline Continuation After Resume (Slice 8)
+
+After a paused agent step is approved and executed, the remaining workflow PIPELINE
+departments can automatically continue.
+
+### How It Works
+
+1. `PausedWorkflowState.pendingStepIds` contains remaining PIPELINE department names
+   (e.g., `["publishing"]`)
+2. `resumeWorkflowAfterApproval()` calls `continueWorkflowAfterResume()` after marking
+   the pause as resumed
+3. `continueWorkflowAfterResume()` loads the project and calls `runExistingProject()`
+   with `departmentsToRun` set to the remaining departments
+4. Completed departments are skipped (checked via department output status)
+5. Publishing deliverables are set when the `publishing` department runs
+6. Workflow reaches `"needs-review"` or `"complete"` when all steps finish
+
+### Continuation Modes
+
+| Context | Behavior |
+|---------|---------|
+| Test path (invokeModel provided) | Synchronous, controllable by mock |
+| Production path (no invokeModel) | Background fire-and-forget |
+
+### PIPELINE Override
+
+`runExistingProject()` now accepts `departmentsToRun: string[]`. When provided,
+only those departments execute. Full PIPELINE runs by default (backward compatible).
+
+```javascript
+await runExistingProject(project, {
+  skipRunStart: true,
+  departmentsToRun: ["publishing"],
+  invokeModel: mockFn,
+});
+```
+
+### Failure Behavior
+
+- If agent task execution fails → continuation does not start
+- If a continued department fails → `failWorkflowRun()` sets `project.status = "failed"`
+- If publishing validation fails → error thrown, project fails closed
+- All failures return clear error codes (`continuation_failed`, etc.)
+
+### Current Limitations
+
+1. **`pendingStepIds` must be pre-populated**: When creating a pause state, callers must
+   pass remaining PIPELINE departments. Nothing auto-detects them yet.
+2. **No agent steps inside the PIPELINE loop**: Departments remain deterministic. Agent
+   steps run before/after the PIPELINE, not as pipeline stages.
+3. **No live progress streaming**: Continuation fires in background; no WebSocket/SSE
+   update to the client when individual departments complete.
+
+---
+
+## What Is Implemented (Release Candidate)
+
+| Capability | Status |
+|-----------|--------|
+| Agent definitions (researcher, QC, orchestrator) | ✅ Complete |
+| Provider abstraction (xAI/Grok + mock) | ✅ Complete |
+| Agent registry (definitions + instances) | ✅ Complete |
+| Task persistence (file-based JSON) | ✅ Complete |
+| Execution persistence + redaction | ✅ Complete |
+| Executor lifecycle (execute, validate, persist) | ✅ Complete |
+| Approval gates (pending/approved/rejected/revision) | ✅ Complete |
+| Agent task API routes (CRUD + run + approve/reject/revision) | ✅ Complete |
+| Global AI Workforce dashboard | ✅ Complete |
+| Engagement Agent Tasks panel | ✅ Complete |
+| Workflow agent step support | ✅ Complete |
+| Formal workflow step model (automation/agent/human_approval) | ✅ Complete |
+| Paused workflow state persistence | ✅ Complete |
+| Resume-after-approval backend | ✅ Complete |
+| Resume Workflow UI button | ✅ Complete |
+| Pipeline continuation after resume | ✅ Complete |
+| Unsafe data filtering (API, UI, audit) | ✅ Complete |
+| Alpha workflow preserved (all 7 departments) | ✅ Complete |
+
+## What Is Not Implemented
+
+| Capability | Status | Notes |
+|-----------|--------|-------|
+| Agent steps inside the PIPELINE loop | ❌ Not yet | Departments remain deterministic |
+| `human_approval` step type wired to workflow | ❌ Not yet | Schema defined; not wired |
+| `post_execution` approval mode | ❌ Not yet | Only `pre_execution` is active |
+| Parallel agent step execution | ❌ Not yet | All steps are sequential |
+| Automatic `pendingStepIds` detection | ❌ Not yet | Callers must pass them |
+| Live continuation progress (SSE/WebSocket) | ❌ Not yet | Fire-and-forget only |
+| Pause state TTL / expiry enforcement | ❌ Not yet | Schema supports `"expired"` |
+| Agent tool permissions enforcement | ❌ Not yet | `allowedTools` defined but unenforced |
+| Agent cost accounting | ❌ Not yet | `estimatedCost` tracked but not enforced |
+| Client portal / data room | ❌ Out of scope | Not planned for this branch |
+| QuickBooks/external integrations | ❌ Out of scope | Not planned |
+| Rate limiting | ❌ Out of scope | Document future need |
+
+---
+
+## Data Storage
+
+All data is file-based JSON under `data/`:
+
+| Directory | Contents |
+|-----------|---------|
+| `data/projects/` | Engagement/project JSON (includes `audit` field) |
+| `data/clients/` | Client JSON |
+| `data/agent-tasks/` | AgentTask JSON |
+| `data/agent-executions/` | AgentExecution JSON (rawResponse redacted) |
+| `data/workflow-pauses/` | PausedWorkflowState JSON |
+
+No database, no migrations, no external state.
+
+---
+
+## Unsafe Data Filtering
+
+The system enforces multiple layers of filtering:
+
+### Layer 1 — Provider (execution store)
+`AgentExecution.rawResponse` is stored but stripped from all API responses.
+
+### Layer 2 — Agent registry
+`getPublicMetadata()` and `listPublicMetadata()` omit `systemPrompt` and `outputSchema`.
+
+### Layer 3 — Task detail API
+`GET /api/agent-tasks/[id]` strips `systemPromptSnapshot`, `rawResponse`, and
+`toolPermissionsSnapshot` from execution records before responding.
+
+### Layer 4 — UI client
+`sanitizeOutputForDisplay()` in `agent-task-client.ts` recursively removes:
+`apiKey`, `authorization`, `debugPrompt`, `diagnosticTrace`, `password`,
+`rawProviderPayload`, `rawProviderResponse`, `rawResponse`, `secret`, `stack`,
+`stackTrace`, `systemPrompt`, `systemPromptSnapshot`, `token`
+
+### Layer 5 — Audit trail
+`WorkflowAgentAuditEntry` and `AgentAuditRunEntry` types only include safe fields.
+No raw provider data, prompts, or secrets are in the type definition.
+
+---
+
+## System Principles
+
+FullSendOS is the **orchestration layer**. It controls:
+- state
+- permissions
+- evidence
+- cost
+- approval
+- accountability
+
+**Grok/xAI** is a provider, not the hosted agent platform. FullSendOS calls Grok as
+a tool. Grok does not control FullSendOS.
+
+**Agents** do the thinking work — analysis, structure, recommendations.
+
+**Workflows** govern the process — sequencing, validation, deliverable contracts.
+
+**Humans** authorize consequential actions — approvals, revisions, rejection.
+
+Agents cannot bypass approvals, modify the workflow engine, or access unsafe data.
+
+---
+
+## Future Slices (Roadmap)
 
 | Slice | Capability |
 |-------|-----------|
-| **Slice 6** | Workflow integration — trigger agents from workflow department steps |
-| **Slice 7** | Tool permissions — enforce allowedTools at execution time |
-| **Slice 8** | Background queue — async task execution with progress streaming |
+| **Slice 9** | Integrate agent steps directly into the orchestrator PIPELINE |
+| **Slice 10** | Live continuation progress (SSE/polling) |
+| **Slice 11** | Agent tool permissions enforcement |
+| **Slice 12** | Cost accounting and budget gates |
+| **Slice 13** | Rate limiting and API security |
+| **Slice 14** | Parallel agent step execution |
+
