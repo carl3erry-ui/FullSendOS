@@ -88,6 +88,7 @@
           <button class="tab" data-tab="client">Client report</button>
           <button class="tab" data-tab="workspace">Workspace</button>
           <button class="tab" data-tab="evidence">Evidence</button>
+          <button class="tab" data-tab="dataroom">Data Room</button>
         </div>
 
         <section class="tab-panel" id="tab-overview">
@@ -129,6 +130,62 @@
             <h3>Items requiring validation</h3>
             <div id="unknownList"></div>
           </article>
+        </section>
+
+        <section class="tab-panel hidden" id="tab-dataroom">
+          <div class="dr-layout">
+            <aside class="dr-sidebar">
+              <div class="section-heading" style="margin-bottom:14px">
+                <div><p class="eyebrow">Client Data Room</p><h3 id="drRoomName">Data Room</h3></div>
+              </div>
+              <div id="drFolderList" class="dr-folder-list">
+                <div class="dr-loading">Loading folders…</div>
+              </div>
+            </aside>
+            <div class="dr-content">
+              <div class="dr-content-header">
+                <div>
+                  <p class="eyebrow" id="drFolderEyebrow">Select a folder</p>
+                  <h3 id="drFolderTitle">Folders</h3>
+                  <p class="muted" id="drFolderDescription"></p>
+                </div>
+                <button class="primary" id="drUploadButton" style="display:none">+ Add file</button>
+              </div>
+              <div id="drFileList">
+                <div class="dr-empty-state">
+                  <p class="eyebrow">No folder selected</p>
+                  <p>Select a folder from the left to view files.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <dialog id="drRegisterDialog">
+            <form method="dialog" id="drRegisterForm">
+              <div class="dialog-header">
+                <div><p class="eyebrow">Data Room</p><h2>Register file</h2></div>
+                <button class="icon-button" value="cancel" type="button" id="drCloseDialog">×</button>
+              </div>
+              <div class="form-grid">
+                <label>Original filename<input required id="drFilename" placeholder="annual-report.pdf"></label>
+                <label>Display name<input id="drDisplayName" placeholder="Annual Report 2024"></label>
+              </div>
+              <label>Description (optional)<textarea id="drDescription" rows="2" placeholder="Brief description of this file's contents…"></textarea></label>
+              <label>Tags (comma-separated)<input id="drTags" placeholder="finance, q4, confidential"></label>
+              <div style="display:flex;gap:16px;margin-top:14px">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" id="drSensitive"> Sensitive
+                </label>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" id="drApprovedForAgent"> Approved for agent use
+                </label>
+              </div>
+              <div class="dialog-actions">
+                <button class="ghost" value="cancel" type="button" id="drCancelDialog">Cancel</button>
+                <button class="primary" type="submit">Register file</button>
+              </div>
+            </form>
+          </dialog>
         </section>
       </section>
 
