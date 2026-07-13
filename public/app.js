@@ -309,6 +309,7 @@ function switchTab(name) {
   document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.tab === name));
   document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.add("hidden"));
   $(`tab-${name}`).classList.remove("hidden");
+  if (name === "dataroom" && state.activeProject) loadDataRoom();
 }
 
 function showMethod() {
@@ -341,6 +342,217 @@ $("refreshButton").addEventListener("click", async () => { await loadProjects();
 $("printButton").addEventListener("click", () => window.print());
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
 document.querySelectorAll(".nav-item").forEach((item) => item.addEventListener("click", () => item.dataset.page === "method" ? showMethod() : showProjectsPage()));
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Data Room
+// ──────────────────────────────────────────────────────────────────────────────
+
+const drState = {
+  dataRoom: null,
+  folders: [],
+  files: [],
+  activeFolderId: null
+};
+
+const drDialog = $("drRegisterDialog");
+
+async function loadDataRoom() {
+  if (!state.activeProject) return;
+  const clientId = encodeURIComponent(state.activeProject.id);
+  try {
+    const [dataRoom, folders] = await Promise.all([
+      request(`/api/projects/${clientId}/data-room`),
+      request(`/api/projects/${clientId}/data-room/folders`)
+    ]);
+    drState.dataRoom = dataRoom;
+    drState.folders = folders;
+    $("drRoomName").textContent = dataRoom.name;
+    renderDrFolders();
+    if (folders.length > 0) {
+      await selectDrFolder(folders[0].id);
+    } else {
+      renderDrFiles([]);
+    }
+  } catch (error) {
+    $("drFolderList").innerHTML = `<div class="muted">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderDrFolders() {
+  const list = $("drFolderList");
+  if (!drState.folders.length) {
+    list.innerHTML = '<div class="muted">No folders yet.</div>';
+    return;
+  }
+  list.innerHTML = drState.folders.map((folder) => `
+    <button class="dr-folder-item ${drState.activeFolderId === folder.id ? "active" : ""}" data-folder-id="${escapeHtml(folder.id)}">
+      <span class="dr-folder-icon">📁</span>
+      <span>${escapeHtml(folder.name)}</span>
+    </button>
+  `).join("");
+  list.querySelectorAll(".dr-folder-item").forEach((btn) => {
+    btn.addEventListener("click", () => selectDrFolder(btn.dataset.folderId));
+  });
+}
+
+async function selectDrFolder(folderId) {
+  drState.activeFolderId = folderId;
+  const folder = drState.folders.find((f) => f.id === folderId);
+  if (!folder) return;
+
+  $("drFolderEyebrow").textContent = folder.category || "folder";
+  $("drFolderTitle").textContent = folder.name;
+  $("drFolderDescription").textContent = folder.description || "";
+  $("drUploadButton").style.display = "";
+  renderDrFolders();
+
+  try {
+    const clientId = encodeURIComponent(state.activeProject.id);
+    const files = await request(`/api/projects/${clientId}/data-room/files?folderId=${encodeURIComponent(folderId)}`);
+    drState.files = files;
+    renderDrFiles(files);
+  } catch (error) {
+    $("drFileList").innerHTML = `<div class="muted">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderDrFiles(files) {
+  const container = $("drFileList");
+  if (!files.length) {
+    container.innerHTML = `
+      <div class="dr-empty-state">
+        <p class="eyebrow">No files yet</p>
+        <p>No files have been added to this client data room yet.<br>
+        Upload financials, brand assets, legal documents, real estate files, or other source materials.</p>
+        <button class="primary" id="drEmptyUploadButton">+ Add file</button>
+      </div>`;
+    const emptyBtn = $("drEmptyUploadButton");
+    if (emptyBtn) emptyBtn.addEventListener("click", openDrRegisterDialog);
+    return;
+  }
+
+  container.innerHTML = `
+    <table class="data-table dr-file-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Size</th>
+          <th>Status</th>
+          <th>Agent</th>
+          <th>Sensitive</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${files.map((file) => `
+          <tr data-file-id="${escapeHtml(file.id)}">
+            <td>
+              <b>${escapeHtml(file.displayName)}</b>
+              <br><small class="muted">${escapeHtml(file.originalFilename)}</small>
+              ${file.description ? `<br><small class="muted">${escapeHtml(file.description)}</small>` : ""}
+            </td>
+            <td><span class="dr-ext-badge">${escapeHtml(file.extension ? file.extension.toUpperCase() : "—")}</span></td>
+            <td class="muted">${file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : "—"}</td>
+            <td><span class="status-badge ${escapeHtml(file.status)}">${escapeHtml(file.status)}</span></td>
+            <td>${file.approvedForAgentUse ? '<span class="dr-flag approved">✓ Approved</span>' : '<span class="dr-flag">—</span>'}</td>
+            <td>${file.sensitive ? '<span class="dr-flag sensitive">⚠ Sensitive</span>' : '<span class="dr-flag">—</span>'}</td>
+            <td>
+              <button class="ghost small dr-toggle-agent" data-id="${escapeHtml(file.id)}" data-value="${file.approvedForAgentUse}" title="Toggle agent approval">Agent</button>
+              <button class="ghost small dr-delete-file" data-id="${escapeHtml(file.id)}" title="Delete file">✕</button>
+            </td>
+          </tr>`).join("")}
+      </tbody>
+    </table>`;
+
+  container.querySelectorAll(".dr-toggle-agent").forEach((btn) => {
+    btn.addEventListener("click", () => toggleAgentApproval(btn.dataset.id, btn.dataset.value === "true"));
+  });
+  container.querySelectorAll(".dr-delete-file").forEach((btn) => {
+    btn.addEventListener("click", () => deleteDrFile(btn.dataset.id));
+  });
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function toggleAgentApproval(fileId, current) {
+  if (!state.activeProject) return;
+  try {
+    const clientId = encodeURIComponent(state.activeProject.id);
+    await request(`/api/projects/${clientId}/data-room/files/${encodeURIComponent(fileId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approvedForAgentUse: !current })
+    });
+    await selectDrFolder(drState.activeFolderId);
+    showToast(!current ? "Approved for agent use" : "Agent approval removed");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+async function deleteDrFile(fileId) {
+  if (!state.activeProject) return;
+  if (!confirm("Delete this file record? This cannot be undone.")) return;
+  try {
+    const clientId = encodeURIComponent(state.activeProject.id);
+    await request(`/api/projects/${clientId}/data-room/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+    await selectDrFolder(drState.activeFolderId);
+    showToast("File deleted");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function openDrRegisterDialog() {
+  $("drRegisterForm").reset();
+  drDialog.showModal();
+  $("drFilename").focus();
+}
+
+async function registerDrFile(event) {
+  event.preventDefault();
+  if (!state.activeProject || !drState.activeFolderId) return;
+
+  const originalFilename = $("drFilename").value.trim();
+  const displayName = $("drDisplayName").value.trim();
+  const description = $("drDescription").value.trim();
+  const tagsRaw = $("drTags").value.trim();
+  const sensitive = $("drSensitive").checked;
+  const approvedForAgentUse = $("drApprovedForAgent").checked;
+  const tags = tagsRaw ? tagsRaw.split(",").map((t) => t.trim()).filter(Boolean) : [];
+
+  try {
+    const clientId = encodeURIComponent(state.activeProject.id);
+    await request(`/api/projects/${clientId}/data-room/files`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        originalFilename,
+        displayName: displayName || originalFilename,
+        folderId: drState.activeFolderId,
+        description: description || undefined,
+        tags,
+        sensitive,
+        approvedForAgentUse
+      })
+    });
+    drDialog.close();
+    await selectDrFolder(drState.activeFolderId);
+    showToast("File registered");
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+$("drUploadButton").addEventListener("click", openDrRegisterDialog);
+$("drCloseDialog").addEventListener("click", () => drDialog.close());
+$("drCancelDialog").addEventListener("click", () => drDialog.close());
+$("drRegisterForm").addEventListener("submit", registerDrFile);
 
 renderMethod();
 await Promise.all([checkHealth(), loadProjects()]);
