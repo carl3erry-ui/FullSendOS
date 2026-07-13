@@ -322,8 +322,8 @@ app.post("/api/projects/:clientId/data-room/files", async (req, res) => {
       if (!Buffer.isBuffer(req.body)) {
         return res.status(400).json({ error: "Binary upload requires application/octet-stream body." });
       }
-      fileBuffer = req.body;
-      sizeBytes = fileBuffer.length;
+      fileBuffer = Buffer.from(req.body);  // explicit Buffer copy ensures type is resolved
+      sizeBytes = fileBuffer.byteLength;
     } else {
       // JSON metadata registration (no binary content)
       const body = req.body && typeof req.body === "object" && !Array.isArray(req.body) ? req.body : {};
