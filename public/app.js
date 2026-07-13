@@ -452,7 +452,7 @@ function renderDrFiles(files) {
               <br><small class="muted">${escapeHtml(file.originalFilename)}</small>
               ${file.description ? `<br><small class="muted">${escapeHtml(file.description)}</small>` : ""}
             </td>
-            <td><span class="dr-ext-badge">${escapeHtml((file.extension || "").toUpperCase() || "—")}</span></td>
+            <td><span class="dr-ext-badge">${escapeHtml(file.extension ? file.extension.toUpperCase() : "—")}</span></td>
             <td class="muted">${file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : "—"}</td>
             <td><span class="status-badge ${escapeHtml(file.status)}">${escapeHtml(file.status)}</span></td>
             <td>${file.approvedForAgentUse ? '<span class="dr-flag approved">✓ Approved</span>' : '<span class="dr-flag">—</span>'}</td>

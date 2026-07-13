@@ -263,7 +263,7 @@ app.get("/api/projects/:clientId/data-room/files", async (req, res) => {
   try {
     const project = await requireProject(req.params.clientId, res);
     if (!project) return;
-    const folderId = Array.isArray(req.query.folderId) ? req.query.folderId[0] : (req.query.folderId || null);
+    const folderId = (Array.isArray(req.query.folderId) ? req.query.folderId[0] : req.query.folderId) || null;
     const files = await listFileMetas(req.params.clientId, folderId);
     res.json(files.map(safeFileMeta));
   } catch (error) {
@@ -313,7 +313,10 @@ app.post("/api/projects/:clientId/data-room/files", async (req, res) => {
       description = req.headers["x-description"] || "";
       engagementId = req.headers["x-engagement-id"] || "";
       tags = (req.headers["x-tags"] || "").split(",").map((t) => t.trim()).filter(Boolean);
-      fileBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (!Buffer.isBuffer(req.body)) {
+        return res.status(400).json({ error: "Binary upload requires application/octet-stream body." });
+      }
+      fileBuffer = req.body;
       sizeBytes = fileBuffer.length;
     } else {
       // JSON metadata registration (no binary content)

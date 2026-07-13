@@ -76,7 +76,7 @@ export function validateFileType(originalFilename, sizeBytes = 0) {
 export function sanitizeFilename(originalFilename) {
   const name = String(originalFilename || "unnamed").trim();
   return name
-    .replace(/[/\\:*?"<>|]/g, "_")   // remove path separators and shell-special chars
+    .replace(/[/\\:*?"<>|]/g, "_")   // replace path separators and shell-special chars with underscores
     .replace(/\.\./g, "_")            // neutralize directory traversal sequences
     .replace(/^\./, "_")              // prevent hidden-file leading dot
     .replace(/[^\w\-. ]/g, "_")       // keep only word chars, dash, dot, space
