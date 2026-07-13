@@ -3,11 +3,13 @@
  *
  * Return task detail with associated executions, approval status, and output.
  * Redacts unsafe raw provider data.
+ * Includes pauseStateId and hasPausedWorkflow when an active pause exists.
  */
 
 import { NextResponse } from "next/server";
 import { globalTaskStore, globalExecutionStore, globalAgentRegistry, AgentExecutorError } from "@/agents";
 import { errorResponse, successResponse } from "../../agent-routes-helper";
+import { findPauseForTask } from "@/services/workflow-pause-store";
 
 export async function GET(
   _request: Request,
@@ -49,6 +51,11 @@ export async function GET(
 
     const agent = globalAgentRegistry.getPublicMetadata(task.agentId);
 
+    // Check if there's an active paused workflow state for this task
+    const pauseState = await findPauseForTask(task.id).catch(() => null);
+    const hasPausedWorkflow = pauseState !== null;
+    const pauseStateId = pauseState?.id ?? null;
+
     return successResponse({
       task: {
         ...task,
@@ -62,6 +69,11 @@ export async function GET(
           : undefined,
         estimatedCost: task.cost ?? safeExecutions.at(-1)?.estimatedCost ?? null,
         error: task.error ?? null,
+        // Workflow pause fields (safe to expose: no prompts/keys/payloads)
+        engagementId: task.engagementId ?? null,
+        workflowRunId: task.workflowRunId ?? null,
+        hasPausedWorkflow,
+        pauseStateId,
       },
       agent: {
         name: agent?.name ?? task.agentId,

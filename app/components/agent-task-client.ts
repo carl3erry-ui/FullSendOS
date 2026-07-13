@@ -52,6 +52,11 @@ export type TaskDetailResponse = {
       total_tokens?: number;
     };
     estimatedCost?: number | null;
+    // Workflow pause fields
+    engagementId?: string | null;
+    workflowRunId?: string | null;
+    hasPausedWorkflow?: boolean;
+    pauseStateId?: string | null;
   };
   agent: {
     name: string;
@@ -269,4 +274,39 @@ export async function submitTaskApproval(
   if (!response.ok) {
     throw new Error(getApiErrorMessage(data, "Failed to submit approval action."));
   }
+}
+
+export type ResumeWorkflowResult = {
+  engagementId: string;
+  pauseStateId: string;
+  taskStatus: string;
+  resumedAt: string;
+};
+
+export async function resumeWorkflow(
+  engagementId: string,
+  pauseStateId: string | null | undefined,
+  options?: { resumedBy?: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<ResumeWorkflowResult> {
+  const payload: Record<string, string> = {};
+  if (pauseStateId) payload.pauseStateId = pauseStateId;
+  if (options?.resumedBy) payload.resumedBy = options.resumedBy;
+
+  const response = await fetchImpl(
+    `/api/engagements/${engagementId}/workflow/resume`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  const data = await parseResponse(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(data, "Failed to resume workflow."));
+  }
+
+  return (data as { engagementId: string; pauseStateId: string; taskStatus: string; resumedAt: string });
 }

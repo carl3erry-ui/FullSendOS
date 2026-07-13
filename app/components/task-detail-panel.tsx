@@ -7,6 +7,7 @@ import {
   fetchTaskDetail,
   runTask,
   submitTaskApproval,
+  resumeWorkflow,
 } from "./agent-task-client";
 import {
   OrchestratorOutputRenderer,
@@ -28,6 +29,8 @@ export function TaskDetailPanel({ taskId, onTaskCompleted }: TaskDetailPanelProp
   const [approvalInProgress, setApprovalInProgress] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState("");
   const [showApprovalForm, setShowApprovalForm] = useState<"reject" | "revision" | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
+  const [resumeMessage, setResumeMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     loadTaskDetail();
@@ -62,6 +65,27 @@ export function TaskDetailPanel({ taskId, onTaskCompleted }: TaskDetailPanelProp
       setError(message);
     } finally {
       setIsRunning(false);
+    }
+  };
+
+  const handleResumeWorkflow = async () => {
+    if (!task) return;
+    const engagementId = task.task.engagementId;
+    if (!engagementId) return;
+
+    try {
+      setIsResuming(true);
+      setResumeMessage(null);
+      setError(null);
+      await resumeWorkflow(engagementId, task.task.pauseStateId);
+      setResumeMessage({ type: "success", text: "Workflow resumed — agent task executed." });
+      await loadTaskDetail();
+      onTaskCompleted();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to resume workflow.";
+      setResumeMessage({ type: "error", text: message });
+    } finally {
+      setIsResuming(false);
     }
   };
 
@@ -218,8 +242,7 @@ export function TaskDetailPanel({ taskId, onTaskCompleted }: TaskDetailPanelProp
         </div>
       )}
 
-      {showApprovalForm && (
-        <div className="mb-4 rounded border border-slate-700 bg-slate-900/50 p-3">
+      {showApprovalForm && (        <div className="mb-4 rounded border border-slate-700 bg-slate-900/50 p-3">
           <textarea
             value={approvalNotes}
             onChange={(e) => setApprovalNotes(e.target.value)}
@@ -248,6 +271,33 @@ export function TaskDetailPanel({ taskId, onTaskCompleted }: TaskDetailPanelProp
           </div>
         </div>
       )}
+
+      {/* Resume Workflow — shown only when task is approved and linked to a paused workflow */}
+      {task.task.approvalStatus === "approved" &&
+        task.task.hasPausedWorkflow === true &&
+        task.task.engagementId && (
+          <div className="mb-4">
+            {resumeMessage && (
+              <div
+                className={`mb-2 rounded border p-2 text-xs ${
+                  resumeMessage.type === "success"
+                    ? "border-emerald-700 bg-emerald-950/30 text-emerald-200"
+                    : "border-rose-700 bg-rose-950/30 text-rose-200"
+                }`}
+              >
+                {resumeMessage.text}
+              </div>
+            )}
+            <button
+              onClick={handleResumeWorkflow}
+              disabled={isResuming}
+              data-testid="resume-workflow-button"
+              className="w-full rounded-lg border border-violet-700 bg-violet-950/30 px-3 py-2 text-sm font-medium text-violet-300 hover:bg-violet-950/50 disabled:opacity-60"
+            >
+              {isResuming ? "Resuming workflow…" : "Resume Workflow"}
+            </button>
+          </div>
+        )}
 
       {Boolean(task.task.output) && (
         <div className="mt-4 space-y-3 rounded border border-slate-700 bg-slate-800/50 p-3">
