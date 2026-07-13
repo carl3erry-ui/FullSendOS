@@ -24,10 +24,10 @@ function toEngagementSummary(project: {
   };
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(_request: Request, { params }: { params: Promise<{ clientId: string }> }) {
   try {
-    const { id } = await params;
-    const [client, projects] = await Promise.all([loadClient(id), listProjects()]);
+    const { clientId } = await params;
+    const [client, projects] = await Promise.all([loadClient(clientId), listProjects()]);
     const engagements = projects
       .filter((project): project is NonNullable<(typeof projects)[number]> => Boolean(project))
       .filter((project) => project.clientId === client.id)

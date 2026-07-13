@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { GET as getClients, POST as createClient } from "../app/api/clients/route";
-import { GET as getClientDetail } from "../app/api/clients/[id]/route";
+import { GET as getClientDetail } from "../app/api/clients/[clientId]/route";
 import { POST as createEngagement } from "../app/api/engagements/route";
 import { loadProject } from "../src/storage/projectStore.js";
 
@@ -70,7 +70,7 @@ test("client routes support create, list, and detail with associated engagement 
     assert.equal(listedClient.engagementCount, 1);
 
     const detailResponse = await getClientDetail(new Request(`http://127.0.0.1:3000/api/clients/${createdClientBody.id}`), {
-      params: Promise.resolve({ id: createdClientBody.id }),
+      params: Promise.resolve({ clientId: createdClientBody.id }),
     });
     const detailBody = await detailResponse.json();
 
@@ -135,7 +135,7 @@ test("legacy engagement creation without clientId remains supported", async () =
 
 test("client detail route returns 404 for unknown id", async () => {
   const response = await getClientDetail(new Request("http://127.0.0.1:3000/api/clients/unknown"), {
-    params: Promise.resolve({ id: "UNKNOWN-CLIENT-ID" }),
+    params: Promise.resolve({ clientId: "UNKNOWN-CLIENT-ID" }),
   });
   const body = await response.json();
 
