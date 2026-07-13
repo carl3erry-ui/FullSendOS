@@ -5,6 +5,7 @@ import { DashboardSummary } from "./dashboard-summary";
 import { ProjectCard } from "./project-card";
 import { ProjectForm, type ProjectFormState } from "./project-form";
 import { ProjectWorkspace } from "./project-workspace";
+import { AIWorkforceSection } from "./ai-workforce-section";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
 import {
   createPollController,
@@ -94,6 +95,7 @@ const executivePipeline = [
 ];
 
 export function ProjectDashboard() {
+  const [view, setView] = useState<"engagements" | "ai-workforce">("engagements");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -475,26 +477,56 @@ export function ProjectDashboard() {
           </p>
         </header>
 
-        <DashboardSummary
-          activeClients={clients.length}
-          readyForReview={readyForReviewProjects.length}
-          actionRequired={actionRequiredProjects.length}
-          recentWorkProducts={recentWorkProducts}
-        />
+        {/* View Tabs */}
+        <div className="flex gap-2 border-b border-slate-700">
+          <button
+            onClick={() => setView("engagements")}
+            className={`px-4 py-2 text-sm font-medium ${
+              view === "engagements"
+                ? "border-b-2 border-cyan-500 text-cyan-300"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Engagements
+          </button>
+          <button
+            onClick={() => setView("ai-workforce")}
+            className={`px-4 py-2 text-sm font-medium ${
+              view === "ai-workforce"
+                ? "border-b-2 border-cyan-500 text-cyan-300"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            AI Workforce
+          </button>
+        </div>
 
-        {(error || notice) && (
-          <section className="space-y-3">
-            {error && (
-              <div className="rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{error}</div>
-            )}
-            {notice && (
-              <div className="rounded-xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{notice}</div>
-            )}
-          </section>
-        )}
+        {/* AI Workforce View */}
+        {view === "ai-workforce" && <AIWorkforceSection />}
 
-        <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+        {/* Engagements View */}
+        {view === "engagements" && (
+          <>
+            <DashboardSummary
+              activeClients={clients.length}
+              readyForReview={readyForReviewProjects.length}
+              actionRequired={actionRequiredProjects.length}
+              recentWorkProducts={recentWorkProducts}
+            />
+
+            {(error || notice) && (
+              <section className="space-y-3">
+                {error && (
+                  <div className="rounded-xl border border-rose-800 bg-rose-950/40 px-4 py-3 text-sm text-rose-200">{error}</div>
+                )}
+                {notice && (
+                  <div className="rounded-xl border border-emerald-800 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">{notice}</div>
+                )}
+              </section>
+            )}
+
+            <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 className="text-xl font-semibold">Executive office</h2>
             <p className="mt-2 text-sm text-slate-400">
               {selectedProject ? `Engagement ${selectedProject.id} is ${selectedProject.status}.` : "Choose an engagement to monitor workflow stage by stage."}
@@ -528,10 +560,10 @@ export function ProjectDashboard() {
                 );
               })}
             </div>
-          </div>
+              </div>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 className="text-xl font-semibold">Decision queue</h2>
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+                <h2 className="text-xl font-semibold">Decision queue</h2>
             <p className="mt-2 text-sm text-slate-400">Focus first on work products that are ready for leadership review, then clear blockers.</p>
 
             <div className="mt-4 space-y-4">
@@ -568,11 +600,11 @@ export function ProjectDashboard() {
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
+              </div>
+              </div>
+            </section>
 
-        <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
+            <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">Active clients</h2>
@@ -753,9 +785,9 @@ export function ProjectDashboard() {
           </div>
         </section>
 
-        <ProjectWorkspace project={selectedProject} runningProjectId={runningProjectId} onRun={handleRun} />
+            <ProjectWorkspace project={selectedProject} runningProjectId={runningProjectId} onRun={handleRun} />
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Recent engagements</h2>
             <div className="flex items-center gap-3">
@@ -801,25 +833,27 @@ export function ProjectDashboard() {
             {!isLoading && completeCount > 0 && (
               <p className="text-sm text-emerald-300">{completeCount} engagement{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
             )}
-          </div>
-        </section>
+            </div>
+            </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-          <h2 className="text-xl font-semibold">Secondary intake</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            Use quick engagement only when work cannot be attached to an existing client.
-          </p>
-          <div className="mt-4">
-            <ProjectForm
-              form={form}
-              isCreating={isCreating}
-              isRunInProgress={Boolean(runningProjectId)}
-              isSecondary
-              onSubmit={handleCreate}
-              onFieldChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
-            />
-          </div>
-        </section>
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+              <h2 className="text-xl font-semibold">Secondary intake</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Use quick engagement only when work cannot be attached to an existing client.
+              </p>
+              <div className="mt-4">
+                <ProjectForm
+                  form={form}
+                  isCreating={isCreating}
+                  isRunInProgress={Boolean(runningProjectId)}
+                  isSecondary
+                  onSubmit={handleCreate}
+                  onFieldChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+                />
+              </div>
+            </section>
+          </>
+        )}
       </div>
     </main>
   );

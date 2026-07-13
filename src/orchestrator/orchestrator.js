@@ -150,20 +150,25 @@ export async function runExistingProject(project, options = {}) {
   const model = options.model || process.env.XAI_MODEL || "grok-4.5";
   const onProgress = options.onProgress;
   const invokeModel = options.invokeModel || callXai;
+  // Slice 8: allow callers to run only a subset of departments for continuation
+  const pipeline = Array.isArray(options.departmentsToRun) ? options.departmentsToRun : PIPELINE;
 
   if (!options.skipRunStart) {
     await beginWorkflowRun(project, { model, runId: options.runId });
   }
 
   try {
-    for (const department of PIPELINE) {
+    for (const department of pipeline) {
       await runDepartment({ department, project, model, onProgress, invokeModel });
     }
 
-    const publishing = project.departments.publishing;
-    project.deliverables.executiveReport = publishing.reportMarkdown;
-    project.deliverables.onePageSummary = publishing.onePageSummary;
-    project.deliverables.deckOutline = publishing.deckOutline;
+    // Only set publishing deliverables when the publishing department was run
+    if (pipeline.includes("publishing")) {
+      const publishing = project.departments.publishing;
+      project.deliverables.executiveReport = publishing.reportMarkdown;
+      project.deliverables.onePageSummary = publishing.onePageSummary;
+      project.deliverables.deckOutline = publishing.deckOutline;
+    }
 
     const hasUnknowns = PIPELINE.some((name) => project.departments[name]?.unknowns?.length > 0);
     const nextStatus = hasUnknowns ? "needs-review" : "complete";

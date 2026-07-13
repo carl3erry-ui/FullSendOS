@@ -75,6 +75,31 @@ export type ProjectClient = {
   industry?: string;
 };
 
+export type AuditActiveRun = {
+  id: string;
+  startedAt: string;
+  updatedAt: string;
+  model?: string;
+};
+
+export type AuditRunEntry = {
+  department: string;
+  status: string;
+  startedAt?: string;
+  completedAt?: string;
+  model?: string;
+  error?: string;
+  type?: string;
+  [key: string]: unknown;
+};
+
+export type ProjectAudit = {
+  activeRun: AuditActiveRun | null;
+  runs: AuditRunEntry[];
+  warnings: string[];
+  updatedAt?: string;
+};
+
 export type ProjectObjective = {
   summary: string;
   constraints: string[];
@@ -97,4 +122,5 @@ export type Project = {
     creative: DepartmentResult;
     publishing: DepartmentResult;
   };
+  audit?: ProjectAudit;
 };
