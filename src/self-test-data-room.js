@@ -214,7 +214,8 @@ test("Sanitizer removes backslashes", () => {
 test("Sanitizer handles normal filenames", () => {
   const safe = sanitizeFilename("Annual Budget Q4 2024.xlsx");
   assert.ok(safe.length > 0, "Should return non-empty string");
-  assert.ok(safe.includes("Annual") || safe.includes("Annual_Budget") || safe.includes("Budget"), `Got: ${safe}`);
+  // Spaces are replaced with underscores; result should be Annual_Budget_Q4_2024.xlsx
+  assert.ok(safe.includes("Annual_Budget_Q4_2024"), `Expected 'Annual_Budget_Q4_2024' in sanitized filename, got: ${safe}`);
 });
 
 test("Sanitizer removes null/empty input gracefully", () => {

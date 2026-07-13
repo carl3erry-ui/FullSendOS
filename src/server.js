@@ -24,6 +24,12 @@ app.use(express.static("public"));
 // Fields that may be updated via PATCH on a file record
 const FILE_PATCH_FIELDS = ["displayName", "description", "tags", "status", "visibility", "approvedForAgentUse", "sensitive"];
 
+// Normalize a query parameter that Express may parse as a string or array
+function queryString(value) {
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+}
+
 function markdownDownloadName(project) {
   return `${project.client.companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "consulting-report"}.md`;
 }
@@ -170,7 +176,7 @@ async function getOrCreateDataRoom(clientId) {
   const counts = await recountDataRoom(clientId, roomId);
   dataRoom.folderCount = counts.folderCount;
   dataRoom.fileCount = counts.fileCount;
-  dataRoom.updatedAt = new Date().toISOString();
+  dataRoom.updatedAt = now;
   await saveDataRoom(dataRoom);
   return dataRoom;
 }
@@ -263,7 +269,7 @@ app.get("/api/projects/:clientId/data-room/files", async (req, res) => {
   try {
     const project = await requireProject(req.params.clientId, res);
     if (!project) return;
-    const folderId = (Array.isArray(req.query.folderId) ? req.query.folderId[0] : req.query.folderId) || null;
+    const folderId = queryString(req.query.folderId);
     const files = await listFileMetas(req.params.clientId, folderId);
     res.json(files.map(safeFileMeta));
   } catch (error) {
@@ -321,13 +327,13 @@ app.post("/api/projects/:clientId/data-room/files", async (req, res) => {
     } else {
       // JSON metadata registration (no binary content)
       const body = req.body || {};
-      originalFilename = body.originalFilename || body.filename || "unnamed";
-      folderId = body.folderId || "";
-      displayName = body.displayName || "";
-      description = body.description || "";
-      engagementId = body.engagementId || "";
-      tags = Array.isArray(body.tags) ? body.tags : [];
-      sizeBytes = body.sizeBytes || 0;
+      originalFilename = String(body.originalFilename || body.filename || "unnamed");
+      folderId = String(body.folderId || "");
+      displayName = String(body.displayName || "");
+      description = String(body.description || "");
+      engagementId = String(body.engagementId || "");
+      tags = Array.isArray(body.tags) ? body.tags.map(String) : [];
+      sizeBytes = Number(body.sizeBytes) || 0;
     }
 
     if (!folderId) return res.status(400).json({ error: "folderId is required." });
