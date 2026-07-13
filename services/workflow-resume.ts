@@ -1,20 +1,22 @@
 /**
- * Workflow Resume Service (Slice 7)
+ * Workflow Resume Service (Slice 7 + Slice 8)
  *
  * Handles resuming a paused workflow after an approval is granted.
  *
- * Flow:
+ * Flow (Slice 7):
  *   1. Caller finds the paused state (by project or task ID)
  *   2. Caller validates the approval was granted
  *   3. resumeWorkflowAfterApproval() executes the pending agent task
  *   4. Audit trail is updated with resume + completion events
  *   5. Pause state is marked "resumed"
  *
- * Limitations (documented):
- *   - Only supports resuming agent-step approval paths (not full department runs)
- *   - Does not continue the broader orchestrator PIPELINE after resume —
- *     the resumed step executes and records its result; continuation of
- *     downstream pipeline steps requires Slice 8 orchestrator integration.
+ * Flow (Slice 8 addition):
+ *   6. If pendingStepIds contains PIPELINE departments, continuation is triggered
+ *   7. continueWorkflowAfterResume() runs remaining departments
+ *   8. Workflow reaches "needs-review" or "complete" when all steps finish
+ *
+ * Continuation is synchronous when invokeModel is provided (test path).
+ * Without invokeModel, continuation fires in background (production path).
  */
 
 import type { Project } from "../types/project";
@@ -29,6 +31,7 @@ import {
   markPauseCancelled,
   type PausedWorkflowState,
 } from "./workflow-pause-store";
+import { continueWorkflowAfterResume, type ContinuationResult } from "./workflow-continuation";
 import type { AuditRunEntry } from "../types/project";
 
 // ---------------------------------------------------------------------------
@@ -36,7 +39,13 @@ import type { AuditRunEntry } from "../types/project";
 // ---------------------------------------------------------------------------
 
 export type ResumeResult =
-  | { ok: true; pauseState: PausedWorkflowState; taskStatus: string; auditEntry: AuditRunEntry }
+  | {
+      ok: true;
+      pauseState: PausedWorkflowState;
+      taskStatus: string;
+      auditEntry: AuditRunEntry;
+      continuation: ContinuationResult | null;
+    }
   | { ok: false; reason: string; code: ResumeErrorCode };
 
 export type ResumeErrorCode =
@@ -56,12 +65,16 @@ export type ResumeErrorCode =
  *
  * @param pauseStateId - ID of the PausedWorkflowState record
  * @param options.resumedBy - Optional identifier of who triggered the resume
+ * @param options.invokeModel - Optional mock AI caller (for testing continuation)
+ * @param options.continuationModel - AI model name for continuation departments
  * @returns ResumeResult indicating success or failure with a clear reason
  */
 export async function resumeWorkflowAfterApproval(
   pauseStateId: string,
   options: {
     resumedBy?: string;
+    invokeModel?: (args: { department: string; prompt: string; model: string }) => Promise<{ text: string }>;
+    continuationModel?: string;
   } = {},
 ): Promise<ResumeResult> {
   // 1. Load the paused state
@@ -174,13 +187,54 @@ export async function resumeWorkflowAfterApproval(
   });
 
   // 9. Mark pause state as resumed
-  await markPauseResumed(pauseStateId, options.resumedBy);
+  const resumedPause = await markPauseResumed(pauseStateId, options.resumedBy);
+
+  // 10. Trigger pipeline continuation if there are pending PIPELINE departments
+  let continuation: ContinuationResult | null = null;
+
+  if (pauseState.pendingStepIds.length > 0) {
+    if (options.invokeModel) {
+      // Synchronous continuation (test path — invokeModel controls AI calls)
+      continuation = await continueWorkflowAfterResume(pauseStateId, {
+        invokeModel: options.invokeModel,
+        model: options.continuationModel,
+      });
+    } else {
+      // Asynchronous background continuation (production path)
+      continueWorkflowAfterResume(pauseStateId, {
+        model: options.continuationModel,
+      }).then((result) => {
+        if (!result.ok) {
+          console.error(
+            "workflow-continuation-failed",
+            pauseStateId,
+            result.reason,
+          );
+        } else {
+          console.log(
+            "workflow-continuation-complete",
+            pauseStateId,
+            result.projectStatus,
+          );
+        }
+      }).catch((err: unknown) => {
+        console.error(
+          "workflow-continuation-error",
+          pauseStateId,
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+      // Continuation started in background — not yet complete
+      continuation = null;
+    }
+  }
 
   return {
     ok: true,
     pauseState: { ...pauseState, status: "resumed", resumedAt, resumedBy: options.resumedBy },
     taskStatus: "completed",
     auditEntry,
+    continuation,
   };
 }
 

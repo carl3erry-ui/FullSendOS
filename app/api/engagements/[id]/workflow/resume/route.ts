@@ -101,6 +101,16 @@ export async function POST(
       return err(result.reason, statusCode);
     }
 
+    // Determine continuation status for the response
+    const continuationStatus =
+      result.continuation === null && result.pauseState.pendingStepIds.length > 0
+        ? "started_in_background"
+        : result.continuation?.ok
+          ? "completed"
+          : result.continuation && !result.continuation.ok
+            ? "failed"
+            : "not_needed";
+
     return NextResponse.json(
       {
         engagementId,
@@ -108,6 +118,16 @@ export async function POST(
         taskStatus: result.taskStatus,
         resumedAt: result.pauseState.resumedAt,
         auditEntry: result.auditEntry,
+        continuation: {
+          status: continuationStatus,
+          ...(result.continuation?.ok && {
+            ranDepartments: result.continuation.ranDepartments,
+            projectStatus: result.continuation.projectStatus,
+          }),
+          ...(result.continuation && !result.continuation.ok && {
+            reason: result.continuation.reason,
+          }),
+        },
       },
       { status: 200 },
     );
