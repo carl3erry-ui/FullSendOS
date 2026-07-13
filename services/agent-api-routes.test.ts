@@ -33,17 +33,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  AgentInstanceRegistry,
-  AgentRegistry,
   AgentTaskSchema,
-  OrchestratorAgent,
-  QualityControlAgent,
-  ResearcherAgent,
   globalAgentRegistry,
   globalExecutionStore,
-  globalInstanceRegistry,
   globalTaskStore,
-  registerAllAgents,
 } from "../agents";
 
 // Test utilities
@@ -94,11 +87,7 @@ test("Agent API Routes", async (suite) => {
       executionStoreDir,
     );
 
-    // Register agents
-    registerAllAgents(globalAgentRegistry);
-    globalInstanceRegistry.register(new OrchestratorAgent());
-    globalInstanceRegistry.register(new ResearcherAgent());
-    globalInstanceRegistry.register(new QualityControlAgent());
+    // Global agent definitions and instances are registered on module import.
   });
 
   suite.after(async () => {
@@ -399,6 +388,10 @@ test("Agent API Routes", async (suite) => {
       assert(
         !("systemPrompt" in agent),
         `Agent ${agent.id} should not expose systemPrompt in public metadata`,
+      );
+      assert(
+        !("outputSchema" in agent),
+        `Agent ${agent.id} should not expose outputSchema in public metadata`,
       );
       assert(agent.id, `Agent should have id`);
       assert(agent.name, `Agent should have name`);

@@ -5,7 +5,7 @@ import type { AgentDefinition } from "./types";
  * Public-safe agent metadata — excludes the full system prompt which
  * is an internal implementation detail and must not be exposed to clients.
  */
-export type PublicAgentMetadata = Omit<AgentDefinition, "systemPrompt">;
+export type PublicAgentMetadata = Omit<AgentDefinition, "systemPrompt" | "outputSchema">;
 
 /**
  * AgentRegistry manages the lifecycle of registered agent definitions.
@@ -48,7 +48,7 @@ export class AgentRegistry {
     const agent = this.agents.get(id);
     if (!agent) return undefined;
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { systemPrompt: _omit, ...meta } = agent;
+    const { systemPrompt: _omit, outputSchema: _omitOutputSchema, ...meta } = agent;
     return meta;
   }
 
@@ -56,7 +56,7 @@ export class AgentRegistry {
   listPublicMetadata(): PublicAgentMetadata[] {
     return this.listEnabled().map(
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ systemPrompt: _omit, ...meta }) => meta,
+      ({ systemPrompt: _omit, outputSchema: _omitOutputSchema, ...meta }) => meta,
     );
   }
 

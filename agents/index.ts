@@ -6,10 +6,10 @@
  * and providers are registered before request handling begins.
  */
 
-import { globalAgentRegistry } from "./registry";
-import { orchestratorDefinition } from "./definitions/orchestrator";
-import { researcherDefinition } from "./definitions/researcher";
-import { qualityControlDefinition } from "./definitions/quality-control";
+import { globalAgentRegistry, globalInstanceRegistry } from "./registry";
+import { orchestratorDefinition, OrchestratorAgent } from "./definitions/orchestrator";
+import { researcherDefinition, ResearcherAgent } from "./definitions/researcher";
+import { qualityControlDefinition, QualityControlAgent } from "./definitions/quality-control";
 
 /**
  * Register all built-in agents into the provided registry.
@@ -18,10 +18,31 @@ import { qualityControlDefinition } from "./definitions/quality-control";
 export function registerAllAgents(
   registry: typeof globalAgentRegistry = globalAgentRegistry,
 ): void {
-  registry.register(orchestratorDefinition);
-  registry.register(researcherDefinition);
-  registry.register(qualityControlDefinition);
+  if (!registry.getById(orchestratorDefinition.id)) {
+    registry.register(orchestratorDefinition);
+  }
+  if (!registry.getById(researcherDefinition.id)) {
+    registry.register(researcherDefinition);
+  }
+  if (!registry.getById(qualityControlDefinition.id)) {
+    registry.register(qualityControlDefinition);
+  }
 }
+
+export function registerAllAgentInstances(): void {
+  if (!globalInstanceRegistry.get(orchestratorDefinition.id)) {
+    globalInstanceRegistry.register(new OrchestratorAgent());
+  }
+  if (!globalInstanceRegistry.get(researcherDefinition.id)) {
+    globalInstanceRegistry.register(new ResearcherAgent());
+  }
+  if (!globalInstanceRegistry.get(qualityControlDefinition.id)) {
+    globalInstanceRegistry.register(new QualityControlAgent());
+  }
+}
+
+registerAllAgents(globalAgentRegistry);
+registerAllAgentInstances();
 
 // Public re-exports
 export * from "./types";

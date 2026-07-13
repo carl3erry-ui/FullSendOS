@@ -6,7 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { globalTaskStore, globalExecutionStore, AgentExecutorError } from "@/agents";
+import { globalTaskStore, globalExecutionStore, globalAgentRegistry, AgentExecutorError } from "@/agents";
 import { errorResponse, successResponse } from "../../agent-routes-helper";
 
 export async function GET(
@@ -32,20 +32,42 @@ export async function GET(
 
     // Redact unsafe data: remove rawResponse from executions before sending
     const safeExecutions = executions.map((exec) => ({
-      ...exec,
-      // Don't include rawResponse in API response - it may contain logs with secrets
-      rawResponse: undefined,
+      id: exec.id,
+      agentTaskId: exec.agentTaskId,
+      agentId: exec.agentId,
+      provider: exec.provider,
+      model: exec.model,
+      status: exec.status,
+      attempt: exec.attempt,
+      validationResult: exec.validationResult,
+      usage: exec.usage,
+      estimatedCost: exec.estimatedCost ?? null,
+      error: exec.error,
+      startedAt: exec.startedAt,
+      completedAt: exec.completedAt,
     }));
 
+    const agent = globalAgentRegistry.getPublicMetadata(task.agentId);
+
     return successResponse({
-      task,
+      task: {
+        ...task,
+        output: task.structuredOutput || task.output,
+        usage: task.usage
+          ? {
+              input_tokens: task.usage.inputTokens,
+              output_tokens: task.usage.outputTokens,
+              total_tokens: task.usage.totalTokens,
+            }
+          : undefined,
+        estimatedCost: task.cost ?? safeExecutions.at(-1)?.estimatedCost ?? null,
+        error: task.error ?? null,
+      },
+      agent: {
+        name: agent?.name ?? task.agentId,
+        role: agent?.role ?? "unknown",
+      },
       executions: safeExecutions,
-      approvalStatus: task.approvalStatus,
-      output: task.structuredOutput || task.output,
-      evidence: task.evidence,
-      usage: task.usage,
-      cost: task.cost,
-      error: task.error,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
