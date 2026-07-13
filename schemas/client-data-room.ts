@@ -1,16 +1,43 @@
 import { z } from "zod";
 
 /**
- * Client Data Room Foundation (Epic 1)
+ * Epic 1.1: Client-Level Data Room
  *
  * File-based storage for client-provided evidence, documents, and supporting materials.
- * Enables structured evidence collection without external integrations.
- *
- * Scope: File metadata + references only. No external integrations, no prompt wiring.
+ * Promotes data room from engagement-level to client-level.
+ * Files belong to clients and may optionally be linked to engagements.
  */
 
+// ============ Folder Schema ============
+export const DataRoomFolderSchema = z.object({
+  id: z.string().min(1).describe("Stable folder ID (slug-based)"),
+  clientId: z.string().min(1).describe("Client this folder belongs to"),
+  name: z.string().min(1).describe("Display name (e.g., 'Financials')"),
+  slug: z.string().min(1).describe("URL-safe slug (e.g., 'financials')"),
+  description: z.string().optional().describe("Folder description"),
+  category: z.enum([
+    "financials",
+    "brand",
+    "legal",
+    "operations",
+    "marketing",
+    "website",
+    "investor",
+    "real-estate",
+    "hr",
+    "misc"
+  ]).describe("Folder category"),
+  sortOrder: z.number().int().nonnegative().describe("Display order"),
+  isSystem: z.boolean().default(true).describe("System folder (cannot delete)")
+});
+
+export type DataRoomFolder = z.infer<typeof DataRoomFolderSchema>;
+
+// ============ File Reference Schema ============
 export const FileReferenceSchema = z.object({
-  id: z.string().min(1).describe("Unique file ID (UUID or slug)"),
+  id: z.string().min(1).describe("Unique file ID"),
+  clientId: z.string().min(1).describe("File belongs to this client"),
+  folderId: z.string().min(1).describe("File stored in this folder"),
   name: z.string().min(1).describe("Original filename"),
   type: z.enum([
     "document",
@@ -20,20 +47,26 @@ export const FileReferenceSchema = z.object({
     "correspondence",
     "media",
     "other"
-  ]).describe("File classification for organization"),
+  ]).describe("File classification"),
   mimeType: z.string().describe("MIME type (e.g., 'application/pdf')"),
   size: z.number().int().positive().describe("File size in bytes"),
   uploadedAt: z.string().describe("ISO timestamp of upload"),
-  uploadedBy: z.string().min(1).describe("User/system identifier who uploaded"),
-  description: z.string().optional().describe("Optional context about the file"),
-  tags: z.array(z.string()).default([]).describe("User-provided classification tags"),
-  engagementId: z.string().min(1).describe("Associated engagement ID"),
-  storagePath: z.string().min(1).describe("Internal storage location (do not expose raw content path)"),
-  isArchived: z.boolean().default(false).describe("Soft-delete flag")
+  uploadedBy: z.string().min(1).describe("User/system identifier"),
+  description: z.string().optional().describe("File context"),
+  tags: z.array(z.string()).default([]).describe("Classification tags"),
+  engagementIds: z.array(z.string()).default([]).describe("Optional engagement linkage"),
+  storagePath: z.string().min(1).describe("Internal storage path (do not expose)"),
+  isArchived: z.boolean().default(false).describe("Soft-delete flag"),
+  approvedForAgentUse: z.boolean().default(false).describe("Can agents read this file"),
+  sensitive: z.boolean().default(false).describe("Contains sensitive data")
 });
 
+export type FileReference = z.infer<typeof FileReferenceSchema>;
+
+// ============ Client Data Room Schema ============
 export const ClientDataRoomSchema = z.object({
-  engagementId: z.string().min(1),
+  clientId: z.string().min(1),
+  folders: z.array(DataRoomFolderSchema).default([]),
   files: z.array(FileReferenceSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -41,18 +74,16 @@ export const ClientDataRoomSchema = z.object({
   totalSize: z.number().int().nonnegative().default(0)
 });
 
-export type FileReference = z.infer<typeof FileReferenceSchema>;
 export type ClientDataRoom = z.infer<typeof ClientDataRoomSchema>;
 
-/**
- * Safe API response type (excludes storagePath)
- */
+// ============ Safe Response Schemas ============
 export const FileReferenceSafeSchema = FileReferenceSchema.omit({ storagePath: true });
 export type FileReferenceSafe = z.infer<typeof FileReferenceSafeSchema>;
 
-/**
- * Upload request (multipart handled by route)
- */
+export const DataRoomFolderSafeSchema = DataRoomFolderSchema;
+export type DataRoomFolderSafe = z.infer<typeof DataRoomFolderSafeSchema>;
+
+// ============ Request Schemas ============
 export const FileUploadRequestSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).default([]),
@@ -64,7 +95,25 @@ export const FileUploadRequestSchema = z.object({
     "correspondence",
     "media",
     "other"
-  ]).optional()
+  ]).optional(),
+  folderId: z.string().optional(),
+  engagementIds: z.array(z.string()).default([]),
+  approvedForAgentUse: z.boolean().default(false),
+  sensitive: z.boolean().default(false)
 });
 
 export type FileUploadRequest = z.infer<typeof FileUploadRequestSchema>;
+
+// ============ Default Folders ============
+export const DEFAULT_FOLDERS: DataRoomFolder[] = [
+  { id: "financials", name: "Financials", slug: "financials", category: "financials", sortOrder: 1, isSystem: true, clientId: "", description: "Financial documents and reports" },
+  { id: "brand", name: "Brand Assets", slug: "brand", category: "brand", sortOrder: 2, isSystem: true, clientId: "", description: "Logos, brand guidelines, visual assets" },
+  { id: "legal", name: "Legal", slug: "legal", category: "legal", sortOrder: 3, isSystem: true, clientId: "", description: "Contracts, agreements, legal documents" },
+  { id: "operations", name: "Operations", slug: "operations", category: "operations", sortOrder: 4, isSystem: true, clientId: "", description: "Operational processes and documentation" },
+  { id: "marketing", name: "Marketing", slug: "marketing", category: "marketing", sortOrder: 5, isSystem: true, clientId: "", description: "Marketing materials and campaigns" },
+  { id: "website", name: "Website", slug: "website", category: "website", sortOrder: 6, isSystem: true, clientId: "", description: "Website designs and content" },
+  { id: "investor", name: "Investor Materials", slug: "investor", category: "investor", sortOrder: 7, isSystem: true, clientId: "", description: "Investor decks and financial materials" },
+  { id: "real-estate", name: "Real Estate", slug: "real-estate", category: "real-estate", sortOrder: 8, isSystem: true, clientId: "", description: "Property documents and details" },
+  { id: "hr", name: "HR / Payroll", slug: "hr", category: "hr", sortOrder: 9, isSystem: true, clientId: "", description: "HR policies and payroll information" },
+  { id: "misc", name: "Miscellaneous", slug: "misc", category: "misc", sortOrder: 10, isSystem: true, clientId: "", description: "Other files and materials" }
+];

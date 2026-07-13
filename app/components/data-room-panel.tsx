@@ -8,26 +8,75 @@ interface DataRoomFile extends FileReferenceSafe {
   tags: string[];
 }
 
-interface DataRoomPanelProps {
-  engagementId: string;
+interface DataRoomFolder {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  category: string;
+  sortOrder: number;
+  isSystem: boolean;
 }
 
-export function DataRoomPanel({ engagementId }: DataRoomPanelProps) {
-  const [files, setFiles] = useState<DataRoomFile[]>([]);
-  const [loading, setLoading] = useState(true);
+interface DataRoomPanelProps {
+  engagementId: string;
+  initialFiles?: DataRoomFile[];
+  initialFolders?: DataRoomFolder[];
+  disableAutoLoad?: boolean;
+  initialShowUpload?: boolean;
+}
+
+export function DataRoomPanel({
+  engagementId,
+  initialFiles = [],
+  initialFolders = [],
+  disableAutoLoad = false,
+  initialShowUpload = false,
+}: DataRoomPanelProps) {
+  const [files, setFiles] = useState<DataRoomFile[]>(initialFiles);
+  const [folders, setFolders] = useState<DataRoomFolder[]>(initialFolders);
+  const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
+  const [loading, setLoading] = useState(!disableAutoLoad);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showUpload, setShowUpload] = useState(false);
+  const [showUpload, setShowUpload] = useState(initialShowUpload);
 
   useEffect(() => {
-    loadFiles();
-  }, [engagementId]);
+    if (disableAutoLoad) return;
+    loadFoldersAndFiles();
+  }, [engagementId, disableAutoLoad]);
 
-  const loadFiles = async () => {
+  useEffect(() => {
+    if (disableAutoLoad) return;
+    loadFiles(selectedFolderId === "all" ? undefined : selectedFolderId);
+  }, [selectedFolderId, disableAutoLoad]);
+
+  const loadFoldersAndFiles = async () => {
+    await Promise.all([loadFolders(), loadFiles()]);
+  };
+
+  const loadFolders = async () => {
+    try {
+      const response = await fetch(`/api/engagements/${engagementId}/data-room/folders`);
+      if (!response.ok) throw new Error("Failed to load folders");
+      const data = await response.json();
+      const sorted = Array.isArray(data.folders)
+        ? [...data.folders].sort((a, b) => a.sortOrder - b.sortOrder)
+        : [];
+      setFolders(sorted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unknown error");
+    }
+  };
+
+  const loadFiles = async (folderId?: string) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams();
+      if (folderId) params.set("folderId", folderId);
+      const query = params.toString();
       const response = await fetch(
-        `/api/engagements/${engagementId}/data-room`
+        `/api/engagements/${engagementId}/data-room${query ? `?${query}` : ""}`
       );
       if (!response.ok) throw new Error("Failed to load files");
       const data = await response.json();
@@ -149,6 +198,22 @@ export function DataRoomPanel({ engagementId }: DataRoomPanelProps) {
           </div>
 
           <div className="form-group">
+            <label htmlFor="folderId">Folder</label>
+            <select
+              id="folderId"
+              name="folderId"
+              defaultValue="misc"
+              disabled={uploading}
+            >
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
             <label htmlFor="description">Description (optional)</label>
             <textarea
               id="description"
@@ -183,39 +248,56 @@ export function DataRoomPanel({ engagementId }: DataRoomPanelProps) {
           <p>No files uploaded yet</p>
         </div>
       ) : (
-        <div className="data-room-file-list">
-          {files.map((file) => (
-            <div key={file.id} className="file-item">
-              <div className="file-info">
-                <div className="file-name">{file.name}</div>
-                <div className="file-meta">
-                  <span className="file-size">{formatFileSize(file.size)}</span>
-                  <span className="file-type">{file.type}</span>
-                  <span className="file-date">{formatDate(file.uploadedAt)}</span>
-                </div>
-                {file.description && (
-                  <div className="file-description">{file.description}</div>
-                )}
-                {file.tags && file.tags.length > 0 && (
-                  <div className="file-tags">
-                    {file.tags.map((tag) => (
-                      <span key={tag} className="tag">
-                        {tag}
-                      </span>
-                    ))}
+        <>
+          <div className="folder-filter-row">
+            <label htmlFor="folder-filter">Folder</label>
+            <select
+              id="folder-filter"
+              value={selectedFolderId}
+              onChange={(event) => setSelectedFolderId(event.target.value)}
+            >
+              <option value="all">All folders</option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>
+                  {folder.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="data-room-file-list">
+            {files.map((file) => (
+              <div key={file.id} className="file-item">
+                <div className="file-info">
+                  <div className="file-name">{file.name}</div>
+                  <div className="file-meta">
+                    <span className="file-size">{formatFileSize(file.size)}</span>
+                    <span className="file-type">{file.type}</span>
+                    <span className="file-date">{formatDate(file.uploadedAt)}</span>
                   </div>
-                )}
+                  {file.description && (
+                    <div className="file-description">{file.description}</div>
+                  )}
+                  {file.tags && file.tags.length > 0 && (
+                    <div className="file-tags">
+                      {file.tags.map((tag) => (
+                        <span key={tag} className="tag">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleDelete(file.id)}
+                  className="btn btn-sm btn-ghost"
+                  aria-label="Delete file"
+                >
+                  ✕
+                </button>
               </div>
-              <button
-                onClick={() => handleDelete(file.id)}
-                className="btn btn-sm btn-ghost"
-                aria-label="Delete file"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
 
       <style jsx>{`
@@ -350,6 +432,28 @@ export function DataRoomPanel({ engagementId }: DataRoomPanelProps) {
           display: flex;
           flex-direction: column;
           gap: 0.75rem;
+        }
+
+        .folder-filter-row {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .folder-filter-row label {
+          font-size: 0.875rem;
+          color: #374151;
+          font-weight: 500;
+        }
+
+        .folder-filter-row select {
+          min-width: 220px;
+          padding: 0.5rem;
+          border: 1px solid #d1d5db;
+          border-radius: 4px;
+          font-size: 0.875rem;
+          background: white;
         }
 
         .file-item {

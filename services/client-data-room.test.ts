@@ -1,303 +1,460 @@
 import { test } from "node:test";
 import { strict as assert } from "node:assert";
-import { promises as fs } from "fs";
-import path from "path";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import {
-  loadClientDataRoom,
-  saveClientDataRoom,
   addFileReference,
-  listFiles,
-  getFileReference,
   archiveFile,
+  getFileReference,
+  getFolders,
+  linkFileToEngagement,
+  listFiles,
+  loadClientDataRoom,
+  searchFiles,
+  unlinkFileFromEngagement,
   updateFileMetadata,
-  searchFiles
 } from "./client-data-room-store";
+import { DEFAULT_FOLDERS, FileReferenceSafeSchema } from "../schemas/client-data-room";
 
-// Note: These tests use file-based persistence
-// In production, you may want to mock or use temporary directories
+const dataDir = path.resolve("data/clients");
 
-test("Client Data Room — loadClientDataRoom initializes new data room", async () => {
-  const engagementId = "test-engagement-1";
-  const dataRoom = await loadClientDataRoom(engagementId);
+function uniqueClient(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
 
-  assert.strictEqual(dataRoom.engagementId, engagementId);
-  assert.strictEqual(dataRoom.files.length, 0);
-  assert.strictEqual(dataRoom.fileCount, 0);
-  assert.strictEqual(dataRoom.totalSize, 0);
-  assert(dataRoom.createdAt);
-  assert(dataRoom.updatedAt);
-});
+async function cleanupClientDataRoom(clientId: string) {
+  await fs.rm(path.join(dataDir, `${clientId}-data-room.json`), { force: true });
+}
 
-test("Client Data Room — addFileReference adds file to data room", async () => {
-  const engagementId = `test-engagement-2-${Date.now()}`;
-  const fileRef = await addFileReference(
-    engagementId,
-    {
-      name: "document.pdf",
-      mimeType: "application/pdf",
-      size: 50000,
-      description: "Test document",
-      tags: ["research", "client-provided"],
-      type: "document"
-    },
-    "test-user",
-    "/data/uploads/test-file"
-  );
-
-  assert.strictEqual(fileRef.name, "document.pdf");
-  assert.strictEqual(fileRef.mimeType, "application/pdf");
-  assert.strictEqual(fileRef.size, 50000);
-  assert.strictEqual(fileRef.type, "document");
-  assert.deepStrictEqual(fileRef.tags, ["research", "client-provided"]);
-  assert.strictEqual(fileRef.uploadedBy, "test-user");
-  assert.strictEqual(fileRef.isArchived, false);
-  assert(fileRef.id);
-
-  // Verify persisted
-  const dataRoom = await loadClientDataRoom(engagementId);
-  assert.strictEqual(dataRoom.fileCount, 1);
-  assert.strictEqual(dataRoom.totalSize, 50000);
-});
-
-test("Client Data Room — listFiles returns non-archived files", async () => {
-  const engagementId = `test-engagement-3-${Date.now()}`;
-
-  // Add multiple files
-  const file1 = await addFileReference(
-    engagementId,
-    {
-      name: "doc1.pdf",
-      mimeType: "application/pdf",
-      size: 10000
-    },
-    "user1",
-    "/uploads/doc1"
-  );
-
-  const file2 = await addFileReference(
-    engagementId,
-    {
-      name: "doc2.pdf",
-      mimeType: "application/pdf",
-      size: 20000
-    },
-    "user1",
-    "/uploads/doc2"
-  );
-
-  // Archive one
-  await archiveFile(engagementId, file1.id);
-
-  const files = await listFiles(engagementId);
-  assert.strictEqual(files.length, 1);
-  assert.strictEqual(files[0].id, file2.id);
-});
-
-test("Client Data Room — getFileReference retrieves by ID", async () => {
-  const engagementId = `test-engagement-4-${Date.now()}`;
-  const fileRef = await addFileReference(
-    engagementId,
-    {
-      name: "test.pdf",
-      mimeType: "application/pdf",
-      size: 5000,
-      description: "Test file"
-    },
-    "user1",
-    "/uploads/test"
-  );
-
-  const retrieved = await getFileReference(engagementId, fileRef.id);
-  assert(retrieved);
-  assert.strictEqual(retrieved.id, fileRef.id);
-  assert.strictEqual(retrieved.name, "test.pdf");
-
-  const notFound = await getFileReference(engagementId, "invalid-id");
-  assert.strictEqual(notFound, null);
-});
-
-test("Client Data Room — updateFileMetadata modifies description/tags", async () => {
-  const engagementId = `test-engagement-5-${Date.now()}`;
-  const fileRef = await addFileReference(
-    engagementId,
-    {
-      name: "doc.pdf",
-      mimeType: "application/pdf",
-      size: 5000,
-      tags: ["original"]
-    },
-    "user1",
-    "/uploads/doc"
-  );
-
-  const updated = await updateFileMetadata(engagementId, fileRef.id, {
-    description: "Updated description",
-    tags: ["updated", "important"]
-  });
-
-  assert.strictEqual(updated.description, "Updated description");
-  assert.deepStrictEqual(updated.tags, ["updated", "important"]);
-
-  // Verify persisted
-  const retrieved = await getFileReference(engagementId, fileRef.id);
-  assert(retrieved);
-  assert.strictEqual(retrieved.description, "Updated description");
-  assert.deepStrictEqual(retrieved.tags, ["updated", "important"]);
-});
-
-test("Client Data Room — searchFiles filters by tags and name", async () => {
-  const engagementId = `test-engagement-6-${Date.now()}`;
-
-  await addFileReference(
-    engagementId,
-    {
-      name: "research-report.pdf",
-      mimeType: "application/pdf",
-      size: 10000,
-      tags: ["research", "market"]
-    },
-    "user1",
-    "/uploads/r1"
-  );
-
-  await addFileReference(
-    engagementId,
-    {
-      name: "competitor-analysis.pdf",
-      mimeType: "application/pdf",
-      size: 8000,
-      tags: ["competitor", "analysis"]
-    },
-    "user1",
-    "/uploads/r2"
-  );
-
-  const byTag = await searchFiles(engagementId, {
-    tags: ["market"]
-  });
-  assert.strictEqual(byTag.length, 1);
-  assert.strictEqual(byTag[0].name, "research-report.pdf");
-
-  const byName = await searchFiles(engagementId, {
-    name: "competitor"
-  });
-  assert.strictEqual(byName.length, 1);
-  assert.strictEqual(byName[0].name, "competitor-analysis.pdf");
-
-  // Search for either research OR competitor tags (any matching tag)
-  const byTagResearch = await searchFiles(engagementId, {
-    tags: ["research"]
-  });
-  assert.strictEqual(byTagResearch.length, 1);
-  assert.strictEqual(byTagResearch[0].name, "research-report.pdf");
-});
-
-test("Client Data Room — archiveFile soft-deletes and updates counts", async () => {
-  const engagementId = `test-engagement-7-${Date.now()}`;
-  const fileRef = await addFileReference(
-    engagementId,
-    {
-      name: "doc.pdf",
-      mimeType: "application/pdf",
-      size: 30000
-    },
-    "user1",
-    "/uploads/doc"
-  );
-
-  let dataRoom = await loadClientDataRoom(engagementId);
-  assert.strictEqual(dataRoom.fileCount, 1);
-  assert.strictEqual(dataRoom.totalSize, 30000);
-
-  await archiveFile(engagementId, fileRef.id);
-
-  dataRoom = await loadClientDataRoom(engagementId);
-  assert.strictEqual(dataRoom.fileCount, 0);
-  assert.strictEqual(dataRoom.totalSize, 0);
-
-  // Archived files still exist but are hidden
-  const files = await listFiles(engagementId);
-  assert.strictEqual(files.length, 0);
-});
-
-test("Client Data Room — file size validation rejects oversized files", async () => {
-  const engagementId = `test-engagement-8-${Date.now()}`;
-  const MAX_FILE_SIZE = 100 * 1024 * 1024;
+test("Client Data Room initializes for a client with default folders", async () => {
+  const clientId = uniqueClient("cdr-init");
 
   try {
-    await addFileReference(
-      engagementId,
-      {
-        name: "huge.bin",
-        mimeType: "application/octet-stream",
-        size: MAX_FILE_SIZE + 1
-      },
-      "user1",
-      "/uploads/huge"
-    );
-    assert.fail("Should have thrown for oversized file");
-  } catch (err) {
-    assert(err instanceof Error);
-    assert(err.message.includes("exceeds maximum size"));
+    const dataRoom = await loadClientDataRoom(clientId);
+    assert.equal(dataRoom.clientId, clientId);
+    assert.equal(dataRoom.files.length, 0);
+    assert.equal(dataRoom.fileCount, 0);
+    assert.equal(dataRoom.totalSize, 0);
+    assert.equal(dataRoom.folders.length, DEFAULT_FOLDERS.length);
+    assert.ok(dataRoom.createdAt);
+    assert.ok(dataRoom.updatedAt);
+  } finally {
+    await cleanupClientDataRoom(clientId);
   }
 });
 
-test("Client Data Room — total storage quota validation", async () => {
-  const engagementId = `test-engagement-quota-${Date.now()}`;
-  const MAX_TOTAL = 5 * 1024 * 1024 * 1024; // 5GB
-  const LARGE_FILE = 80 * 1024 * 1024; // 80MB (less than 100MB max per file)
+test("Default folders preserve stable IDs and sorted order", async () => {
+  const clientId = uniqueClient("cdr-folders");
 
-  // Add file near quota
-  await addFileReference(
-    engagementId,
-    {
-      name: "large1.bin",
-      mimeType: "application/octet-stream",
-      size: LARGE_FILE
-    },
-    "user1",
-    "/uploads/large1"
-  );
+  try {
+    const folders = await getFolders(clientId);
+    assert.equal(folders.length, DEFAULT_FOLDERS.length);
+    assert.deepEqual(
+      folders.map((folder) => folder.id),
+      DEFAULT_FOLDERS.map((folder) => folder.id)
+    );
+    assert.deepEqual(
+      folders.map((folder) => folder.sortOrder),
+      [...folders].map((folder) => folder.sortOrder).sort((a, b) => a - b)
+    );
+    assert.equal(folders.every((folder) => folder.clientId === clientId), true);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
 
-  // Add another large file to get closer to quota
-  await addFileReference(
-    engagementId,
-    {
-      name: "large2.bin",
-      mimeType: "application/octet-stream",
-      size: LARGE_FILE
-    },
-    "user1",
-    "/uploads/large2"
-  );
+test("Client-level upload stores clientId and folder metadata", async () => {
+  const clientId = uniqueClient("cdr-upload");
 
-  // Add one more to exceed
-  await addFileReference(
-    engagementId,
-    {
-      name: "large3.bin",
-      mimeType: "application/octet-stream",
-      size: LARGE_FILE
-    },
-    "user1",
-    "/uploads/large3"
-  );
+  try {
+    const fileRef = await addFileReference(
+      clientId,
+      {
+        name: "financials-q1.pdf",
+        mimeType: "application/pdf",
+        size: 42_000,
+        folderId: "financials",
+        description: "Quarterly financial report",
+        tags: ["q1", "finance"],
+        type: "financial",
+      },
+      "test-user",
+      "/internal/test/financials-q1.pdf"
+    );
 
-  // Now try to exceed the 5GB quota
+    assert.equal(fileRef.clientId, clientId);
+    assert.equal(fileRef.folderId, "financials");
+    assert.equal(fileRef.type, "financial");
+    assert.deepEqual(fileRef.tags, ["q1", "finance"]);
+    assert.equal(fileRef.isArchived, false);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("Client file list returns all non-archived files", async () => {
+  const clientId = uniqueClient("cdr-list");
+
   try {
     await addFileReference(
-      engagementId,
+      clientId,
       {
-        name: "overflow.bin",
-        mimeType: "application/octet-stream",
-        size: LARGE_FILE
+        name: "one.pdf",
+        mimeType: "application/pdf",
+        size: 10_000,
       },
-      "user1",
-      "/uploads/overflow"
+      "user",
+      "/internal/one.pdf"
     );
-    assert.fail("Should have thrown for quota exceeded");
-  } catch (err) {
-    assert(err instanceof Error);
-    assert(err.message.includes("quota exceeded"));
+
+    await addFileReference(
+      clientId,
+      {
+        name: "two.pdf",
+        mimeType: "application/pdf",
+        size: 20_000,
+      },
+      "user",
+      "/internal/two.pdf"
+    );
+
+    const files = await listFiles(clientId);
+    assert.equal(files.length, 2);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("Filtering by folderId returns only folder-matching files", async () => {
+  const clientId = uniqueClient("cdr-folder-filter");
+
+  try {
+    await addFileReference(
+      clientId,
+      {
+        name: "brand-logo.png",
+        mimeType: "image/png",
+        size: 6_000,
+        folderId: "brand",
+      },
+      "user",
+      "/internal/brand-logo.png"
+    );
+
+    await addFileReference(
+      clientId,
+      {
+        name: "legal-contract.pdf",
+        mimeType: "application/pdf",
+        size: 12_000,
+        folderId: "legal",
+      },
+      "user",
+      "/internal/legal-contract.pdf"
+    );
+
+    const brandFiles = await listFiles(clientId, { folderId: "brand" });
+    assert.equal(brandFiles.length, 1);
+    assert.equal(brandFiles[0].folderId, "brand");
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("File can be linked and unlinked to engagement IDs", async () => {
+  const clientId = uniqueClient("cdr-link");
+  const engagementId = "ENG-LINK-001";
+
+  try {
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "brief.txt",
+        mimeType: "text/plain",
+        size: 2_000,
+      },
+      "user",
+      "/internal/brief.txt"
+    );
+
+    const linked = await linkFileToEngagement(clientId, file.id, engagementId);
+    assert.equal(linked.engagementIds.includes(engagementId), true);
+
+    const linkedAgain = await linkFileToEngagement(clientId, file.id, engagementId);
+    assert.equal(linkedAgain.engagementIds.filter((id) => id === engagementId).length, 1);
+
+    const unlinked = await unlinkFileFromEngagement(clientId, file.id, engagementId);
+    assert.equal(unlinked.engagementIds.includes(engagementId), false);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("Filtering by engagementId returns only linked files", async () => {
+  const clientId = uniqueClient("cdr-engagement-filter");
+
+  try {
+    const linked = await addFileReference(
+      clientId,
+      {
+        name: "linked.pdf",
+        mimeType: "application/pdf",
+        size: 9_000,
+        engagementIds: ["ENG-1"],
+      },
+      "user",
+      "/internal/linked.pdf"
+    );
+
+    await addFileReference(
+      clientId,
+      {
+        name: "unlinked.pdf",
+        mimeType: "application/pdf",
+        size: 9_000,
+      },
+      "user",
+      "/internal/unlinked.pdf"
+    );
+
+    const files = await listFiles(clientId, { engagementId: "ENG-1" });
+    assert.equal(files.length, 1);
+    assert.equal(files[0].id, linked.id);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("getFileReference returns null for missing files", async () => {
+  const clientId = uniqueClient("cdr-get");
+
+  try {
+    const missing = await getFileReference(clientId, "missing-id");
+    assert.equal(missing, null);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("Safe schema omits storagePath from API-safe metadata", async () => {
+  const clientId = uniqueClient("cdr-safe");
+
+  try {
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "safe-test.pdf",
+        mimeType: "application/pdf",
+        size: 4_000,
+      },
+      "user",
+      "/internal/safe-test.pdf"
+    );
+
+    const safe = FileReferenceSafeSchema.parse(file);
+    assert.equal("storagePath" in safe, false);
+    assert.equal(safe.clientId, clientId);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("updateFileMetadata supports engagementIds and policy flags", async () => {
+  const clientId = uniqueClient("cdr-update");
+
+  try {
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "policy.docx",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        size: 5_000,
+      },
+      "user",
+      "/internal/policy.docx"
+    );
+
+    const updated = await updateFileMetadata(clientId, file.id, {
+      description: "Updated",
+      tags: ["legal", "approved"],
+      type: "contract",
+      engagementIds: ["ENG-77"],
+      approvedForAgentUse: true,
+      sensitive: true,
+    });
+
+    assert.equal(updated.description, "Updated");
+    assert.deepEqual(updated.tags, ["legal", "approved"]);
+    assert.equal(updated.type, "contract");
+    assert.deepEqual(updated.engagementIds, ["ENG-77"]);
+    assert.equal(updated.approvedForAgentUse, true);
+    assert.equal(updated.sensitive, true);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("archiveFile soft-deletes and updates aggregate counts", async () => {
+  const clientId = uniqueClient("cdr-archive");
+
+  try {
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "archive.pdf",
+        mimeType: "application/pdf",
+        size: 30_000,
+      },
+      "user",
+      "/internal/archive.pdf"
+    );
+
+    let dataRoom = await loadClientDataRoom(clientId);
+    assert.equal(dataRoom.fileCount, 1);
+    assert.equal(dataRoom.totalSize, 30_000);
+
+    await archiveFile(clientId, file.id);
+
+    dataRoom = await loadClientDataRoom(clientId);
+    assert.equal(dataRoom.fileCount, 0);
+    assert.equal(dataRoom.totalSize, 0);
+
+    const listed = await listFiles(clientId);
+    assert.equal(listed.length, 0);
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("searchFiles supports tags, name, type, folder and engagement filters", async () => {
+  const clientId = uniqueClient("cdr-search");
+
+  try {
+    await addFileReference(
+      clientId,
+      {
+        name: "market-research-2026.pdf",
+        mimeType: "application/pdf",
+        size: 8_000,
+        type: "research",
+        tags: ["market", "north-america"],
+        folderId: "marketing",
+        engagementIds: ["ENG-A"],
+      },
+      "user",
+      "/internal/market-research-2026.pdf"
+    );
+
+    await addFileReference(
+      clientId,
+      {
+        name: "employment-policy.pdf",
+        mimeType: "application/pdf",
+        size: 8_000,
+        type: "document",
+        tags: ["hr"],
+        folderId: "hr",
+      },
+      "user",
+      "/internal/employment-policy.pdf"
+    );
+
+    const results = await searchFiles(clientId, {
+      tags: ["market"],
+      name: "research",
+      type: "research",
+      folderId: "marketing",
+      engagementId: "ENG-A",
+    });
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].name, "market-research-2026.pdf");
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("addFileReference rejects unknown folderId", async () => {
+  const clientId = uniqueClient("cdr-folder-missing");
+
+  try {
+    await assert.rejects(
+      () =>
+        addFileReference(
+          clientId,
+          {
+            name: "bad-folder.pdf",
+            mimeType: "application/pdf",
+            size: 1_000,
+            folderId: "does-not-exist",
+          },
+          "user",
+          "/internal/bad-folder.pdf"
+        ),
+      /Folder not found/
+    );
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("file size validation rejects oversized files", async () => {
+  const clientId = uniqueClient("cdr-size");
+  const maxFileSize = 100 * 1024 * 1024;
+
+  try {
+    await assert.rejects(
+      () =>
+        addFileReference(
+          clientId,
+          {
+            name: "huge.bin",
+            mimeType: "application/octet-stream",
+            size: maxFileSize + 1,
+          },
+          "user",
+          "/internal/huge.bin"
+        ),
+      /exceeds maximum size/
+    );
+  } finally {
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("client storage quota validation rejects overflow", async () => {
+  const clientId = uniqueClient("cdr-quota");
+  const maxFileSize = 100 * 1024 * 1024;
+
+  try {
+    for (let index = 0; index < 51; index += 1) {
+      await addFileReference(
+        clientId,
+        {
+          name: `near-limit-${index}.bin`,
+          mimeType: "application/octet-stream",
+          size: maxFileSize,
+        },
+        "user",
+        `/internal/near-limit-${index}.bin`
+      );
+    }
+
+    await assert.rejects(
+      () =>
+        addFileReference(
+          clientId,
+          {
+            name: "overflow.bin",
+            mimeType: "application/octet-stream",
+            size: 30 * 1024 * 1024,
+          },
+          "user",
+          "/internal/overflow.bin"
+        ),
+      /quota exceeded/
+    );
+  } finally {
+    await cleanupClientDataRoom(clientId);
   }
 });

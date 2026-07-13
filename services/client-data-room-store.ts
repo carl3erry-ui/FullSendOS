@@ -1,7 +1,12 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
-import { ClientDataRoom, FileReference } from "../schemas/client-data-room";
+import {
+  ClientDataRoom,
+  DataRoomFolder,
+  FileReference,
+  DEFAULT_FOLDERS
+} from "../schemas/client-data-room";
 
 function generateId(): string {
   return randomBytes(16).toString("hex");
@@ -23,34 +28,53 @@ async function ensureDataDir(): Promise<void> {
 /**
  * Get storage path for client data room file
  */
-function getClientDataRoomPath(engagementId: string): string {
-  return path.join(DATA_DIR, `${engagementId}.json`);
+function getClientDataRoomPath(clientId: string): string {
+  return path.join(DATA_DIR, `${clientId}-data-room.json`);
 }
 
 /**
- * Load or initialize client data room for engagement
+ * Load or initialize client data room
  */
 export async function loadClientDataRoom(
-  engagementId: string
+  clientId: string
 ): Promise<ClientDataRoom> {
   await ensureDataDir();
-  const storagePath = getClientDataRoomPath(engagementId);
+  const storagePath = getClientDataRoomPath(clientId);
 
   try {
     const data = await fs.readFile(storagePath, "utf-8");
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    
+    // Ensure default folders exist on load
+    const defaultFolderIds = new Set(DEFAULT_FOLDERS.map((f) => f.id));
+    const existingFolderIds = new Set(parsed.folders.map((f: DataRoomFolder) => f.id));
+    
+    const missingFolders = DEFAULT_FOLDERS.filter(
+      (f) => !existingFolderIds.has(f.id)
+    ).map((f) => ({ ...f, clientId }));
+    
+    if (missingFolders.length > 0) {
+      parsed.folders.push(...missingFolders);
+      await saveClientDataRoom(parsed);
+    }
+    
+    return parsed;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // Initialize new data room
+      // Initialize new data room with default folders
       const now = new Date().toISOString();
-      return {
-        engagementId,
+      const folders = DEFAULT_FOLDERS.map((f) => ({ ...f, clientId }));
+      const dataRoom: ClientDataRoom = {
+        clientId,
+        folders,
         files: [],
         createdAt: now,
         updatedAt: now,
         fileCount: 0,
         totalSize: 0
       };
+      await saveClientDataRoom(dataRoom);
+      return dataRoom;
     }
     throw err;
   }
@@ -63,30 +87,33 @@ export async function saveClientDataRoom(
   dataRoom: ClientDataRoom
 ): Promise<void> {
   await ensureDataDir();
-  const storagePath = getClientDataRoomPath(dataRoom.engagementId);
+  const storagePath = getClientDataRoomPath(dataRoom.clientId);
   const now = new Date().toISOString();
   dataRoom.updatedAt = now;
   await fs.writeFile(storagePath, JSON.stringify(dataRoom, null, 2), "utf-8");
 }
 
 /**
- * Add file reference to data room
- * Manages deduplication, size limits, and metadata
+ * Add file reference to client data room
  */
 export async function addFileReference(
-  engagementId: string,
+  clientId: string,
   file: {
     name: string;
     mimeType: string;
     size: number;
+    folderId?: string;
     description?: string;
     tags?: string[];
     type?: string;
+    engagementIds?: string[];
+    approvedForAgentUse?: boolean;
+    sensitive?: boolean;
   },
   uploadedBy: string,
   internalStoragePath: string
 ): Promise<FileReference> {
-  const dataRoom = await loadClientDataRoom(engagementId);
+  const dataRoom = await loadClientDataRoom(clientId);
 
   // Validate file size (100MB limit per file)
   const MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -94,14 +121,25 @@ export async function addFileReference(
     throw new Error(`File exceeds maximum size of 100MB. Received: ${file.size} bytes`);
   }
 
-  // Validate total storage per engagement (5GB limit to allow testing)
+  // Validate total storage per client (5GB limit)
   const MAX_TOTAL_SIZE = 5 * 1024 * 1024 * 1024;
   if (dataRoom.totalSize + file.size > MAX_TOTAL_SIZE) {
-    throw new Error(`Engagement storage quota exceeded. Limit: 5GB`);
+    throw new Error(`Client storage quota exceeded. Limit: 5GB`);
+  }
+
+  // Default folder
+  const folderId = file.folderId || "misc";
+  
+  // Verify folder exists
+  const folder = dataRoom.folders.find((f) => f.id === folderId);
+  if (!folder) {
+    throw new Error(`Folder not found: ${folderId}`);
   }
 
   const fileRef: FileReference = {
     id: generateId(),
+    clientId,
+    folderId,
     name: file.name,
     type: (file.type as any) || "other",
     mimeType: file.mimeType,
@@ -110,9 +148,11 @@ export async function addFileReference(
     uploadedBy,
     description: file.description,
     tags: file.tags || [],
-    engagementId,
+    engagementIds: file.engagementIds || [],
     storagePath: internalStoragePath,
-    isArchived: false
+    isArchived: false,
+    approvedForAgentUse: file.approvedForAgentUse || false,
+    sensitive: file.sensitive || false
   };
 
   dataRoom.files.push(fileRef);
@@ -126,23 +166,34 @@ export async function addFileReference(
 }
 
 /**
- * List all active files in data room
+ * List all active files in client data room
  */
 export async function listFiles(
-  engagementId: string
+  clientId: string,
+  options?: { folderId?: string; engagementId?: string }
 ): Promise<FileReference[]> {
-  const dataRoom = await loadClientDataRoom(engagementId);
-  return dataRoom.files.filter((f) => !f.isArchived);
+  const dataRoom = await loadClientDataRoom(clientId);
+  let files = dataRoom.files.filter((f) => !f.isArchived);
+
+  if (options?.folderId) {
+    files = files.filter((f) => f.folderId === options.folderId);
+  }
+
+  if (options?.engagementId) {
+    files = files.filter((f) => f.engagementIds.includes(options.engagementId!));
+  }
+
+  return files;
 }
 
 /**
  * Get file reference by ID
  */
 export async function getFileReference(
-  engagementId: string,
+  clientId: string,
   fileId: string
 ): Promise<FileReference | null> {
-  const dataRoom = await loadClientDataRoom(engagementId);
+  const dataRoom = await loadClientDataRoom(clientId);
   const file = dataRoom.files.find((f) => f.id === fileId && !f.isArchived);
   return file || null;
 }
@@ -151,10 +202,10 @@ export async function getFileReference(
  * Archive (soft delete) file
  */
 export async function archiveFile(
-  engagementId: string,
+  clientId: string,
   fileId: string
 ): Promise<void> {
-  const dataRoom = await loadClientDataRoom(engagementId);
+  const dataRoom = await loadClientDataRoom(clientId);
   const file = dataRoom.files.find((f) => f.id === fileId);
   if (!file) throw new Error(`File not found: ${fileId}`);
 
@@ -168,41 +219,52 @@ export async function archiveFile(
 }
 
 /**
- * Update file metadata (description, tags)
+ * Update file metadata
  */
 export async function updateFileMetadata(
-  engagementId: string,
+  clientId: string,
   fileId: string,
   updates: {
     description?: string;
     tags?: string[];
     type?: string;
+    engagementIds?: string[];
+    approvedForAgentUse?: boolean;
+    sensitive?: boolean;
   }
 ): Promise<FileReference> {
-  const dataRoom = await loadClientDataRoom(engagementId);
+  const dataRoom = await loadClientDataRoom(clientId);
   const file = dataRoom.files.find((f) => f.id === fileId && !f.isArchived);
   if (!file) throw new Error(`File not found: ${fileId}`);
 
   if (updates.description !== undefined) file.description = updates.description;
   if (updates.tags !== undefined) file.tags = updates.tags;
   if (updates.type !== undefined) file.type = updates.type as any;
+  if (updates.engagementIds !== undefined) file.engagementIds = updates.engagementIds;
+  if (updates.approvedForAgentUse !== undefined) file.approvedForAgentUse = updates.approvedForAgentUse;
+  if (updates.sensitive !== undefined) file.sensitive = updates.sensitive;
 
   await saveClientDataRoom(dataRoom);
   return file;
 }
 
 /**
- * Search files by tag or name
+ * Search files
  */
 export async function searchFiles(
-  engagementId: string,
+  clientId: string,
   query: {
     tags?: string[];
     name?: string;
     type?: string;
+    folderId?: string;
+    engagementId?: string;
   }
 ): Promise<FileReference[]> {
-  const files = await listFiles(engagementId);
+  const files = await listFiles(clientId, {
+    folderId: query.folderId,
+    engagementId: query.engagementId
+  });
 
   return files.filter((f) => {
     if (query.tags && query.tags.length > 0) {
@@ -214,4 +276,50 @@ export async function searchFiles(
     if (query.type && f.type !== query.type) return false;
     return true;
   });
+}
+
+/**
+ * Get client data room folders
+ */
+export async function getFolders(clientId: string): Promise<DataRoomFolder[]> {
+  const dataRoom = await loadClientDataRoom(clientId);
+  return dataRoom.folders.sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+/**
+ * Link file to engagement (add engagement ID)
+ */
+export async function linkFileToEngagement(
+  clientId: string,
+  fileId: string,
+  engagementId: string
+): Promise<FileReference> {
+  const dataRoom = await loadClientDataRoom(clientId);
+  const file = dataRoom.files.find((f) => f.id === fileId && !f.isArchived);
+  if (!file) throw new Error(`File not found: ${fileId}`);
+
+  if (!file.engagementIds.includes(engagementId)) {
+    file.engagementIds.push(engagementId);
+  }
+
+  await saveClientDataRoom(dataRoom);
+  return file;
+}
+
+/**
+ * Unlink file from engagement (remove engagement ID)
+ */
+export async function unlinkFileFromEngagement(
+  clientId: string,
+  fileId: string,
+  engagementId: string
+): Promise<FileReference> {
+  const dataRoom = await loadClientDataRoom(clientId);
+  const file = dataRoom.files.find((f) => f.id === fileId && !f.isArchived);
+  if (!file) throw new Error(`File not found: ${fileId}`);
+
+  file.engagementIds = file.engagementIds.filter((id) => id !== engagementId);
+
+  await saveClientDataRoom(dataRoom);
+  return file;
 }

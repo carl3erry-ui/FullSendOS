@@ -6,48 +6,33 @@ import {
   listFiles,
   searchFiles
 } from "@/services/client-data-room-store";
-import { loadProject } from "@/src/storage/projectStore.js";
+import { loadClient } from "@/src/storage/clientStore.js";
 import { FileReferenceSafeSchema } from "@/schemas/client-data-room";
 
 const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 
-async function resolveClientIdForEngagement(engagementId: string): Promise<string> {
-  try {
-    const project = await loadProject(engagementId);
-    return project.clientId || project.id;
-  } catch (error) {
-    if (
-      typeof error === "object" &&
-      error &&
-      "code" in error &&
-      error.code === "ENOENT"
-    ) {
-      throw new Error(`Engagement not found: ${engagementId}`);
-    }
-    throw error;
-  }
-}
-
 /**
- * GET /api/engagements/[id]/data-room
- * List all files in client data room
+ * GET /api/clients/[clientId]/data-room/files
+ * List files with optional filtering
  */
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ clientId: string }> }
 ): Promise<NextResponse> {
-  const { id: engagementId } = await context.params;
+  const { clientId } = await context.params;
 
   try {
-    const clientId = await resolveClientIdForEngagement(engagementId);
+    await loadClient(clientId);
+
     const query = new URL(request.url).searchParams;
     const folderId = query.get("folderId") || undefined;
+    const engagementId = query.get("engagementId") || undefined;
     const tags = query.get("tags")?.split(",").filter(Boolean) || undefined;
     const name = query.get("name") || undefined;
     const type = query.get("type") || undefined;
 
     let files;
-    if (tags || name || type || folderId) {
+    if (tags || name || type || folderId || engagementId) {
       files = await searchFiles(clientId, {
         tags,
         name,
@@ -56,46 +41,49 @@ export async function GET(
         engagementId
       });
     } else {
-      files = await listFiles(clientId, { engagementId, folderId });
+      files = await listFiles(clientId);
     }
 
-    // Safe response: omit storagePath
     const safeFiles = files.map((f) => FileReferenceSafeSchema.parse(f));
 
     return NextResponse.json({
-      engagementId,
       clientId,
       fileCount: files.length,
       files: safeFiles
     });
   } catch (error) {
-    console.error("[DataRoom GET]", error);
-    if (error instanceof Error && error.message.startsWith("Engagement not found:")) {
+    console.error("[DataRoom Files GET]", error);
+    if (
+      typeof error === "object" &&
+      error &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
       return NextResponse.json(
-        { error: error.message },
+        { error: "Client not found" },
         { status: 404 }
       );
     }
     return NextResponse.json(
-      { error: "Failed to list data room files" },
+      { error: "Failed to list files" },
       { status: 500 }
     );
   }
 }
 
 /**
- * POST /api/engagements/[id]/data-room
- * Upload a new file to data room
- * Expects multipart/form-data with file and optional metadata
+ * POST /api/clients/[clientId]/data-room/files
+ * Upload file to client data room
  */
 export async function POST(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  context: { params: Promise<{ clientId: string }> }
 ): Promise<NextResponse> {
-  const { id: engagementId } = await context.params;
+  const { clientId } = await context.params;
 
   try {
-    const clientId = await resolveClientIdForEngagement(engagementId);
+    await loadClient(clientId);
+
     const contentType = request.headers.get("content-type") || "";
 
     if (!contentType.includes("multipart/form-data")) {
@@ -115,9 +103,10 @@ export async function POST(
     const uploadedBy = (formData.get("uploadedBy") as string) || "system";
     const engagementIdsStr = formData.get("engagementIds") as string;
     const engagementIds = engagementIdsStr
-      ? engagementIdsStr.split(",").map((id) => id.trim()).filter(Boolean)
+      ? engagementIdsStr.split(",").map((id) => id.trim())
       : [];
-    const approvedForAgentUse = formData.get("approvedForAgentUse") === "true";
+    const approvedForAgentUse =
+      formData.get("approvedForAgentUse") === "true";
     const sensitive = formData.get("sensitive") === "true";
 
     if (!file) {
@@ -127,7 +116,7 @@ export async function POST(
       );
     }
 
-    // Validate MIME type (basic security check)
+    // Validate MIME type
     const allowedMimes = [
       "application/pdf",
       "text/plain",
@@ -152,7 +141,7 @@ export async function POST(
     // Create upload directory
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
-    // Generate unique filename and save
+    // Generate unique filename
     const ext = path.extname(file.name);
     const basename = path.basename(file.name, ext);
     const storageName = `${clientId}-${Date.now()}-${basename}${ext}`;
@@ -172,7 +161,7 @@ export async function POST(
         tags,
         type: type as any,
         folderId,
-        engagementIds: Array.from(new Set([engagementId, ...engagementIds])),
+        engagementIds,
         approvedForAgentUse,
         sensitive
       },
@@ -180,31 +169,22 @@ export async function POST(
       storagePath
     );
 
-    // Safe response
     const safeRef = FileReferenceSafeSchema.parse(fileRef);
 
     return NextResponse.json(
       {
         success: true,
-        clientId,
-        engagementId,
         file: safeRef
       },
       { status: 201 }
     );
   } catch (error) {
-    console.error("[DataRoom POST]", error);
+    console.error("[DataRoom Files POST]", error);
     const message =
       error instanceof Error ? error.message : "Failed to upload file";
-    if (typeof message === "string" && message.startsWith("Engagement not found:")) {
-      return NextResponse.json(
-        { error: message },
-        { status: 404 }
-      );
-    }
     return NextResponse.json(
       { error: message },
-      { status: 500 }
+      { status: error instanceof Error && message.includes("not found") ? 404 : 500 }
     );
   }
 }
