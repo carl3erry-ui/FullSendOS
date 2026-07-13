@@ -179,16 +179,16 @@ Agents in this slice hold only low-risk permissions.
 
 ---
 
-## Current Limitations (Slices 1-3)
+## Current Limitations (Slices 1-4)
 
-This covers foundation (Slice 1), execution (Slice 2), and API routes (Slice 3). The following are **not yet implemented**:
+This covers foundation (Slice 1), execution (Slice 2), API routes (Slice 3), and approval UI (Slice 4). The following are **not yet implemented**:
 
-- Approval UI and review workflow (Slice 4)
-- Workflow integration (agents cannot yet be triggered by workflow steps) (Slice 5)
-- Tool permission enforcement at runtime (permissions are modelled, not enforced at the tool call level) (Slice 6)
+- Engagement workspace agent panel (Slice 5)
+- Workflow integration (agents cannot yet be triggered by workflow steps) (Slice 6)
+- Tool permission enforcement at runtime (permissions are modelled, not enforced at the tool call level) (Slice 7)
 - Live usage tracking from provider responses (captured in AgentExecution but not yet extracted from NormalizedAIResponse)
 - Exact cost accounting (estimatedCost is always null — pricing data not configured)
-- Background/async task execution queue (Slice 7)
+- Background/async task execution queue (Slice 8)
 - Task retry policy (each task runs once; rerun = new task)
 
 ---
@@ -669,11 +669,97 @@ All API responses follow a consistent success/error shape:
 
 ---
 
+## Slice 4: Approval UI
+
+Approval UI is implemented in the AI Workforce dashboard. Users can:
+- Review pending agent tasks
+- Approve tasks
+- Reject tasks with feedback
+- Request revisions
+
+Approval actions are available through the task detail panel when `approvalStatus === "pending"`.
+
+---
+
+## Slice 5: Engagement Workspace Agent Panel
+
+The Agent Tasks panel appears inside the engagement workspace alongside executive brief,
+supporting analysis, department work product, and evidence sections.
+
+### Engagement-Linked Task Creation
+
+From the engagement workspace, users can create agent tasks that are automatically linked
+to the current engagement by `engagementId`. The task creation form:
+- Pre-populates the engagement context (name, objective)
+- Requires agent selection
+- Requires task title and objective
+- Supports optional instructions and priority
+- Uses the engagement's default provider (mock or xAI)
+
+### Engagement Task List
+
+Tasks linked to an engagement via `engagementId` appear in the panel. The list shows:
+- Task title
+- Agent name and role
+- Status (queued, running, completed, failed)
+- Approval status (pending, approved, rejected, revision_requested, not_required)
+- Created timestamp
+- Completed timestamp (when present)
+
+### Task Detail and Output Rendering
+
+When a task is selected, the detail panel shows:
+- Full task metadata (title, objective, instructions, provider, model)
+- Token usage and estimated cost (when available)
+- Status and approval state
+- Structured output (rendered by agent type)
+- Error messages (without stack traces or diagnostics)
+- Run button (when status === "queued")
+- Approval actions (when approvalStatus === "pending")
+
+### Global and Engagement-Specific Compatibility
+
+Tasks created inside an engagement appear in:
+- The engagement workspace Agent Tasks panel
+- The global AI Workforce dashboard
+- Task listing API when filtered by engagementId
+
+Tasks created globally with an `engagementId` appear in:
+- The matching engagement workspace Agent Tasks panel
+- The global AI Workforce dashboard
+
+There is one shared task store (no duplication).
+
+### Empty State Handling
+
+When an engagement has no agent tasks:
+- Display message: "No agent tasks have been created for this engagement yet."
+- Display action button: "Create Agent Task"
+- Clicking the button opens the task creation modal
+
+### Unsafe Data Filtering
+
+The engagement panel does not display:
+- API keys or authorization headers
+- Private system prompts
+- Raw provider payloads or responses
+- Stack traces or diagnostics
+- Secrets or sensitive fields
+
+All output is sanitized before rendering.
+
+### Current Limitation
+
+Agents do not yet drive the core consulting workflow. Workflow integration (Slice 6)
+will allow agents to be triggered from workflow department steps. For now, agents
+operate as independent tools within the engagement workspace.
+
+---
+
 ## Future Slices
 
 | Slice | Capability |
 |-------|-----------|
-| **Slice 4** | Approval UI — review and action ApprovalGate records in the dashboard |
-| **Slice 5** | Workflow integration — trigger agents from workflow department steps |
-| **Slice 6** | Tool permissions — enforce allowedTools at execution time |
-| **Slice 7** | Background queue — async task execution with progress streaming |
+| **Slice 6** | Workflow integration — trigger agents from workflow department steps |
+| **Slice 7** | Tool permissions — enforce allowedTools at execution time |
+| **Slice 8** | Background queue — async task execution with progress streaming |

@@ -173,8 +173,19 @@ export async function fetchAgents(fetchImpl: FetchLike = fetch): Promise<PublicA
   return agents.map((agent) => sanitizeOutputForDisplay(agent) as PublicAgentMetadata);
 }
 
-export async function fetchTasks(fetchImpl: FetchLike = fetch): Promise<AgentTaskSummary[]> {
-  const response = await fetchImpl("/api/agent-tasks");
+export async function fetchTasks(
+  filterOptions?: { engagementId?: string; projectId?: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<AgentTaskSummary[]> {
+  const url = new URL("/api/agent-tasks", typeof window !== "undefined" ? window.location.origin : "http://localhost:3000");
+  if (filterOptions?.engagementId) {
+    url.searchParams.set("engagementId", filterOptions.engagementId);
+  }
+  if (filterOptions?.projectId) {
+    url.searchParams.set("projectId", filterOptions.projectId);
+  }
+
+  const response = await fetchImpl(url.toString());
   const data = await parseResponse(response);
 
   if (!response.ok) {
