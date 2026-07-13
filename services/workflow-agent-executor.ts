@@ -5,6 +5,8 @@ import { globalTaskStore } from "../agents/task-store";
 import { globalAgentRegistry, globalInstanceRegistry } from "../agents/registry";
 import { globalExecutionStore } from "../agents/execution-store";
 import { globalProviderRegistry } from "../ai/provider-registry";
+import { savePauseState } from "./workflow-pause-store";
+import { buildPauseState } from "./workflow-resume";
 
 export type WorkflowAgentStepConfig = {
   agentId: string;
@@ -27,6 +29,7 @@ export type WorkflowAgentAuditEntry = {
   provider?: string;
   model?: string;
   error?: string;
+  pauseStateId?: string;  // set when status is waiting-for-approval
 };
 
 function now() {
@@ -101,8 +104,29 @@ export async function executeWorkflowAgentStep(options: {
     // Save task to store
     await globalTaskStore.saveTask(task);
 
-    // If approval required, do not execute yet
+    // If approval required, persist pause state and return without executing
     if (step.requiresApproval) {
+      const pauseId = `pause-${task.id}-${Date.now()}`;
+      const pause = buildPauseState({
+        pauseId,
+        workflowRunId: workflowRunId ?? `run-${project.id}`,
+        projectId: project.id,
+        engagementId: project.id,
+        stepId: departmentId ?? step.agentId,
+        agentTaskId: task.id,
+        completedStepIds: [],
+        failedStepIds: [],
+        pendingStepIds: [],
+      });
+      // Persist to disk — non-blocking failure: log and continue
+      savePauseState(pause).catch((e: unknown) => {
+        console.warn(
+          "workflow-pause-persist-failed",
+          pause.id,
+          e instanceof Error ? e.message : String(e),
+        );
+      });
+
       return {
         type: "agent",
         agentId: step.agentId,
@@ -112,6 +136,7 @@ export async function executeWorkflowAgentStep(options: {
         startedAt,
         provider: task.provider,
         model: task.model,
+        pauseStateId: pauseId,
       };
     }
 

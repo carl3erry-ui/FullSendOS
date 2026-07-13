@@ -25,6 +25,7 @@ export type AgentAuditRunEntry = {
   provider?: string;
   model?: string;
   error?: string;
+  pauseStateId?: string;  // set when step is waiting for approval
 };
 
 /**
@@ -53,6 +54,7 @@ export function recordAgentStepInAudit(
     provider: entry.provider,
     model: entry.model,
     error: entry.error,
+    pauseStateId: entry.pauseStateId,
   };
 
   return {
