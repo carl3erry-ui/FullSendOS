@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createEmptyProject } from "../../../src/schemas/projectSchema.js";
 import { listProjects, saveProject } from "../../../src/storage/projectStore.js";
 import { loadClient } from "../../../src/storage/clientStore.js";
+import { classifyIntake } from "../../../services/intake-classifier";
+import { buildEnrichmentPlan, createEnrichmentTask } from "../../../services/intake-enrichment";
 
 type FieldValidationError = {
   path: string;
@@ -34,8 +36,44 @@ export async function POST(request: Request) {
     }
 
     const project = createEmptyProject(payload);
+
+    // Slice 10: Classify intake completeness and run enrichment if needed
+    const intakeCtx = {
+      companyName: payload.companyName,
+      website: payload.website,
+      industry: payload.industry,
+      geography: payload.geography,
+      objective: payload.objective,
+      knownFacts: payload.knownFacts,
+      clientProvidedContext: payload.clientProvidedContext,
+      contactName: payload.contactName,
+    };
+    const intakeClassification = classifyIntake(intakeCtx);
+    project.intakeStatus = intakeClassification;
+
+    let enrichmentTaskId: string | undefined;
+
+    if (intakeClassification === "enrichable") {
+      const plan = buildEnrichmentPlan(intakeCtx, project.id);
+      project.enrichmentNote = plan.assumptionNote;
+      // Create enrichment task non-blocking — failures don't block engagement creation
+      createEnrichmentTask(plan, { provider: "mock" }).then((task) => {
+        // Persist enrichment task ID to the project after creation
+        project.enrichmentTaskId = task.id;
+        enrichmentTaskId = task.id;
+        saveProject(project).catch((e: unknown) => {
+          console.warn("enrichment-task-id-persist-failed", project.id, e instanceof Error ? e.message : String(e));
+        });
+      }).catch((e: unknown) => {
+        console.warn("enrichment-task-creation-failed", project.id, e instanceof Error ? e.message : String(e));
+      });
+    }
+
     await saveProject(project);
-    return NextResponse.json(project, { status: 201 });
+    return NextResponse.json(
+      { ...project, intakeClassification, enrichmentTaskId },
+      { status: 201 },
+    );
   } catch (error) {
     if (typeof error === "object" && error && "issues" in error && Array.isArray(error.issues)) {
       const fieldErrors = error.issues.slice(0, 12).map((issue: { path?: unknown; message?: unknown }) => ({

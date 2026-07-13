@@ -26,6 +26,11 @@ export const ProjectSchema = z.object({
   updatedAt: z.string(),
   status: ProjectStatusSchema,
 
+  // Intake classification (Slice 10 — set on creation, not re-evaluated on run)
+  intakeStatus: z.enum(["complete", "enrichable", "needs_user_input", "blocked"]).optional(),
+  enrichmentTaskId: z.string().optional(),
+  enrichmentNote: z.string().optional(),
+
   client: z.object({
     companyName: z.string().min(1),
     contactName: z.string().optional(),

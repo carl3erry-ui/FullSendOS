@@ -10,6 +10,7 @@ import {
   WORKFLOW_DEPARTMENTS,
 } from "./work-product-model";
 import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
+import { IntakeStatusBanner } from "./intake-status-banner";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;

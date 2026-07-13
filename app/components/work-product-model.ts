@@ -28,6 +28,9 @@ export type EngagementDetail = {
   status: string;
   createdAt?: string;
   updatedAt?: string;
+  intakeStatus?: "complete" | "enrichable" | "needs_user_input" | "blocked";
+  enrichmentNote?: string;
+  enrichmentTaskId?: string | null;
   client?: {
     companyName?: string;
     contactName?: string;
