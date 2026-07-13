@@ -16,10 +16,13 @@ export function buildStoragePath(clientId, fileId, safeFilename) {
   const safeClientId = String(clientId).replace(/[^A-Za-z0-9._-]/g, "");
   const safeFileId = String(fileId).replace(/[^A-Za-z0-9._-]/g, "");
   const filename = `${safeFileId}-${safeFilename}`;
-  // Verify no path traversal is possible
+  // Guard against path traversal: resolved path must be a descendant of base.
+  // Allow: starts with base+sep (file inside dir) or equals base (the dir itself).
+  // Reject: anything outside the base directory.
   const resolved = path.resolve(FILE_STORAGE_BASE, safeClientId, filename);
   const base = path.resolve(FILE_STORAGE_BASE, safeClientId);
-  if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+  const insideBase = resolved.startsWith(base + path.sep) || resolved === base;
+  if (!insideBase) {
     throw new Error("Path traversal detected.");
   }
   return resolved;

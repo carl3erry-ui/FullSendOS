@@ -21,6 +21,9 @@ app.use(express.json({ limit: "3mb" }));
 app.use(express.raw({ type: "application/octet-stream", limit: "102mb" }));
 app.use(express.static("public"));
 
+// Fields that may be updated via PATCH on a file record
+const FILE_PATCH_FIELDS = ["displayName", "description", "tags", "status", "visibility", "approvedForAgentUse", "sensitive"];
+
 function markdownDownloadName(project) {
   return `${project.client.companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "consulting-report"}.md`;
 }
@@ -260,7 +263,7 @@ app.get("/api/projects/:clientId/data-room/files", async (req, res) => {
   try {
     const project = await requireProject(req.params.clientId, res);
     if (!project) return;
-    const folderId = req.query.folderId || null;
+    const folderId = Array.isArray(req.query.folderId) ? req.query.folderId[0] : (req.query.folderId || null);
     const files = await listFileMetas(req.params.clientId, folderId);
     res.json(files.map(safeFileMeta));
   } catch (error) {
@@ -310,7 +313,7 @@ app.post("/api/projects/:clientId/data-room/files", async (req, res) => {
       description = req.headers["x-description"] || "";
       engagementId = req.headers["x-engagement-id"] || "";
       tags = (req.headers["x-tags"] || "").split(",").map((t) => t.trim()).filter(Boolean);
-      fileBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
+      fileBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
       sizeBytes = fileBuffer.length;
     } else {
       // JSON metadata registration (no binary content)
@@ -395,8 +398,7 @@ app.patch("/api/projects/:clientId/data-room/files/:fileId", async (req, res) =>
     const fileMeta = await loadFileMeta(req.params.clientId, req.params.fileId);
     const body = req.body || {};
 
-    const ALLOWED_UPDATES = ["displayName", "description", "tags", "status", "visibility", "approvedForAgentUse", "sensitive"];
-    for (const key of ALLOWED_UPDATES) {
+    for (const key of FILE_PATCH_FIELDS) {
       if (key in body) fileMeta[key] = body[key];
     }
     fileMeta.updatedAt = new Date().toISOString();

@@ -517,8 +517,10 @@ test("status can be set to all valid values", () => {
 // Cleanup
 // ────────────────────────────────────────────────────────────────────────────
 
+// Use the same sanitization logic as clientDir() in dataRoomStore.js
+const safeTestClientId = TEST_CLIENT_ID.replace(/[^A-Za-z0-9._-]/g, "");
 try {
-  await fs.rm(path.join(DATA_DIR, `data-rooms/${TEST_CLIENT_ID}`), { recursive: true, force: true });
+  await fs.rm(path.join(DATA_DIR, "data-rooms", safeTestClientId), { recursive: true, force: true });
 } catch { /* ignore */ }
 
 // ────────────────────────────────────────────────────────────────────────────

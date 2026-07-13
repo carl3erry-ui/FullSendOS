@@ -75,13 +75,12 @@ export function validateFileType(originalFilename, sizeBytes = 0) {
 
 export function sanitizeFilename(originalFilename) {
   const name = String(originalFilename || "unnamed").trim();
-  // Replace path separators and dangerous characters
   return name
-    .replace(/[/\\:*?"<>|]/g, "_")
-    .replace(/\.\./g, "_")
-    .replace(/^\./, "_")
-    .replace(/[^\w\-. ]/g, "_")
-    .replace(/\s+/g, "_")
+    .replace(/[/\\:*?"<>|]/g, "_")   // remove path separators and shell-special chars
+    .replace(/\.\./g, "_")            // neutralize directory traversal sequences
+    .replace(/^\./, "_")              // prevent hidden-file leading dot
+    .replace(/[^\w\-. ]/g, "_")       // keep only word chars, dash, dot, space
+    .replace(/\s+/g, "_")             // collapse whitespace to underscore
     .slice(0, 200) || "unnamed";
 }
 
