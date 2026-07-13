@@ -3,14 +3,46 @@ import { getApiErrorMessage } from "./api-error";
 export type PublicAgentMetadata = {
   id: string;
   name: string;
+  department?: string;
   description: string;
   role: string;
+  roleSummary?: string;
   version: string;
   capabilities: string[];
+  permissions?: string[];
+  riskLevel?: "low" | "medium" | "high" | "critical";
+  typicalTasks?: string[];
+  workflowStepMapping?: string[];
+  supportsDataRoomMetadata?: boolean;
+  requiresHumanReview?: boolean;
   defaultProvider: string;
+  allowedProviders?: string[];
   defaultModel: string;
   requiresApproval: boolean;
   enabled: boolean;
+};
+
+export type DepartmentAgentMapping = {
+  departmentId: string;
+  primaryAgentId: string;
+  supportingAgentIds: string[];
+};
+
+export type WorkforceTaskTemplate = {
+  id: string;
+  title: string;
+  departmentId: string;
+  agentId: string;
+  objectiveTemplate: string;
+  instructionsTemplate: string;
+  riskLevel: "low" | "medium" | "high" | "critical";
+  requiresApproval: boolean;
+};
+
+export type WorkforceCatalog = {
+  departmentMappings: DepartmentAgentMapping[];
+  taskTemplates: WorkforceTaskTemplate[];
+  availableAgents: PublicAgentMetadata[];
 };
 
 export type AgentTaskSummary = {
@@ -176,6 +208,22 @@ export async function fetchAgents(fetchImpl: FetchLike = fetch): Promise<PublicA
     : [];
 
   return agents.map((agent) => sanitizeOutputForDisplay(agent) as PublicAgentMetadata);
+}
+
+export async function fetchWorkforceCatalog(fetchImpl: FetchLike = fetch): Promise<WorkforceCatalog | null> {
+  const response = await fetchImpl("/api/agents");
+  const data = await parseResponse(response);
+
+  if (!response.ok) {
+    throw new Error(getApiErrorMessage(data, "Unable to load workforce catalog."));
+  }
+
+  const workforce = (data as { workforce?: unknown }).workforce;
+  if (!workforce || typeof workforce !== "object") {
+    return null;
+  }
+
+  return sanitizeOutputForDisplay(workforce) as WorkforceCatalog;
 }
 
 export async function fetchTasks(

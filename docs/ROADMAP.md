@@ -83,6 +83,15 @@ Phase 7: Marketplace
 - PDF export
 - PowerPoint export
 
+## Slice 11 Scope Note
+
+Department Agent Workforce Foundation is implemented as an extension to the
+existing agent framework. This slice explicitly excludes:
+
+- Rebuilding registry/executor/provider architecture
+- Data-room file parsing/indexing of private file contents
+- Autonomous external actions (publishing, spending, account modifications)
+
 Note: richer export artifact generation remains deferred until after validated in-product review workflows.
 
 ## Sprint 4

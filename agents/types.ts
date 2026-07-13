@@ -31,6 +31,25 @@ export const ApprovalStatusSchema = z.enum([
 ]);
 
 export const ProviderNameSchema = z.enum(["xai", "mock"]);
+export const AgentRiskLevelSchema = z.enum(["low", "medium", "high", "critical"]);
+
+export const AgentInputContractSchema = z.object({
+  description: z.string().min(1),
+  requiredFields: z.array(z.string()).default([]),
+  optionalFields: z.array(z.string()).default([]),
+});
+
+export const AgentOutputContractSchema = z.object({
+  description: z.string().min(1),
+  schemaName: z.string().min(1),
+  safeFields: z.array(z.string()).default([]),
+});
+
+export const AgentApprovalRequirementsSchema = z.object({
+  required: z.boolean(),
+  reason: z.string().min(1),
+  mode: z.enum(["none", "pre_execution", "post_execution"]).default("none"),
+});
 
 // ---------------------------------------------------------------------------
 // Evidence
@@ -65,15 +84,27 @@ export const AgentUsageSchema = z.object({
 export const AgentDefinitionSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  department: z.string().min(1),
   description: z.string(),
   role: z.string().min(1),
+  roleSummary: z.string().min(1),
   version: z.string().min(1),
   capabilities: z.array(z.string()),
-  allowedTools: z.array(z.string()),
+  allowedTools: z.array(z.string()).optional(),
+  permissions: z.array(z.string()).default([]),
   defaultProvider: ProviderNameSchema,
+  allowedProviders: z.array(ProviderNameSchema).default(["xai", "mock"]),
   defaultModel: z.string().min(1),
   systemPrompt: z.string(),
   requiresApproval: z.boolean(),
+  approvalRequirements: AgentApprovalRequirementsSchema,
+  riskLevel: AgentRiskLevelSchema,
+  inputContract: AgentInputContractSchema,
+  outputContract: AgentOutputContractSchema,
+  typicalTasks: z.array(z.string()).default([]),
+  workflowStepMapping: z.array(z.string()).default([]),
+  supportsDataRoomMetadata: z.boolean().default(false),
+  requiresHumanReview: z.boolean().default(false),
   maximumIterations: z.number().int().positive(),
   timeoutMs: z.number().int().positive(),
   enabled: z.boolean(),
@@ -177,6 +208,7 @@ export type AgentTaskStatus = z.infer<typeof AgentTaskStatusSchema>;
 export type ExecutionStatus = z.infer<typeof ExecutionStatusSchema>;
 export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
 export type ProviderName = z.infer<typeof ProviderNameSchema>;
+export type AgentRiskLevel = z.infer<typeof AgentRiskLevelSchema>;
 export type AgentEvidence = z.infer<typeof AgentEvidenceSchema>;
 export type AgentTask = z.infer<typeof AgentTaskSchema>;
 export type AgentExecution = z.infer<typeof AgentExecutionSchema>;

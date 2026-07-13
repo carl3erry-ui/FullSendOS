@@ -10,6 +10,10 @@ import { globalAgentRegistry, globalInstanceRegistry } from "./registry";
 import { orchestratorDefinition, OrchestratorAgent } from "./definitions/orchestrator";
 import { researcherDefinition, ResearcherAgent } from "./definitions/researcher";
 import { qualityControlDefinition, QualityControlAgent } from "./definitions/quality-control";
+import {
+  workforceDefinitions,
+  createWorkforceAgentInstance,
+} from "./definitions/workforce";
 
 /**
  * Register all built-in agents into the provided registry.
@@ -27,6 +31,12 @@ export function registerAllAgents(
   if (!registry.getById(qualityControlDefinition.id)) {
     registry.register(qualityControlDefinition);
   }
+
+  for (const definition of workforceDefinitions) {
+    if (!registry.getById(definition.id)) {
+      registry.register(definition);
+    }
+  }
 }
 
 export function registerAllAgentInstances(): void {
@@ -38,6 +48,12 @@ export function registerAllAgentInstances(): void {
   }
   if (!globalInstanceRegistry.get(qualityControlDefinition.id)) {
     globalInstanceRegistry.register(new QualityControlAgent());
+  }
+
+  for (const definition of workforceDefinitions) {
+    if (!globalInstanceRegistry.get(definition.id)) {
+      globalInstanceRegistry.register(createWorkforceAgentInstance(definition.id));
+    }
   }
 }
 
@@ -53,6 +69,13 @@ export { AgentRegistry, AgentInstanceRegistry, globalAgentRegistry, globalInstan
 export { orchestratorDefinition, OrchestratorAgent } from "./definitions/orchestrator";
 export { researcherDefinition, ResearcherAgent } from "./definitions/researcher";
 export { qualityControlDefinition, QualityControlAgent } from "./definitions/quality-control";
+export { workforceDefinitions, workforceSchemas, createWorkforceAgentInstance } from "./definitions/workforce";
+export {
+  WORKFORCE_DEPARTMENT_MAPPINGS,
+  WORKFORCE_TASK_TEMPLATES,
+  getPublicWorkforceCatalog,
+  hasDangerousPermissions,
+} from "./workforce-catalog";
 export * from "./errors";
 export { AgentTaskStore, globalTaskStore, type AgentTaskFilter } from "./task-store";
 export { AgentExecutionStore, globalExecutionStore } from "./execution-store";

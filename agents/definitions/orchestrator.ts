@@ -7,10 +7,13 @@ import { AgentPermissions } from "../permissions";
 
 export const orchestratorDefinition: AgentDefinition = {
   id: "orchestrator",
-  name: "Orchestrator",
+  name: "CEO / Executive Orchestrator Agent",
+  department: "executive",
   description:
     "Plans and coordinates consulting engagements. Breaks objectives into structured tasks, identifies dependencies, surfaces risks, and determines which agents to activate at each stage.",
   role: "engagement-planner",
+  roleSummary:
+    "Owns executive-level orchestration, cross-department sequencing, and decision framing.",
   version: "1.0.0",
   capabilities: [
     "engagement-planning",
@@ -24,8 +27,27 @@ export const orchestratorDefinition: AgentDefinition = {
     AgentPermissions.READ_ENGAGEMENT,
     AgentPermissions.CREATE_TASK,
     AgentPermissions.UPDATE_TASK,
+    AgentPermissions.READ_ENGAGEMENT_CONTEXT,
+    AgentPermissions.READ_CLIENT_PROFILE,
+    AgentPermissions.READ_DATA_ROOM_METADATA,
+    AgentPermissions.REQUEST_DATA_ROOM_FILE_ACCESS_LATER,
+    AgentPermissions.CREATE_EXECUTIVE_SUMMARY,
+    AgentPermissions.REQUEST_HUMAN_APPROVAL,
+  ],
+  permissions: [
+    AgentPermissions.READ_PROJECT,
+    AgentPermissions.READ_ENGAGEMENT,
+    AgentPermissions.CREATE_TASK,
+    AgentPermissions.UPDATE_TASK,
+    AgentPermissions.READ_ENGAGEMENT_CONTEXT,
+    AgentPermissions.READ_CLIENT_PROFILE,
+    AgentPermissions.READ_DATA_ROOM_METADATA,
+    AgentPermissions.REQUEST_DATA_ROOM_FILE_ACCESS_LATER,
+    AgentPermissions.CREATE_EXECUTIVE_SUMMARY,
+    AgentPermissions.REQUEST_HUMAN_APPROVAL,
   ],
   defaultProvider: "xai",
+  allowedProviders: ["xai", "mock"],
   defaultModel: process.env.XAI_DEFAULT_MODEL ?? "grok-4.5",
   systemPrompt: `You are the FullSendOS Orchestrator Agent.
 
@@ -42,6 +64,39 @@ Rules:
 - Return a valid JSON object conforming to the OrchestratorOutput schema.`,
   outputSchema: OrchestratorOutputSchema as unknown as ZodType<unknown>,
   requiresApproval: false,
+  approvalRequirements: {
+    required: false,
+    reason: "Executive planning output is reviewed in standard workflow checkpoints.",
+    mode: "none",
+  },
+  riskLevel: "high",
+  inputContract: {
+    description: "Engagement objective and constraints to drive orchestration.",
+    requiredFields: ["objective"],
+    optionalFields: ["instructions", "context", "engagementId"],
+  },
+  outputContract: {
+    description: "Structured orchestration plan safe for workflow and UI display.",
+    schemaName: "OrchestratorOutputSchema",
+    safeFields: [
+      "summary",
+      "assumptions",
+      "tasks",
+      "dependencies",
+      "risks",
+      "approvalGates",
+      "successCriteria",
+      "recommendedNextAction",
+    ],
+  },
+  typicalTasks: [
+    "Create executive workplan",
+    "Assign department responsibilities",
+    "Identify decision gates",
+  ],
+  workflowStepMapping: ["intelligence", "strategy", "creative", "publishing"],
+  supportsDataRoomMetadata: true,
+  requiresHumanReview: true,
   maximumIterations: 3,
   timeoutMs: 60_000,
   enabled: true,

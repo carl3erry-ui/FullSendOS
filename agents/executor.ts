@@ -321,7 +321,8 @@ export class AgentExecutor {
     }
 
     // ----- Step 8: High-risk permission check -----
-    const highRiskTools = definition.allowedTools.filter((tool) =>
+    const toolPermissions = definition.allowedTools ?? definition.permissions ?? [];
+    const highRiskTools = toolPermissions.filter((tool) =>
       HIGH_RISK_PERMISSIONS.has(tool as Parameters<typeof HIGH_RISK_PERMISSIONS.has>[0]),
     );
     if (highRiskTools.length > 0 && task.approvalStatus !== "approved") {
@@ -371,7 +372,7 @@ export class AgentExecutor {
       status: "running",
       attempt,
       systemPromptSnapshot: agent.buildSystemPrompt(task),
-      toolPermissionsSnapshot: definition.allowedTools,
+      toolPermissionsSnapshot: toolPermissions,
       startedAt: now,
     };
     await this.executionStore.saveExecution(execution);

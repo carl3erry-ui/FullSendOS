@@ -15,6 +15,8 @@ import {
   OrchestratorOutputSchema,
   ResearchOutputSchema,
   QualityControlOutputSchema,
+  FinanceOutputSchema,
+  LegalReviewOutputSchema,
 } from "../agents/output-schemas";
 
 // Registry
@@ -32,6 +34,11 @@ import { createXAIProvider } from "../ai/xai-provider";
 
 // registerAllAgents helper
 import { registerAllAgents } from "../agents/index";
+import {
+  WORKFORCE_DEPARTMENT_MAPPINGS,
+  WORKFORCE_TASK_TEMPLATES,
+  hasDangerousPermissions,
+} from "../agents/workforce-catalog";
 
 // ---------------------------------------------------------------------------
 // 1. Agent definition validation
@@ -41,15 +48,39 @@ test("AgentDefinitionSchema accepts a valid agent definition", () => {
   const result = AgentDefinitionSchema.safeParse({
     id: "test-agent",
     name: "Test Agent",
+    department: "testing",
     description: "A test agent",
     role: "tester",
+    roleSummary: "Validates test scaffolding and schema behavior.",
     version: "1.0.0",
     capabilities: ["read"],
     allowedTools: ["read_project"],
+    permissions: ["read_project"],
     defaultProvider: "mock",
+    allowedProviders: ["mock", "xai"],
     defaultModel: "mock-1.0",
     systemPrompt: "You are a test agent.",
     requiresApproval: false,
+    approvalRequirements: {
+      required: false,
+      reason: "No approval required for test output.",
+      mode: "none",
+    },
+    riskLevel: "low",
+    inputContract: {
+      description: "Test objective payload.",
+      requiredFields: ["objective"],
+      optionalFields: [],
+    },
+    outputContract: {
+      description: "Test output payload.",
+      schemaName: "TestOutputSchema",
+      safeFields: ["summary"],
+    },
+    typicalTasks: ["Validate schema parsing"],
+    workflowStepMapping: ["testing"],
+    supportsDataRoomMetadata: false,
+    requiresHumanReview: false,
     maximumIterations: 3,
     timeoutMs: 30000,
     enabled: true,
@@ -68,15 +99,39 @@ test("AgentDefinitionSchema rejects unknown defaultProvider value", () => {
   const result = AgentDefinitionSchema.safeParse({
     id: "bad-provider-agent",
     name: "Bad Provider",
+    department: "testing",
     description: "",
     role: "tester",
+    roleSummary: "Tests provider validation.",
     version: "1.0.0",
     capabilities: [],
     allowedTools: [],
+    permissions: [],
     defaultProvider: "openai", // not in enum
+    allowedProviders: ["mock", "xai"],
     defaultModel: "gpt-4",
     systemPrompt: "...",
     requiresApproval: false,
+    approvalRequirements: {
+      required: false,
+      reason: "No approval required.",
+      mode: "none",
+    },
+    riskLevel: "low",
+    inputContract: {
+      description: "Input contract",
+      requiredFields: ["objective"],
+      optionalFields: [],
+    },
+    outputContract: {
+      description: "Output contract",
+      schemaName: "BadProviderOutput",
+      safeFields: [],
+    },
+    typicalTasks: [],
+    workflowStepMapping: [],
+    supportsDataRoomMetadata: false,
+    requiresHumanReview: false,
     maximumIterations: 1,
     timeoutMs: 5000,
     enabled: true,
@@ -246,11 +301,9 @@ test("AgentRegistry registers an agent and returns it by id", () => {
 
 test("AgentRegistry listEnabled returns only enabled agents", () => {
   const registry = new AgentRegistry();
-  registry.register(orchestratorDefinition);
-  registry.register(researcherDefinition);
-  registry.register(qualityControlDefinition);
+  registerAllAgents(registry);
   const enabled = registry.listEnabled();
-  assert.equal(enabled.length, 3);
+  assert.equal(enabled.length, 15);
   assert.ok(enabled.every((a) => a.enabled));
 });
 
@@ -278,16 +331,102 @@ test("getPublicMetadata omits systemPrompt", () => {
   assert.ok(meta);
   assert.equal("systemPrompt" in meta, false);
   assert.equal(meta.id, "orchestrator");
-  assert.equal(meta.name, "Orchestrator");
+  assert.equal(meta.name, "CEO / Executive Orchestrator Agent");
 });
 
 test("listPublicMetadata omits systemPrompt for all agents", () => {
   const registry = new AgentRegistry();
   registerAllAgents(registry);
   const all = registry.listPublicMetadata();
-  assert.equal(all.length, 3);
+  assert.equal(all.length, 15);
   for (const meta of all) {
     assert.equal("systemPrompt" in meta, false, `${meta.id} should not expose systemPrompt`);
+    assert.equal("outputSchema" in meta, false, `${meta.id} should not expose outputSchema`);
+  }
+});
+
+test("Registered agents do not include dangerous permissions", () => {
+  const registry = new AgentRegistry();
+  registerAllAgents(registry);
+  const agents = registry.listEnabled();
+
+  for (const agent of agents) {
+    assert.equal(
+      hasDangerousPermissions(agent.permissions ?? []),
+      false,
+      `${agent.id} contains dangerous permissions`,
+    );
+  }
+});
+
+test("Workforce templates and department mappings reference registered agents", () => {
+  const registry = new AgentRegistry();
+  registerAllAgents(registry);
+  const registered = new Set(registry.listEnabled().map((agent) => agent.id));
+
+  for (const mapping of WORKFORCE_DEPARTMENT_MAPPINGS) {
+    assert.ok(
+      registered.has(mapping.primaryAgentId),
+      `Missing primary agent ${mapping.primaryAgentId} for department ${mapping.departmentId}`,
+    );
+    for (const supportingId of mapping.supportingAgentIds) {
+      assert.ok(
+        registered.has(supportingId),
+        `Missing supporting agent ${supportingId} for department ${mapping.departmentId}`,
+      );
+    }
+  }
+
+  for (const template of WORKFORCE_TASK_TEMPLATES) {
+    assert.ok(
+      registered.has(template.agentId),
+      `Template ${template.id} references unknown agent ${template.agentId}`,
+    );
+  }
+});
+
+test("Finance output schema injects non-advisory disclaimer by default", () => {
+  const parsed = FinanceOutputSchema.parse({
+    financialSummary: "Working draft summary.",
+    assumptions: ["Assumption A"],
+    revenueDrivers: ["Driver A"],
+    costDrivers: ["Cost A"],
+    cashFlowConsiderations: ["Consideration A"],
+    valuationConsiderations: ["Valuation A"],
+    risks: ["Risk A"],
+    openQuestions: ["Question A"],
+  });
+
+  assert.ok(
+    parsed.disclaimers.some((item) => item.toLowerCase().includes("not certified accounting advice")),
+  );
+});
+
+test("Legal review output schema injects attorney-review disclaimer by default", () => {
+  const parsed = LegalReviewOutputSchema.parse({
+    legalIssueSpotting: ["Issue A"],
+    complianceRisks: ["Risk A"],
+    contractConsiderations: ["Contract A"],
+    licensingConsiderations: ["Licensing A"],
+    requiredAttorneyReview: ["Attorney Review A"],
+  });
+
+  assert.ok(
+    parsed.disclaimers.some((item) => item.toLowerCase().includes("not legal advice")),
+  );
+});
+
+test("High-risk workforce roles require approval", () => {
+  const registry = new AgentRegistry();
+  registerAllAgents(registry);
+
+  const highRiskIds = ["orchestrator", "finance", "legal-review", "executive-review"];
+  for (const id of highRiskIds) {
+    const agent = registry.getById(id);
+    assert.ok(agent, `Expected agent ${id} to be registered`);
+    assert.equal(agent?.riskLevel, "high");
+    assert.equal(agent?.requiresHumanReview, true);
+    assert.equal(agent?.approvalRequirements.required, agent?.requiresApproval);
   }
 });
 

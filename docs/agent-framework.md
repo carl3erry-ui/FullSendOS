@@ -70,7 +70,7 @@ The `AgentRegistry` stores agent definitions and exposes public-safe metadata:
 import { AgentRegistry, registerAllAgents } from "./agents";
 
 const registry = new AgentRegistry();
-registerAllAgents(registry); // registers orchestrator, researcher, quality-control
+registerAllAgents(registry); // registers full workforce roster
 
 const meta = registry.getPublicMetadata("orchestrator");
 // meta omits systemPrompt — safe to serialize to clients
@@ -104,6 +104,32 @@ Reviews work products for accuracy, completeness, and logical consistency.
 Issues verdicts: `approved`, `approved_with_notes`, `revision_required`, `rejected`.
 
 Output schema: `QualityControlOutputSchema`
+
+### Slice 11 Workforce Foundation
+
+The workforce now includes additional department specialists registered through the
+existing `AgentRegistry` and `AgentInstanceRegistry` layers (no framework rebuild):
+
+- `project-manager`
+- `market-research`
+- `finance`
+- `strategy`
+- `brand-strategy`
+- `creative-director`
+- `website-digital`
+- `operations`
+- `legal-review`
+- `sales-revenue`
+- `investor-relations`
+- `executive-review`
+
+Safety boundaries remain unchanged:
+
+- Public metadata omits `systemPrompt` and runtime schemas.
+- Task templates and department mappings are exposed as safe config only.
+- Dangerous permissions (publishing, spending, secret access, external actions)
+  remain blocked by contract and tests.
+- Finance and legal outputs include explicit non-advisory disclaimers.
 
 ---
 

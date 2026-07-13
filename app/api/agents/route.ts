@@ -6,14 +6,16 @@
  */
 
 import { NextResponse } from "next/server";
-import { globalAgentRegistry } from "@/agents";
+import { getPublicWorkforceCatalog, globalAgentRegistry } from "@/agents";
 
 export async function GET() {
   try {
     const metadata = globalAgentRegistry.listPublicMetadata();
+    const workforce = getPublicWorkforceCatalog(globalAgentRegistry);
     return NextResponse.json({
       success: true,
       data: metadata,
+      workforce,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

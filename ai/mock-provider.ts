@@ -148,6 +148,111 @@ const MOCK_QC_OUTPUT = {
     "Proceed to strategy phase with documented assumption gaps. Commission live research validation before final deliverable.",
 };
 
+const WORKFORCE_MOCK_PAYLOADS: Record<string, unknown> = {
+  "project-manager": {
+    projectPlan: ["Define scope", "Sequence milestones", "Assign owners"],
+    milestones: ["Discovery complete", "Strategy approved", "Execution kickoff"],
+    owners: [{ role: "project-manager", owner: "engagement-lead" }],
+    dependencies: ["Research summary"],
+    blockers: [],
+    timelineRisks: ["Stakeholder alignment delay"],
+    nextActions: ["Confirm owners", "Finalize schedule"],
+  },
+  "market-research": {
+    marketDefinition: "Target regional services market",
+    targetSegments: ["SMB", "Mid-market"],
+    competitors: ["Competitor A", "Competitor B"],
+    demandSignals: ["Increasing category search", "Repeat purchase behavior"],
+    localMarketFactors: ["Regional seasonality"],
+    opportunities: ["Segment-focused packaging"],
+    risks: ["Price sensitivity"],
+    confidence: 0.62,
+  },
+  finance: {
+    financialSummary: "Preliminary financial support analysis.",
+    assumptions: ["Current cost structure remains stable"],
+    revenueDrivers: ["New channel activation"],
+    costDrivers: ["Customer acquisition"],
+    cashFlowConsiderations: ["Working capital timing"],
+    valuationConsiderations: ["Comparable multiples"],
+    risks: ["Demand volatility"],
+    openQuestions: ["Verified churn data unavailable"],
+  },
+  strategy: {
+    strategicOptions: ["Option A", "Option B"],
+    recommendation: "Prioritize Option A with phased rollout.",
+    rationale: ["Higher near-term upside", "Lower execution complexity"],
+    tradeoffs: ["Reduced flexibility in later phases"],
+    risks: ["Execution bandwidth"],
+    milestones: ["Phase 1 launch", "Phase 2 optimization"],
+    decisionRequired: ["Budget approval"],
+  },
+  "brand-strategy": {
+    brandPositioning: "Trusted specialist for high-accountability engagements.",
+    audience: ["Operators", "Executive buyers"],
+    messaging: ["Confidence through execution", "Clarity over noise"],
+    voice: ["Direct", "Credible"],
+    differentiation: ["Integrated strategy-to-delivery model"],
+    brandRisks: ["Over-broad messaging"],
+    recommendations: ["Narrow primary audience positioning"],
+  },
+  "creative-director": {
+    creativeDirection: "Performance-led storytelling with practical proof points.",
+    visualConcepts: ["Concept A", "Concept B"],
+    campaignIdeas: ["Case-study-led launch"],
+    assetNeeds: ["Landing page", "Social cutdowns"],
+    brandConsistencyNotes: ["Maintain core message hierarchy"],
+    risks: ["Concept sprawl"],
+  },
+  "website-digital": {
+    websiteAssessment: ["Navigation friction on core flows"],
+    userJourney: ["Awareness > Consideration > Conversion"],
+    conversionOpportunities: ["Tighten CTA hierarchy"],
+    contentNeeds: ["Proof-focused case studies"],
+    seoConsiderations: ["Improve intent-aligned page structure"],
+    technicalRisks: ["Slow mobile performance"],
+  },
+  operations: {
+    operationalAssessment: ["Delivery process is partially standardized"],
+    processGaps: ["Handoff ownership ambiguity"],
+    staffingConsiderations: ["Need dedicated PM bandwidth"],
+    vendorConsiderations: ["Reporting tooling alignment"],
+    implementationPlan: ["Define SOPs", "Pilot new flow", "Scale"],
+    risks: ["Change resistance"],
+  },
+  "legal-review": {
+    legalIssueSpotting: ["Potential claims substantiation exposure"],
+    complianceRisks: ["Channel-specific disclosure requirements"],
+    contractConsiderations: ["SLA obligations"],
+    licensingConsiderations: ["Jurisdictional variance"],
+    requiredAttorneyReview: ["External counsel sign-off before publication"],
+  },
+  "sales-revenue": {
+    revenueOpportunities: ["Verticalized offer packaging"],
+    salesChannels: ["Inbound", "Partnership"],
+    pricingConsiderations: ["Tiered pricing experiment"],
+    pipelineIdeas: ["Account-based sequence"],
+    accountTargets: ["Segment A ICP"],
+    risks: ["Longer sales cycles"],
+  },
+  "investor-relations": {
+    investorNarrative: ["Clear problem-solution-outcome arc"],
+    keyMetrics: ["Revenue growth", "Retention"],
+    diligenceNeeds: ["Cohort analysis", "Unit economics"],
+    riskDisclosures: ["Market concentration risk"],
+    fundraisingMaterialsNeeded: ["Investor memo", "Data room index"],
+    nextActions: ["Finalize diligence checklist"],
+  },
+  "executive-review": {
+    finalRecommendation: "Proceed with phased execution contingent on approvals.",
+    decisionSummary: ["Core strategy approved", "Key risks are manageable"],
+    confidence: 0.67,
+    unresolvedQuestions: ["Final legal review pending"],
+    approvalRecommendation: "Approve Phase 1 and hold Phase 2 pending legal sign-off.",
+    nextActions: ["Start Phase 1", "Schedule legal checkpoint"],
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Agent type detection
 // ---------------------------------------------------------------------------
@@ -170,6 +275,11 @@ function detectAgentType(request: AIProviderRequest): MockAgentType {
 }
 
 function buildMockPayload(request: AIProviderRequest): unknown {
+  const id = (request.metadata?.agentId as string | undefined) ?? "";
+  if (id && WORKFORCE_MOCK_PAYLOADS[id]) {
+    return WORKFORCE_MOCK_PAYLOADS[id];
+  }
+
   const type = detectAgentType(request);
   if (type === "orchestrator") return MOCK_ORCHESTRATOR_OUTPUT;
   if (type === "researcher") return MOCK_RESEARCH_OUTPUT;

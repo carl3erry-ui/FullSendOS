@@ -36,22 +36,46 @@ export function AgentsList({ agents, isLoading }: AgentsListProps) {
           <p className="mb-3 text-sm text-slate-300">{agent.description}</p>
 
           <div className="space-y-2 text-sm">
+            {agent.department && (
+              <div>
+                <span className="text-slate-400">Department: </span>
+                <span className="text-slate-200">{agent.department}</span>
+              </div>
+            )}
             <div>
               <span className="text-slate-400">Role: </span>
               <span className="text-slate-200">{agent.role}</span>
             </div>
+            {agent.roleSummary && (
+              <div>
+                <span className="text-slate-400">Role Summary: </span>
+                <span className="text-slate-200">{agent.roleSummary}</span>
+              </div>
+            )}
             <div>
               <span className="text-slate-400">Provider: </span>
               <span className="text-slate-200">{agent.defaultProvider}</span>
               <span className="ml-2 text-slate-400">Model: </span>
               <span className="text-slate-200">{agent.defaultModel}</span>
             </div>
+            {agent.riskLevel && (
+              <div>
+                <span className="text-slate-400">Risk: </span>
+                <span className="text-slate-200">{agent.riskLevel}</span>
+              </div>
+            )}
             <div>
               <span className="text-slate-400">Approval: </span>
               <span className="text-slate-200">
                 {agent.requiresApproval ? "Required" : "Not required"}
               </span>
             </div>
+            {agent.typicalTasks && agent.typicalTasks.length > 0 && (
+              <div>
+                <span className="text-slate-400">Typical Tasks: </span>
+                <span className="text-slate-200">{agent.typicalTasks.slice(0, 3).join(", ")}</span>
+              </div>
+            )}
             <div>
               <span className="text-slate-400">Capabilities: </span>
               <div className="mt-1 flex flex-wrap gap-1">
