@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { GET as getClients, POST as createClient } from "../app/api/clients/route";
-import { GET as getClientDetail } from "../app/api/clients/[clientId]/route";
+import { GET as getClientDetail, PATCH as patchClientLifecycle } from "../app/api/clients/[clientId]/route";
 import { POST as createEngagement } from "../app/api/engagements/route";
 import { loadProject } from "../src/storage/projectStore.js";
 
@@ -141,4 +141,70 @@ test("client detail route returns 404 for unknown id", async () => {
 
   assert.equal(response.status, 404);
   assert.equal(body.error, "Client not found.");
+});
+
+test("client lifecycle actions archive, restore, and soft-delete without hard deletion", async () => {
+  const createRequest = new Request("http://127.0.0.1:3000/api/clients", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: "Client Lifecycle Test Co",
+      industry: "Services",
+    }),
+  });
+
+  const createdResponse = await createClient(createRequest);
+  const createdBody = await createdResponse.json();
+
+  assert.equal(createdResponse.status, 201);
+
+  try {
+    const archiveResponse = await patchClientLifecycle(
+      new Request(`http://127.0.0.1:3000/api/clients/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive" }),
+      }),
+      { params: Promise.resolve({ clientId: createdBody.id }) },
+    );
+    assert.equal(archiveResponse.status, 200);
+
+    const defaultList = await (await getClients()).json();
+    assert.equal(defaultList.some((client: { id?: string }) => client.id === createdBody.id), false);
+
+    const archivedList = await (
+      await getClients(new Request("http://127.0.0.1:3000/api/clients?includeArchived=true"))
+    ).json();
+    assert.equal(archivedList.some((client: { id?: string; lifecycleStatus?: string }) => client.id === createdBody.id && client.lifecycleStatus === "archived"), true);
+
+    const restoreResponse = await patchClientLifecycle(
+      new Request(`http://127.0.0.1:3000/api/clients/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      }),
+      { params: Promise.resolve({ clientId: createdBody.id }) },
+    );
+    assert.equal(restoreResponse.status, 200);
+
+    const restoredList = await (await getClients()).json();
+    assert.equal(restoredList.some((client: { id?: string }) => client.id === createdBody.id), true);
+
+    const deleteResponse = await patchClientLifecycle(
+      new Request(`http://127.0.0.1:3000/api/clients/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete" }),
+      }),
+      { params: Promise.resolve({ clientId: createdBody.id }) },
+    );
+    assert.equal(deleteResponse.status, 200);
+
+    const deletedList = await (
+      await getClients(new Request("http://127.0.0.1:3000/api/clients?includeDeleted=true"))
+    ).json();
+    assert.equal(deletedList.some((client: { id?: string; lifecycleStatus?: string }) => client.id === createdBody.id && client.lifecycleStatus === "deleted"), true);
+  } finally {
+    await cleanupClient(createdBody.id);
+  }
 });

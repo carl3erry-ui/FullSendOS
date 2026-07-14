@@ -9,6 +9,9 @@ function toClientSummary(client: {
   industry?: string;
   website?: string;
   primaryContact?: string;
+  lifecycleStatus?: string;
+  archivedAt?: string;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }, engagementSummaries: Array<{ clientId?: string | null; updatedAt?: string }>) {
@@ -24,6 +27,9 @@ function toClientSummary(client: {
     industry: client.industry || "",
     website: client.website || "",
     primaryContact: client.primaryContact || "",
+    lifecycleStatus: client.lifecycleStatus || "active",
+    archivedAt: client.archivedAt || null,
+    deletedAt: client.deletedAt || null,
     createdAt: client.createdAt,
     updatedAt: client.updatedAt,
     engagementCount: related.length,
@@ -31,8 +37,16 @@ function toClientSummary(client: {
   };
 }
 
-export async function GET() {
-  const [clients, engagements] = await Promise.all([listClients(), listProjects()]);
+export async function GET(request?: Request) {
+  const url = request ? new URL(request.url) : null;
+  const includeArchived = url?.searchParams.get("includeArchived") === "true";
+  const includeDeleted = url?.searchParams.get("includeDeleted") === "true";
+  const includeAll = url?.searchParams.get("includeAll") === "true";
+
+  const [clients, engagements] = await Promise.all([
+    listClients({ includeArchived, includeDeleted, includeAll }),
+    listProjects({ includeArchived, includeDeleted, includeAll }),
+  ]);
   const safeClients = clients.filter((client): client is NonNullable<(typeof clients)[number]> => Boolean(client));
   const safeEngagements = engagements.filter((engagement): engagement is NonNullable<(typeof engagements)[number]> => Boolean(engagement));
   return NextResponse.json(safeClients.map((client) => toClientSummary(client, safeEngagements)));

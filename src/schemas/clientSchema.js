@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const ClientLifecycleStatusSchema = z.enum(["active", "archived", "deleted"]);
+
 export const ClientSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   id: z.string().min(1),
@@ -7,6 +9,9 @@ export const ClientSchema = z.object({
   industry: z.string().optional(),
   website: z.string().url().optional(),
   primaryContact: z.string().optional(),
+  lifecycleStatus: ClientLifecycleStatusSchema.default("active"),
+  archivedAt: z.string().optional(),
+  deletedAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -26,6 +31,7 @@ export function createClient(input) {
     industry: input.industry,
     website: input.website,
     primaryContact: input.primaryContact,
+    lifecycleStatus: "active",
     createdAt: now,
     updatedAt: now,
   });

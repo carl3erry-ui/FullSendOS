@@ -6,6 +6,7 @@ import { GET as getProjects, POST as createProject } from "../app/api/projects/r
 import { POST as runProject } from "../app/api/projects/[id]/run/route";
 import { GET as getEngagements, POST as createEngagement } from "../app/api/engagements/route";
 import { POST as runEngagement } from "../app/api/engagements/[id]/run/route";
+import { PATCH as patchEngagementLifecycle } from "../app/api/engagements/[id]/route";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
 
@@ -304,4 +305,67 @@ test("unknown engagement id behavior remains explicit and backward compatible", 
 
   assert.equal(response.status, 404);
   assert.equal(body.error, "Project not found.");
+});
+
+test("engagement lifecycle actions archive, restore, and soft-delete without hard deletion", async () => {
+  const request = new Request("http://127.0.0.1:3000/api/engagements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyName: "Lifecycle Engagement Co", objective: "Validate lifecycle" }),
+  });
+
+  const createdResponse = await createEngagement(request);
+  const createdBody = await createdResponse.json();
+
+  assert.equal(createdResponse.status, 201);
+
+  try {
+    const archiveResponse = await patchEngagementLifecycle(
+      new Request(`http://127.0.0.1:3000/api/engagements/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "archive" }),
+      }),
+      { params: Promise.resolve({ id: createdBody.id }) },
+    );
+    assert.equal(archiveResponse.status, 200);
+
+    const defaultList = await (await getEngagements()).json();
+    assert.equal(defaultList.some((item: { id?: string }) => item.id === createdBody.id), false);
+
+    const archivedList = await (
+      await getEngagements(new Request("http://127.0.0.1:3000/api/engagements?includeArchived=true"))
+    ).json();
+    assert.equal(archivedList.some((item: { id?: string; lifecycleStatus?: string }) => item.id === createdBody.id && item.lifecycleStatus === "archived"), true);
+
+    const restoreResponse = await patchEngagementLifecycle(
+      new Request(`http://127.0.0.1:3000/api/engagements/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restore" }),
+      }),
+      { params: Promise.resolve({ id: createdBody.id }) },
+    );
+    assert.equal(restoreResponse.status, 200);
+
+    const restoredList = await (await getEngagements()).json();
+    assert.equal(restoredList.some((item: { id?: string }) => item.id === createdBody.id), true);
+
+    const deleteResponse = await patchEngagementLifecycle(
+      new Request(`http://127.0.0.1:3000/api/engagements/${createdBody.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete" }),
+      }),
+      { params: Promise.resolve({ id: createdBody.id }) },
+    );
+    assert.equal(deleteResponse.status, 200);
+
+    const deletedList = await (
+      await getEngagements(new Request("http://127.0.0.1:3000/api/engagements?includeDeleted=true"))
+    ).json();
+    assert.equal(deletedList.some((item: { id?: string; lifecycleStatus?: string }) => item.id === createdBody.id && item.lifecycleStatus === "deleted"), true);
+  } finally {
+    await cleanupEngagement(createdBody.id);
+  }
 });

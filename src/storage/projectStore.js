@@ -3,6 +3,14 @@ import path from "node:path";
 
 const storageDir = path.resolve("data/projects");
 
+function isVisibleByLifecycle(project, options = {}) {
+  const lifecycleStatus = project?.lifecycleStatus || "active";
+  if (options.includeAll) return true;
+  if (lifecycleStatus === "archived") return Boolean(options.includeArchived);
+  if (lifecycleStatus === "deleted") return Boolean(options.includeDeleted);
+  return true;
+}
+
 function computeCompletedDepartments(project) {
   const runs = Array.isArray(project?.audit?.runs) ? project.audit.runs : [];
   const departmentKeys = Object.keys(project?.departments || {});
@@ -63,18 +71,24 @@ export async function loadProject(id) {
   return JSON.parse(await fs.readFile(file, "utf8"));
 }
 
-export async function listProjects() {
+export async function listProjects(options = {}) {
   await fs.mkdir(storageDir, { recursive: true });
   const files = (await fs.readdir(storageDir)).filter((name) => name.endsWith(".json"));
   const projects = await Promise.all(files.map(async (name) => {
     try {
       const project = JSON.parse(await fs.readFile(path.join(storageDir, name), "utf8"));
+      if (!isVisibleByLifecycle(project, options)) {
+        return null;
+      }
       return {
         id: project.id,
         clientId: project.clientId || null,
         companyName: project.client?.companyName || "Untitled Project",
         objective: project.brief?.objective || "",
         status: project.status,
+        lifecycleStatus: project.lifecycleStatus || "active",
+        archivedAt: project.archivedAt || null,
+        deletedAt: project.deletedAt || null,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
         activeRunId: project.audit?.activeRun?.id || null,
@@ -91,4 +105,25 @@ export async function listProjects() {
   return projects
     .filter(Boolean)
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+}
+
+export async function updateProjectLifecycle(id, action) {
+  const current = await loadProject(id);
+  const now = new Date().toISOString();
+
+  const next = {
+    ...current,
+    lifecycleStatus:
+      action === "archive"
+        ? "archived"
+        : action === "delete"
+          ? "deleted"
+          : "active",
+    archivedAt: action === "archive" ? now : undefined,
+    deletedAt: action === "delete" ? now : undefined,
+    updatedAt: now,
+  };
+
+  await saveProject(next);
+  return next;
 }

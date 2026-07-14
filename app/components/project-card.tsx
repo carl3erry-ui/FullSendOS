@@ -3,12 +3,17 @@ type ProjectCardProps = {
   companyName: string;
   objective: string;
   status: string;
+  lifecycleStatus?: "active" | "archived" | "deleted";
   updatedAt?: string;
   completedDepartments: number;
   totalDepartments: number;
   runningProjectId: string | null;
+  lifecycleUpdating: boolean;
   onRun: (projectId: string) => void;
   onOpen: (projectId: string) => void;
+  onArchive: (projectId: string) => void;
+  onRestore: (projectId: string) => void;
+  onDelete: (projectId: string) => void;
   isSelected: boolean;
 };
 
@@ -17,12 +22,17 @@ export function ProjectCard({
   companyName,
   objective,
   status,
+  lifecycleStatus = "active",
   updatedAt,
   completedDepartments,
   totalDepartments,
   runningProjectId,
+  lifecycleUpdating,
   onRun,
   onOpen,
+  onArchive,
+  onRestore,
+  onDelete,
   isSelected,
 }: ProjectCardProps) {
   const statusStyle =
@@ -42,6 +52,7 @@ export function ProjectCard({
         <div>
           <h3 className="font-medium">{companyName}</h3>
           <p className="text-sm text-slate-400">{objective || "No objective provided yet"}</p>
+          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{lifecycleStatus}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${statusStyle}`}>
@@ -56,11 +67,39 @@ export function ProjectCard({
           <button
             className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => onRun(id)}
-            disabled={Boolean(runningProjectId) || status === "running"}
+            disabled={Boolean(runningProjectId) || status === "running" || lifecycleStatus !== "active"}
           >
             {runningProjectId === id ? "Running..." : status === "running" ? "Running" : "Run"}
           </button>
         </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {lifecycleStatus === "active" ? (
+          <button
+            className="rounded-lg border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-50"
+            onClick={() => onArchive(id)}
+            disabled={lifecycleUpdating}
+          >
+            Archive
+          </button>
+        ) : (
+          <button
+            className="rounded-lg border border-emerald-700 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-500 disabled:opacity-50"
+            onClick={() => onRestore(id)}
+            disabled={lifecycleUpdating}
+          >
+            Restore
+          </button>
+        )}
+        {lifecycleStatus !== "deleted" && (
+          <button
+            className="rounded-lg border border-rose-700 px-2 py-1 text-xs text-rose-200 hover:border-rose-500 disabled:opacity-50"
+            onClick={() => onDelete(id)}
+            disabled={lifecycleUpdating}
+          >
+            Soft-delete
+          </button>
+        )}
       </div>
       <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-400">
         <span>

@@ -18,6 +18,8 @@ export const ProjectStatusSchema = z.enum([
   "failed"
 ]);
 
+export const ProjectLifecycleStatusSchema = z.enum(["active", "archived", "deleted"]);
+
 export const ProjectSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   id: z.string().min(1),
@@ -25,6 +27,9 @@ export const ProjectSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   status: ProjectStatusSchema,
+  lifecycleStatus: ProjectLifecycleStatusSchema.default("active"),
+  archivedAt: z.string().optional(),
+  deletedAt: z.string().optional(),
 
   client: z.object({
     companyName: z.string().min(1),
@@ -107,6 +112,7 @@ export function createEmptyProject(input) {
     createdAt: now,
     updatedAt: now,
     status: "draft",
+    lifecycleStatus: "active",
     client: {
       companyName: input.companyName,
       contactName: input.contactName,

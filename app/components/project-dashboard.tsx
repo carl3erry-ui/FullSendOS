@@ -23,6 +23,9 @@ type ProjectSummary = {
   companyName: string;
   objective: string;
   status: string;
+  lifecycleStatus?: "active" | "archived" | "deleted";
+  archivedAt?: string | null;
+  deletedAt?: string | null;
   updatedAt?: string;
   activeRunId?: string | null;
   activeRunUpdatedAt?: string | null;
@@ -45,6 +48,9 @@ type ClientSummary = {
   industry: string;
   website: string;
   primaryContact: string;
+  lifecycleStatus?: "active" | "archived" | "deleted";
+  archivedAt?: string | null;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   engagementCount: number;
@@ -57,6 +63,9 @@ type ClientDetail = {
   industry: string;
   website: string;
   primaryContact: string;
+  lifecycleStatus?: "active" | "archived" | "deleted";
+  archivedAt?: string | null;
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   engagementCount: number;
@@ -114,14 +123,25 @@ export function ProjectDashboard() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
+  const [updatingLifecycleId, setUpdatingLifecycleId] = useState<string | null>(null);
 
   const pollControllerRef = useRef<ReturnType<typeof createPollController> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  function lifecycleQueryString() {
+    const params = new URLSearchParams();
+    if (showArchived) params.set("includeArchived", "true");
+    if (showDeleted) params.set("includeDeleted", "true");
+    return params.toString();
+  }
+
   async function loadProjects(options: { clearError?: boolean } = {}) {
     const shouldClearError = options.clearError ?? true;
     if (shouldClearError) setError(null);
-    const response = await fetch("/api/engagements", { cache: "no-store" });
+    const query = lifecycleQueryString();
+    const response = await fetch(query ? `/api/engagements?${query}` : "/api/engagements", { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok) {
@@ -141,7 +161,8 @@ export function ProjectDashboard() {
   async function loadClients(options: { clearError?: boolean } = {}) {
     const shouldClearError = options.clearError ?? true;
     if (shouldClearError) setError(null);
-    const response = await fetch("/api/clients", { cache: "no-store" });
+    const query = lifecycleQueryString();
+    const response = await fetch(query ? `/api/clients?${query}` : "/api/clients", { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok) {
@@ -162,7 +183,8 @@ export function ProjectDashboard() {
     const shouldClearError = options.clearError ?? true;
     if (shouldClearError) setError(null);
 
-    const response = await fetch(`/api/clients/${clientId}`, { cache: "no-store" });
+    const query = lifecycleQueryString();
+    const response = await fetch(query ? `/api/clients/${clientId}?${query}` : `/api/clients/${clientId}`, { cache: "no-store" });
     const data = await response.json();
 
     if (!response.ok) {
@@ -194,7 +216,7 @@ export function ProjectDashboard() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showArchived, showDeleted]);
 
   useEffect(() => {
     if (!selectedClientId) {
@@ -222,7 +244,7 @@ export function ProjectDashboard() {
     return () => {
       active = false;
     };
-  }, [selectedClientId]);
+  }, [selectedClientId, showArchived, showDeleted]);
 
   const hasRunning = useMemo(() => hasRunningProjects(projects), [projects]);
 
@@ -442,6 +464,80 @@ export function ProjectDashboard() {
     }
   }
 
+  async function handleClientLifecycle(clientId: string, action: "archive" | "restore" | "delete") {
+    if (action === "delete") {
+      const confirmed = window.confirm(
+        "Soft-delete this client? This hides the client from default views and preserves all linked engagements, Data Room files, and historical work products.",
+      );
+      if (!confirmed) return;
+    }
+
+    setUpdatingLifecycleId(`client:${clientId}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/clients/${clientId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(data, "Unable to update client lifecycle state."));
+      }
+
+      await Promise.all([
+        loadClients({ clearError: false }),
+        loadProjects({ clearError: false }),
+        selectedClientId ? loadClientDetail(selectedClientId, { clearError: false }) : Promise.resolve(null),
+      ]);
+      setNotice(`Client ${action}d successfully.`);
+    } catch (lifecycleError) {
+      const message = lifecycleError instanceof Error ? lifecycleError.message : "Unable to update client lifecycle state.";
+      setError(message);
+    } finally {
+      setUpdatingLifecycleId(null);
+    }
+  }
+
+  async function handleEngagementLifecycle(projectId: string, action: "archive" | "restore" | "delete") {
+    if (action === "delete") {
+      const confirmed = window.confirm(
+        "Soft-delete this engagement? This hides it from default lists and preserves all linked artifacts, Data Room evidence, human input history, and workflow audit data.",
+      );
+      if (!confirmed) return;
+    }
+
+    setUpdatingLifecycleId(`engagement:${projectId}`);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/engagements/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(getApiErrorMessage(data, "Unable to update engagement lifecycle state."));
+      }
+
+      await Promise.all([
+        loadProjects({ clearError: false }),
+        loadClients({ clearError: false }),
+        selectedClientId ? loadClientDetail(selectedClientId, { clearError: false }) : Promise.resolve(null),
+      ]);
+      setNotice(`Engagement ${action}d successfully.`);
+    } catch (lifecycleError) {
+      const message = lifecycleError instanceof Error ? lifecycleError.message : "Unable to update engagement lifecycle state.";
+      setError(message);
+    } finally {
+      setUpdatingLifecycleId(null);
+    }
+  }
+
   const completeCount = projects.filter((project) => project.status === "complete").length;
   const readyForReviewProjects = projects.filter(
     (project) => project.status === "needs-review" || project.status === "complete",
@@ -538,6 +634,28 @@ export function ProjectDashboard() {
                 )}
               </section>
             )}
+
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+              <div className="flex flex-wrap items-center gap-4">
+                <p className="text-sm font-medium text-slate-200">Lifecycle visibility</p>
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={showArchived}
+                    onChange={(event) => setShowArchived(event.target.checked)}
+                  />
+                  Show archived
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={showDeleted}
+                    onChange={(event) => setShowDeleted(event.target.checked)}
+                  />
+                  Show deleted
+                </label>
+              </div>
+            </section>
 
             <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -664,21 +782,55 @@ export function ProjectDashboard() {
             <div className="mt-5 space-y-2">
               {!clients.length && <p className="text-sm text-slate-400">No clients yet. Create your first client above.</p>}
               {clients.map((client) => (
-                <button
+                <div
                   key={client.id}
                   className={`w-full rounded-xl border px-3 py-3 text-left transition ${
                     selectedClientId === client.id
                       ? "border-cyan-500 bg-cyan-500/10"
                       : "border-slate-800 bg-slate-950/60 hover:border-slate-600"
                   }`}
-                  onClick={() => setSelectedClientId(client.id)}
                 >
-                  <p className="text-sm font-medium text-slate-100">{client.name}</p>
-                  <p className="text-xs text-slate-400">
-                    {client.engagementCount} engagement{client.engagementCount === 1 ? "" : "s"}
-                    {client.lastActivityAt ? ` | activity ${new Date(client.lastActivityAt).toLocaleString()}` : ""}
-                  </p>
-                </button>
+                  <div className="flex items-start justify-between gap-3">
+                    <button onClick={() => setSelectedClientId(client.id)}>
+                      <p className="text-sm font-medium text-slate-100">{client.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {client.engagementCount} engagement{client.engagementCount === 1 ? "" : "s"}
+                        {client.lastActivityAt ? ` | activity ${new Date(client.lastActivityAt).toLocaleString()}` : ""}
+                      </p>
+                    </button>
+                    <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                      {client.lifecycleStatus || "active"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(client.lifecycleStatus || "active") === "active" ? (
+                      <button
+                        className="rounded-lg border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(client.id, "archive")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Archive
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-lg border border-emerald-700 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(client.id, "restore")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Restore
+                      </button>
+                    )}
+                    {(client.lifecycleStatus || "active") !== "deleted" && (
+                      <button
+                        className="rounded-lg border border-rose-700 px-2 py-1 text-xs text-rose-200 hover:border-rose-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(client.id, "delete")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Soft-delete
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -696,7 +848,12 @@ export function ProjectDashboard() {
             {!isClientLoading && selectedClient && (
               <div className="mt-4 space-y-4">
                 <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-                  <p className="text-lg font-semibold">{selectedClient.name}</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-lg font-semibold">{selectedClient.name}</p>
+                    <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                      {selectedClient.lifecycleStatus || "active"}
+                    </span>
+                  </div>
                   <p className="mt-1 text-sm text-slate-300">
                     {selectedClient.industry || "Industry not set"}
                     {selectedClient.website ? ` | ${selectedClient.website}` : ""}
@@ -704,6 +861,34 @@ export function ProjectDashboard() {
                   <p className="mt-1 text-xs text-slate-400">
                     {selectedClient.engagementCount} engagement{selectedClient.engagementCount === 1 ? "" : "s"} linked
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(selectedClient.lifecycleStatus || "active") === "active" ? (
+                      <button
+                        className="rounded-lg border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(selectedClient.id, "archive")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Archive client
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-lg border border-emerald-700 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(selectedClient.id, "restore")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Restore client
+                      </button>
+                    )}
+                    {(selectedClient.lifecycleStatus || "active") !== "deleted" && (
+                      <button
+                        className="rounded-lg border border-rose-700 px-2 py-1 text-xs text-rose-200 hover:border-rose-500 disabled:opacity-50"
+                        onClick={() => handleClientLifecycle(selectedClient.id, "delete")}
+                        disabled={Boolean(updatingLifecycleId)}
+                      >
+                        Soft-delete client
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -715,6 +900,9 @@ export function ProjectDashboard() {
                         <div>
                           <p className="text-sm font-medium">{engagement.id}</p>
                           <p className="text-xs text-slate-400">{engagement.objective || "Objective not specified"}</p>
+                          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                            {(engagement.lifecycleStatus || "active").toUpperCase()}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
@@ -726,10 +914,36 @@ export function ProjectDashboard() {
                           <button
                             className="rounded-lg border border-cyan-600 px-2 py-1 text-xs text-cyan-200 hover:border-cyan-400 disabled:opacity-50"
                             onClick={() => handleRun(engagement.id)}
-                            disabled={Boolean(runningProjectId)}
+                            disabled={Boolean(runningProjectId) || (engagement.lifecycleStatus || "active") !== "active"}
                           >
                             {runningProjectId === engagement.id ? "Running..." : "Run"}
                           </button>
+                          {(engagement.lifecycleStatus || "active") === "active" ? (
+                            <button
+                              className="rounded-lg border border-amber-700 px-2 py-1 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-50"
+                              onClick={() => handleEngagementLifecycle(engagement.id, "archive")}
+                              disabled={Boolean(updatingLifecycleId)}
+                            >
+                              Archive
+                            </button>
+                          ) : (
+                            <button
+                              className="rounded-lg border border-emerald-700 px-2 py-1 text-xs text-emerald-200 hover:border-emerald-500 disabled:opacity-50"
+                              onClick={() => handleEngagementLifecycle(engagement.id, "restore")}
+                              disabled={Boolean(updatingLifecycleId)}
+                            >
+                              Restore
+                            </button>
+                          )}
+                          {(engagement.lifecycleStatus || "active") !== "deleted" && (
+                            <button
+                              className="rounded-lg border border-rose-700 px-2 py-1 text-xs text-rose-200 hover:border-rose-500 disabled:opacity-50"
+                              onClick={() => handleEngagementLifecycle(engagement.id, "delete")}
+                              disabled={Boolean(updatingLifecycleId)}
+                            >
+                              Soft-delete
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -834,12 +1048,17 @@ export function ProjectDashboard() {
                 companyName={project.companyName}
                 objective={project.objective}
                 status={project.status}
+                lifecycleStatus={project.lifecycleStatus || "active"}
                 updatedAt={project.updatedAt}
                 completedDepartments={project.completedDepartments}
                 totalDepartments={project.totalDepartments}
                 runningProjectId={runningProjectId}
+                lifecycleUpdating={Boolean(updatingLifecycleId)}
                 onRun={handleRun}
                 onOpen={setSelectedProjectId}
+                onArchive={(projectId) => handleEngagementLifecycle(projectId, "archive")}
+                onRestore={(projectId) => handleEngagementLifecycle(projectId, "restore")}
+                onDelete={(projectId) => handleEngagementLifecycle(projectId, "delete")}
                 isSelected={project.id === selectedProjectId}
               />
             ))}
