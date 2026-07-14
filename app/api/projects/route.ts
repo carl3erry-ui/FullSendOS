@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createEmptyProject } from "../../../src/schemas/projectSchema.js";
 import { listProjects, saveProject } from "../../../src/storage/projectStore.js";
 import { loadClient } from "../../../src/storage/clientStore.js";
+import { provisionSmartIntakeForProject } from "@/services/human-input-service";
 
 type FieldValidationError = {
   path: string;
@@ -35,6 +36,23 @@ export async function POST(request: Request) {
 
     const project = createEmptyProject(payload);
     await saveProject(project);
+
+    const smartIntake = await provisionSmartIntakeForProject({
+      clientId: project.clientId,
+      engagementId: project.id,
+      companyName: project.client.companyName,
+      website: project.client.website,
+      objective: project.brief.objective,
+      requestedBy: payload?.requestedBy || payload?.clientId || "system",
+    });
+
+    if (smartIntake.requests.length > 0) {
+      project.audit.warnings.push(
+        ...smartIntake.requests.map((request) => request.prompt),
+      );
+      await saveProject(project);
+    }
+
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "issues" in error && Array.isArray(error.issues)) {

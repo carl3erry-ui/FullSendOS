@@ -6,6 +6,7 @@ import { ProjectCard } from "./project-card";
 import { ProjectForm, type ProjectFormState } from "./project-form";
 import { ProjectWorkspace } from "./project-workspace";
 import { AIWorkforceSection } from "./ai-workforce-section";
+import { HumanInputCenter } from "./human-input-center";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
 import {
   createPollController,
@@ -95,7 +96,7 @@ const executivePipeline = [
 ];
 
 export function ProjectDashboard() {
-  const [view, setView] = useState<"engagements" | "ai-workforce">("engagements");
+  const [view, setView] = useState<"engagements" | "ai-workforce" | "human-input">("engagements");
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [clients, setClients] = useState<ClientSummary[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
@@ -499,10 +500,23 @@ export function ProjectDashboard() {
           >
             AI Workforce
           </button>
+          <button
+            onClick={() => setView("human-input")}
+            className={`px-4 py-2 text-sm font-medium ${
+              view === "human-input"
+                ? "border-b-2 border-cyan-500 text-cyan-300"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Human Input
+          </button>
         </div>
 
         {/* AI Workforce View */}
         {view === "ai-workforce" && <AIWorkforceSection />}
+
+        {/* Human Input View */}
+        {view === "human-input" && <HumanInputCenter />}
 
         {/* Engagements View */}
         {view === "engagements" && (

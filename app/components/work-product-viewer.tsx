@@ -10,6 +10,7 @@ import {
   WORKFLOW_DEPARTMENTS,
 } from "./work-product-model";
 import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
+import { EngagementHumanInputPanel } from "./engagement-human-input-panel";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -22,7 +23,7 @@ type WorkProductViewerProps = {
   onRun: (projectId: string) => void;
 };
 
-type TopLevelSection = "executive" | "analysis" | "department" | "evidence" | "agent-tasks";
+type TopLevelSection = "executive" | "analysis" | "department" | "evidence" | "agent-tasks" | "human-input";
 
 const INTERNAL_FIELD_PATTERN = /(debug|diagnostic|raw|provider|prompt|token|secret|api.?key|stack)/i;
 
@@ -264,6 +265,7 @@ function collectClaims(detail: EngagementDetail): Array<{ department: string; st
 
 function getTopLevelSection(section: string): TopLevelSection {
   if (section === "agent-tasks") return "agent-tasks";
+  if (section === "human-input") return "human-input";
   if (section.startsWith("department:")) return "department";
   if (section === "analysis") return "analysis";
   if (section === "evidence") return "evidence";
@@ -697,6 +699,13 @@ export function WorkProductViewer({
           >
             Agent Tasks
           </button>
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "human-input" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("human-input")}
+            type="button"
+          >
+            Human Input
+          </button>
         </div>
 
         {topSection === "department" && (
@@ -729,6 +738,10 @@ export function WorkProductViewer({
             engagementName={project.companyName}
             engagementObjective={project.objective}
           />
+        )}
+
+        {!isLoading && !loadError && detail && topSection === "human-input" && (
+          <EngagementHumanInputPanel engagementId={project.id} />
         )}
 
         {!isLoading &&

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { beginWorkflowRun, getActiveRunSnapshot, isActiveRun, markRunStaleAsFailed } from "../../../../../src/orchestrator/runLifecycle.js";
 import { runExistingProject } from "../../../../../src/orchestrator/orchestrator.js";
 import { loadProject } from "../../../../../src/storage/projectStore.js";
+import { listHumanInputRequests } from "@/services/human-input-service";
 
 type FieldValidationError = {
   path: string;
@@ -47,6 +48,28 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const project = await loadProject(id);
+
+    const blockingRequests = await listHumanInputRequests({
+      engagementId: project.id,
+      blockingOnly: true,
+    });
+
+    if (blockingRequests.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Human input is required before this workflow can continue.",
+          blockingRequests: blockingRequests.slice(0, 8).map((request) => ({
+            id: request.id,
+            title: request.title,
+            prompt: request.prompt,
+            relatedField: request.relatedField || null,
+            requiredToContinue: request.requiredToContinue,
+            status: request.status,
+          })),
+        },
+        { status: 409 },
+      );
+    }
 
     await markRunStaleAsFailed(project);
 
