@@ -12,6 +12,7 @@ import {
 import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
 import { EngagementHumanInputPanel } from "./engagement-human-input-panel";
 import { DataRoomPanel } from "./data-room-panel";
+import { DeliverableExportPanel } from "./deliverable-export-panel";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -24,7 +25,15 @@ type WorkProductViewerProps = {
   onRun: (projectId: string) => void;
 };
 
-type TopLevelSection = "executive" | "analysis" | "department" | "evidence" | "agent-tasks" | "human-input" | "data-room";
+type TopLevelSection =
+  | "executive"
+  | "analysis"
+  | "department"
+  | "evidence"
+  | "agent-tasks"
+  | "human-input"
+  | "data-room"
+  | "exports";
 
 const INTERNAL_FIELD_PATTERN = /(debug|diagnostic|raw|provider|prompt|token|secret|api.?key|stack)/i;
 
@@ -421,6 +430,7 @@ function collectClaims(detail: EngagementDetail): Array<{ department: string; st
 }
 
 function getTopLevelSection(section: string): TopLevelSection {
+  if (section === "exports") return "exports";
   if (section === "agent-tasks") return "agent-tasks";
   if (section === "human-input") return "human-input";
   if (section === "data-room") return "data-room";
@@ -921,6 +931,13 @@ export function WorkProductViewer({
           >
             Data Room
           </button>
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "exports" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("exports")}
+            type="button"
+          >
+            Export Deliverables
+          </button>
         </div>
 
         {topSection === "department" && (
@@ -961,6 +978,10 @@ export function WorkProductViewer({
 
         {!isLoading && !loadError && detail && topSection === "data-room" && (
           <DataRoomPanel ownerId={project.id} scope="engagement" />
+        )}
+
+        {!isLoading && !loadError && detail && topSection === "exports" && (
+          <DeliverableExportPanel engagementId={project.id} />
         )}
 
         {!isLoading &&
