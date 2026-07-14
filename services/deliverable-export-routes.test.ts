@@ -111,6 +111,43 @@ test("project export route supports html, text, and json formats", async () => {
   }
 });
 
+test("project export route supports pdf format and keeps detail response safe", async () => {
+  const project = makeProject(true);
+  await saveProject(project);
+
+  try {
+    const createResponse = await postProjectExports(
+      new Request("http://127.0.0.1/api/projects/id/exports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "pdf", templateId: "client-ready" }),
+      }),
+      { params: Promise.resolve({ id: project.id }) },
+    );
+
+    const created = await createResponse.json();
+    assert.equal(createResponse.status, 201);
+    assert.equal(created.format, "pdf");
+    assert.equal(created.contentType, "application/pdf");
+    assert.equal(created.contentEncoding, "base64");
+    assert.equal(created.isBinary, true);
+    assert.match(created.filename, /\.pdf$/);
+    assert.ok(typeof created.content === "string");
+
+    const detailResponse = await getProjectExportDetail(
+      new Request("http://127.0.0.1/api/projects/id/exports/exportId"),
+      { params: Promise.resolve({ id: project.id, exportId: created.id }) },
+    );
+    const detail = await detailResponse.json();
+    assert.equal(detailResponse.status, 200);
+    assert.equal(detail.format, "pdf");
+    assert.equal(detail.contentPreviewUnavailable, true);
+    assert.equal(detail.content, "");
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
 test("template API returns built-in templates", async () => {
   const response = await getDeliverableTemplates();
   const body = await response.json();
@@ -213,6 +250,7 @@ test("download route returns correct content types for all formats", async () =>
       { format: "html", expected: /text\/html/i },
       { format: "text", expected: /text\/plain/i },
       { format: "json", expected: /application\/json/i },
+      { format: "pdf", expected: /application\/pdf/i },
     ] as const;
 
     for (const item of formats) {
@@ -274,6 +312,41 @@ test("download route fails safely for missing export and wrong project", async (
   }
 });
 
+test("pdf download returns binary data, safe attachment name, and no path exposure", async () => {
+  const project = makeProject(true);
+  await saveProject(project);
+
+  try {
+    const createResponse = await postProjectExports(
+      new Request("http://127.0.0.1/api/projects/id/exports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "pdf", templateId: "client-ready" }),
+      }),
+      { params: Promise.resolve({ id: project.id }) },
+    );
+    const created = await createResponse.json();
+
+    const downloadResponse = await getProjectExportDownload(
+      new Request("http://127.0.0.1/api/projects/id/exports/exportId/download"),
+      { params: Promise.resolve({ id: project.id, exportId: created.id }) },
+    );
+
+    const contentType = downloadResponse.headers.get("Content-Type") || "";
+    const contentDisposition = downloadResponse.headers.get("Content-Disposition") || "";
+    const bytes = Buffer.from(await downloadResponse.arrayBuffer());
+
+    assert.equal(downloadResponse.status, 200);
+    assert.match(contentType, /application\/pdf/i);
+    assert.match(contentDisposition, /attachment;/i);
+    assert.match(contentDisposition, /\.pdf/i);
+    assert.doesNotMatch(contentDisposition, /\.\.|\//);
+    assert.equal(bytes.subarray(0, 4).toString("utf8"), "%PDF");
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
 test("project export route fails safely when work product is missing", async () => {
   const project = makeProject(false);
   await saveProject(project);
@@ -296,7 +369,7 @@ test("project export route fails safely when work product is missing", async () 
   }
 });
 
-test("project export route validates format safely", async () => {
+test("project export route validates unsupported format safely", async () => {
   const project = makeProject(true);
   await saveProject(project);
 
@@ -305,7 +378,7 @@ test("project export route validates format safely", async () => {
       new Request("http://127.0.0.1/api/projects/id/exports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ format: "pdf" }),
+        body: JSON.stringify({ format: "docx" }),
       }),
       { params: Promise.resolve({ id: project.id }) },
     );
@@ -356,6 +429,33 @@ test("engagement alias export routes mirror project export behavior", async () =
     );
     assert.equal(downloadResponse.status, 200);
     assert.match(downloadResponse.headers.get("Content-Disposition") || "", /attachment;/i);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("engagement alias export download supports pdf", async () => {
+  const project = makeProject(true);
+  await saveProject(project);
+
+  try {
+    const createResponse = await postEngagementExports(
+      new Request("http://127.0.0.1/api/engagements/id/exports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ format: "pdf" }),
+      }),
+      { params: Promise.resolve({ id: project.id }) },
+    );
+    const created = await createResponse.json();
+
+    const downloadResponse = await getEngagementExportDownload(
+      new Request("http://127.0.0.1/api/engagements/id/exports/exportId/download"),
+      { params: Promise.resolve({ id: project.id, exportId: created.id }) },
+    );
+
+    assert.equal(downloadResponse.status, 200);
+    assert.match(downloadResponse.headers.get("Content-Type") || "", /application\/pdf/i);
   } finally {
     await cleanupProject(project.id);
   }

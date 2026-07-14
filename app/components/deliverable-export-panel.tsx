@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type ExportFormat = "markdown" | "html" | "text" | "json";
+type ExportFormat = "markdown" | "html" | "text" | "json" | "pdf";
 
 type DeliverableTemplateSummary = {
   id: string;
@@ -27,6 +27,7 @@ type ExportSummary = {
 type ExportDetail = ExportSummary & {
   title: string;
   content: string;
+  contentPreviewUnavailable?: boolean;
   exportMetadata: {
     generatedBy: string;
     generatedAt: string;
@@ -46,7 +47,7 @@ type DeliverableExportPanelProps = {
   initialExports?: ExportSummary[];
 };
 
-const FORMATS: ExportFormat[] = ["markdown", "html", "text", "json"];
+const FORMATS: ExportFormat[] = ["markdown", "html", "text", "json", "pdf"];
 
 function bytesLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -183,6 +184,9 @@ export function DeliverableExportPanel({
         <p className="mt-1 text-sm text-slate-400">
           Generate a safe, branded deliverable from the executive report, summary, deck outline, sources, assumptions, open questions, and confirmations.
         </p>
+        <p className="mt-1 text-xs text-slate-500">
+          PDF exports generate a downloadable client-ready file using the selected template.
+        </p>
       </div>
 
       {error && (
@@ -272,8 +276,9 @@ export function DeliverableExportPanel({
                 type="button"
                 className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200"
                 onClick={() => void openExport(record.id)}
+                disabled={record.format === "pdf"}
               >
-                Open
+                {record.format === "pdf" ? "Preview unavailable" : "Open"}
               </button>
               <button
                 type="button"
@@ -296,6 +301,7 @@ export function DeliverableExportPanel({
                 type="button"
                 className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-200"
                 onClick={() => void copyContent()}
+                disabled={activeExport.format === "pdf" || !activeExport.content}
               >
                 Copy content
               </button>
@@ -311,9 +317,15 @@ export function DeliverableExportPanel({
           <p className="text-xs text-slate-400">
             Template: {activeExport.templateName} | File: {activeExport.filename} | Generated: {new Date(activeExport.generatedAt).toLocaleString()} | Sections: {activeExport.exportMetadata.includedSections.length}
           </p>
-          <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-200">
-            {activeExport.content}
-          </pre>
+          {activeExport.format === "pdf" || activeExport.contentPreviewUnavailable ? (
+            <div className="rounded border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-300">
+              PDF preview is not shown inline. Use Download to open the client-ready file.
+            </div>
+          ) : (
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-950/70 p-3 text-xs text-slate-200">
+              {activeExport.content}
+            </pre>
+          )}
         </article>
       )}
     </section>

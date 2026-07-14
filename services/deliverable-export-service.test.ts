@@ -95,8 +95,8 @@ function makeDetail(overrides: Partial<EngagementDetail> = {}): EngagementDetail
   };
 }
 
-test("markdown export includes core deliverable sections", () => {
-  const result = buildDeliverableExport({
+test("markdown export includes core deliverable sections", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-1",
     engagementTitle: "Hardware Brewery",
     clientName: "Hardware Brewery",
@@ -113,8 +113,8 @@ test("markdown export includes core deliverable sections", () => {
   assert.match(result.content, /## Confidence Summary/);
 });
 
-test("html export uses semantic safe markup", () => {
-  const result = buildDeliverableExport({
+test("html export uses semantic safe markup", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-1",
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
@@ -128,8 +128,8 @@ test("html export uses semantic safe markup", () => {
   assert.doesNotMatch(result.content, /<script/i);
 });
 
-test("text export includes all major sections", () => {
-  const result = buildDeliverableExport({
+test("text export includes all major sections", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-1",
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
@@ -144,8 +144,8 @@ test("text export includes all major sections", () => {
   assert.match(result.content, /OPEN QUESTIONS/);
 });
 
-test("json export package is structured and safe", () => {
-  const result = buildDeliverableExport({
+test("json export package is structured and safe", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-1",
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
@@ -159,8 +159,8 @@ test("json export package is structured and safe", () => {
   assert.ok(parsed.sections?.some((section) => section.title === "Executive Report"));
 });
 
-test("export handles missing optional sections gracefully", () => {
-  const result = buildDeliverableExport({
+test("export handles missing optional sections gracefully", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-2",
     engagementTitle: "Sparse Engagement",
     detail: makeDetail({
@@ -200,7 +200,7 @@ test("export handles missing optional sections gracefully", () => {
   assert.match(result.content, /No deck outline recorded\./);
 });
 
-test("export safety excludes unsafe fields", () => {
+test("export safety excludes unsafe fields", async () => {
   const unsafeDetail = makeDetail({
     deliverables: {
       executiveReport: "storagePath should not appear",
@@ -240,7 +240,7 @@ test("export safety excludes unsafe fields", () => {
     },
   });
 
-  const result = buildDeliverableExport({
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-3",
     engagementTitle: "Unsafe Check",
     detail: unsafeDetail,
@@ -255,8 +255,8 @@ test("export safety excludes unsafe fields", () => {
   assert.equal(result.safetySummary.providerPayloadExcluded, true);
 });
 
-test("template metadata is stored on export record", () => {
-  const result = buildDeliverableExport({
+test("template metadata is stored on export record", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-TEMPLATE",
     engagementTitle: "Template Co",
     detail: makeDetail(),
@@ -269,8 +269,8 @@ test("template metadata is stored on export record", () => {
   assert.equal(result.templateVersion, "1.0.0");
 });
 
-test("client-ready template renders client-facing section set", () => {
-  const result = buildDeliverableExport({
+test("client-ready template renders client-facing section set", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-CLIENT",
     engagementTitle: "Client Co",
     detail: makeDetail(),
@@ -285,8 +285,8 @@ test("client-ready template renders client-facing section set", () => {
   assert.doesNotMatch(result.content, /## Assumptions/);
 });
 
-test("investor-brief template renders investor section set", () => {
-  const result = buildDeliverableExport({
+test("investor-brief template renders investor section set", async () => {
+  const result = await buildDeliverableExport({
     engagementId: "EXPORT-ENG-INVESTOR",
     engagementTitle: "Investor Co",
     detail: makeDetail(),
@@ -320,4 +320,73 @@ test("filename length is safely bounded", () => {
 
   assert.ok(filename.length <= 100);
   assert.match(filename, /\.json$/);
+});
+
+test("pdf export stores base64 content with application/pdf metadata", async () => {
+  const result = await buildDeliverableExport({
+    engagementId: "EXPORT-ENG-PDF",
+    engagementTitle: "Hardware Brewery",
+    clientName: "Hardware Brewery",
+    detail: makeDetail(),
+    format: "pdf",
+    template: requireTemplate("client-ready"),
+  });
+
+  assert.equal(result.format, "pdf");
+  assert.equal(result.contentType, "application/pdf");
+  assert.equal(result.contentEncoding, "base64");
+  assert.equal(result.isBinary, true);
+  assert.match(result.filename, /\.pdf$/);
+  assert.equal(result.templateId, "client-ready");
+  assert.equal(result.templateName, "Client Ready");
+  assert.equal(result.templateVersion, "1.0.0");
+  assert.ok(result.byteSize > 0);
+  assert.equal(result.exportMetadata.binaryContent?.encoding, "base64");
+  assert.equal(result.exportMetadata.binaryContent?.mediaType, "application/pdf");
+  assert.equal(result.exportMetadata.binaryContent?.inlineContentExcluded, true);
+});
+
+test("pdf export decodes to bytes with %PDF signature and excludes unsafe text", async () => {
+  const result = await buildDeliverableExport({
+    engagementId: "EXPORT-ENG-PDF-SAFE",
+    engagementTitle: "Safety Check",
+    detail: makeDetail({
+      deliverables: {
+        executiveReport: "storagePath and apiKey should be excluded",
+        onePageSummary: "rawProviderResponse should be excluded",
+        deckOutline: [],
+        evidenceReferences: [],
+        evidenceSummary: {
+          evidenceUsed: [],
+          assumptions: [],
+          openQuestions: [],
+          humanConfirmations: [],
+          sourceCoverage: {
+            dataRoomDocuments: 0,
+            humanConfirmations: 0,
+            clientProvidedAnchors: 0,
+            agentEvidence: 0,
+            openQuestions: 0,
+          },
+          confidenceSummary: {
+            level: "pending",
+            score: null,
+            rationale: "No evidence",
+          },
+          missingEvidence: [],
+          recommendedNextActions: [],
+        },
+      },
+    }),
+    format: "pdf",
+    template: requireTemplate("executive-standard"),
+  });
+
+  const decoded = Buffer.from(result.content, "base64");
+  const header = decoded.subarray(0, 4).toString("utf8");
+
+  assert.ok(decoded.byteLength > 0);
+  assert.equal(header, "%PDF");
+  assert.equal(result.safetySummary.providerPayloadExcluded, true);
+  assert.equal(result.safetySummary.storagePathExcluded, true);
 });

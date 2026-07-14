@@ -29,7 +29,21 @@ export async function GET(
       return Response.json({ error: "Export does not belong to the requested engagement." }, { status: 404 });
     }
 
-    const filename = safeAttachmentFilename(record.filename, `deliverable-${record.format}.txt`);
+    const fallbackExt = record.format === "pdf" ? "pdf" : "txt";
+    const filename = safeAttachmentFilename(record.filename, `deliverable-${record.format}.${fallbackExt}`);
+
+    if (record.format === "pdf") {
+      const binary = Buffer.from(record.content, "base64");
+
+      return new Response(binary, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename=\"${filename}\"`,
+          "Cache-Control": "no-store",
+        },
+      });
+    }
 
     return new Response(record.content, {
       status: 200,
