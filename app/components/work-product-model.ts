@@ -49,7 +49,74 @@ export type EngagementDetail = {
       purpose?: string;
       keyPoints?: string[];
       visualSuggestion?: string;
+      evidenceNote?: string;
     }>;
+    evidenceReferences?: Array<{
+      id: string;
+      sourceType: string;
+      citationLabel: string;
+      title: string;
+      description: string;
+      fileId?: string;
+      documentId?: string;
+      agentTaskId?: string;
+      humanInputRequestId?: string;
+      departmentId?: string;
+      excerptPreview?: string;
+      confidence?: number;
+      verifiedStatus: string;
+      createdAt: string;
+    }>;
+    evidenceSummary?: {
+      evidenceUsed: Array<{
+        id: string;
+        sourceType: string;
+        citationLabel: string;
+        title: string;
+        description: string;
+        excerptPreview?: string;
+        confidence?: number;
+        verifiedStatus: string;
+      }>;
+      assumptions: Array<{
+        id: string;
+        statement: string;
+        departmentId?: string;
+        confidence?: number;
+      }>;
+      openQuestions: Array<{
+        id: string;
+        question: string;
+        whyItMatters?: string;
+        recommendedMethod?: string;
+        relatedField?: string;
+        humanInputRequestId?: string;
+        departmentId?: string;
+        verifiedStatus: string;
+      }>;
+      humanConfirmations: Array<{
+        id: string;
+        citationLabel: string;
+        title: string;
+        description: string;
+        confidence?: number;
+        verifiedStatus: string;
+      }>;
+      sourceCoverage: {
+        dataRoomDocuments: number;
+        humanConfirmations: number;
+        clientProvidedAnchors: number;
+        agentEvidence: number;
+        openQuestions: number;
+      };
+      confidenceSummary: {
+        level: "high" | "medium" | "low" | "pending";
+        score: number | null;
+        rationale: string;
+      };
+      missingEvidence: string[];
+      recommendedNextActions: string[];
+    };
   };
   audit?: {
     activeRun?: {

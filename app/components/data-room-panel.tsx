@@ -34,7 +34,8 @@ interface DataRoomFolder {
 }
 
 interface DataRoomPanelProps {
-  engagementId: string;
+  ownerId: string;
+  scope: "client" | "engagement";
   initialFiles?: DataRoomFile[];
   initialFolders?: DataRoomFolder[];
   disableAutoLoad?: boolean;
@@ -42,7 +43,8 @@ interface DataRoomPanelProps {
 }
 
 export function DataRoomPanel({
-  engagementId,
+  ownerId,
+  scope,
   initialFiles = [],
   initialFolders = [],
   disableAutoLoad = false,
@@ -60,10 +62,17 @@ export function DataRoomPanel({
     Record<string, DataRoomDocumentSafe>
   >({});
 
+  const basePath = scope === "client" ? `/api/clients/${ownerId}/data-room` : `/api/engagements/${ownerId}/data-room`;
+  const filesPath = scope === "client" ? `${basePath}/files` : basePath;
+  const filePath = (fileId: string) => (scope === "client" ? `${basePath}/files/${fileId}` : `${basePath}/${fileId}`);
+  const fileProcessPath = (fileId: string) =>
+    scope === "client" ? `${basePath}/files/${fileId}/process` : `${basePath}/${fileId}/process`;
+  const panelTitle = scope === "client" ? "Client Data Room" : "Engagement Data Room";
+
   useEffect(() => {
     if (disableAutoLoad) return;
     loadFoldersAndFiles();
-  }, [engagementId, disableAutoLoad]);
+  }, [ownerId, scope, disableAutoLoad]);
 
   useEffect(() => {
     if (disableAutoLoad) return;
@@ -76,7 +85,7 @@ export function DataRoomPanel({
 
   const loadDocuments = async () => {
     try {
-      const response = await fetch(`/api/engagements/${engagementId}/data-room/documents`);
+      const response = await fetch(`${basePath}/documents`);
       if (!response.ok) return;
 
       const data = await response.json();
@@ -93,7 +102,7 @@ export function DataRoomPanel({
 
   const loadFolders = async () => {
     try {
-      const response = await fetch(`/api/engagements/${engagementId}/data-room/folders`);
+      const response = await fetch(`${basePath}/folders`);
       if (!response.ok) throw new Error("Failed to load folders");
       const data = await response.json();
       const sorted = Array.isArray(data.folders)
@@ -112,7 +121,7 @@ export function DataRoomPanel({
       if (folderId) params.set("folderId", folderId);
       const query = params.toString();
       const response = await fetch(
-        `/api/engagements/${engagementId}/data-room${query ? `?${query}` : ""}`
+        `${filesPath}${query ? `?${query}` : ""}`
       );
       if (!response.ok) throw new Error("Failed to load files");
       const data = await response.json();
@@ -132,7 +141,7 @@ export function DataRoomPanel({
     try {
       const formData = new FormData(e.currentTarget);
       const response = await fetch(
-        `/api/engagements/${engagementId}/data-room`,
+        filesPath,
         {
           method: "POST",
           body: formData
@@ -159,7 +168,7 @@ export function DataRoomPanel({
 
     try {
       const response = await fetch(
-        `/api/engagements/${engagementId}/data-room/${fileId}`,
+        filePath(fileId),
         { method: "DELETE" }
       );
 
@@ -186,7 +195,7 @@ export function DataRoomPanel({
       setError(null);
 
       const response = await fetch(
-        `/api/engagements/${engagementId}/data-room/${file.id}/process`,
+        fileProcessPath(file.id),
         { method: "POST" }
       );
 
@@ -223,7 +232,7 @@ export function DataRoomPanel({
     <div className="data-room-panel">
       <div className="data-room-header">
         <div>
-          <h3>Client Data Room</h3>
+          <h3>{panelTitle}</h3>
           <p className="text-sm text-gray-600">
             {files.length} file{files.length !== 1 ? "s" : ""}
           </p>
@@ -318,7 +327,10 @@ export function DataRoomPanel({
         <div className="loading">Loading files...</div>
       ) : files.length === 0 ? (
         <div className="empty-state">
-          <p>No files uploaded yet</p>
+          <p>No files have been added to this data room yet.</p>
+          <p className="mt-2 text-sm text-gray-600">
+            Upload financials, brand assets, legal documents, real estate files, or other source materials.
+          </p>
         </div>
       ) : (
         <>
@@ -386,11 +398,6 @@ export function DataRoomPanel({
                         <div className="processing-summary">
                           {documentsByFileId[file.id].summary}
                         </div>
-                      )}
-                      {documentsByFileId[file.id].textPreview && (
-                        <pre className="processing-preview">
-                          {documentsByFileId[file.id].textPreview}
-                        </pre>
                       )}
                       {documentsByFileId[file.id].extractionWarnings.length > 0 && (
                         <div className="processing-warnings">
@@ -716,20 +723,6 @@ export function DataRoomPanel({
           font-size: 0.79rem;
           color: #134e4a;
           margin-bottom: 0.35rem;
-        }
-
-        .processing-preview {
-          white-space: pre-wrap;
-          font-size: 0.72rem;
-          line-height: 1.35;
-          color: #134e4a;
-          background: #ffffff;
-          border: 1px solid #ccfbf1;
-          border-radius: 4px;
-          padding: 0.45rem;
-          margin: 0 0 0.35rem 0;
-          max-height: 140px;
-          overflow: auto;
         }
 
         .processing-warnings {

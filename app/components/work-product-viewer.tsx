@@ -11,6 +11,7 @@ import {
 } from "./work-product-model";
 import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
 import { EngagementHumanInputPanel } from "./engagement-human-input-panel";
+import { DataRoomPanel } from "./data-room-panel";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -23,7 +24,7 @@ type WorkProductViewerProps = {
   onRun: (projectId: string) => void;
 };
 
-type TopLevelSection = "executive" | "analysis" | "department" | "evidence" | "agent-tasks" | "human-input";
+type TopLevelSection = "executive" | "analysis" | "department" | "evidence" | "agent-tasks" | "human-input" | "data-room";
 
 const INTERNAL_FIELD_PATTERN = /(debug|diagnostic|raw|provider|prompt|token|secret|api.?key|stack)/i;
 
@@ -184,7 +185,14 @@ function DeckOutline({ deck }: { deck?: unknown }) {
       <div className="grid gap-3 md:grid-cols-2">
         {deck.map((slide, index) => {
           if (!slide || typeof slide !== "object") return null;
-          const item = slide as { slide?: number; title?: string; purpose?: string; keyPoints?: string[]; visualSuggestion?: string };
+          const item = slide as {
+            slide?: number;
+            title?: string;
+            purpose?: string;
+            keyPoints?: string[];
+            visualSuggestion?: string;
+            evidenceNote?: string;
+          };
           return (
             <article className="rounded-xl border border-slate-800 bg-slate-950/60 p-4" key={`slide-${index}`}>
               <p className="text-xs uppercase tracking-[0.14em] text-slate-400">Slide {item.slide ?? index + 1}</p>
@@ -207,10 +215,158 @@ function DeckOutline({ deck }: { deck?: unknown }) {
                   <p className="mt-1 text-sm text-slate-300">{item.visualSuggestion}</p>
                 </>
               )}
+              {item.evidenceNote && (
+                <>
+                  <p className="mt-3 text-xs uppercase tracking-[0.14em] text-emerald-300">Evidence Note</p>
+                  <p className="mt-1 text-sm text-slate-300">{item.evidenceNote}</p>
+                </>
+              )}
             </article>
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function EvidenceReferenceList({
+  title,
+  references,
+  emptyMessage,
+}: {
+  title: string;
+  references?: Array<{
+    id: string;
+    citationLabel: string;
+    title: string;
+    description: string;
+    excerptPreview?: string;
+    confidence?: number;
+    verifiedStatus: string;
+    sourceType?: string;
+  }>;
+  emptyMessage: string;
+}) {
+  if (!Array.isArray(references) || references.length === 0) {
+    return (
+      <section className="space-y-2">
+        <SectionHeading title={title} />
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-3 text-sm text-slate-400">{emptyMessage}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-2">
+      <SectionHeading title={title} />
+      <div className="space-y-3">
+        {references.map((reference) => (
+          <article className="rounded-lg border border-slate-800 bg-slate-900/40 p-3" key={reference.id}>
+            <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.12em] text-slate-400">
+              <span>{reference.citationLabel}</span>
+              <span>{reference.verifiedStatus.replace(/_/g, " ")}</span>
+              {reference.sourceType && <span>{reference.sourceType.replace(/_/g, " ")}</span>}
+            </div>
+            <p className="mt-2 text-sm font-medium text-slate-100">{reference.title}</p>
+            <p className="mt-1 text-sm text-slate-300">{reference.description}</p>
+            {reference.excerptPreview && <p className="mt-2 text-sm text-slate-400">Excerpt: {reference.excerptPreview}</p>}
+            {typeof reference.confidence === "number" && (
+              <p className="mt-2 text-xs text-slate-400">Confidence: {Math.round(reference.confidence * 100)}%</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AssumptionsPanel({ assumptions }: { assumptions?: Array<{ id: string; statement: string; departmentId?: string; confidence?: number }> }) {
+  if (!Array.isArray(assumptions) || assumptions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="space-y-2">
+      <SectionHeading title="Assumptions" subtitle="Separate these from verified facts before acting on recommendations." />
+      <div className="space-y-3">
+        {assumptions.map((assumption) => (
+          <article className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3" key={assumption.id}>
+            <p className="text-sm text-amber-100">{assumption.statement}</p>
+            <p className="mt-2 text-xs text-amber-200/90">
+              {assumption.departmentId ? `Department: ${assumption.departmentId}` : "Cross-functional assumption"}
+              {typeof assumption.confidence === "number" ? ` | ${Math.round(assumption.confidence * 100)}% confidence` : ""}
+            </p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function OpenQuestionsPanel({ questions }: { questions?: Array<{ id: string; question: string; whyItMatters?: string; recommendedMethod?: string; relatedField?: string; humanInputRequestId?: string; verifiedStatus: string }> }) {
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="space-y-2">
+      <SectionHeading title="Open Questions" subtitle="Unresolved items that still constrain confidence or decision quality." />
+      <div className="space-y-3">
+        {questions.map((question) => (
+          <article className="rounded-lg border border-amber-900/70 bg-amber-950/30 p-3" key={question.id}>
+            <p className="text-sm text-amber-100">{question.question}</p>
+            {question.relatedField && <p className="mt-1 text-xs text-amber-200/90">Field: {question.relatedField}</p>}
+            {question.humanInputRequestId && (
+              <p className="mt-1 text-xs text-amber-200/90">Human Input Request: {question.humanInputRequestId}</p>
+            )}
+            {question.whyItMatters && <p className="mt-2 text-sm text-amber-200/90">Why it matters: {question.whyItMatters}</p>}
+            {question.recommendedMethod && <p className="mt-2 text-sm text-amber-200/90">Recommended method: {question.recommendedMethod}</p>}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ConfidenceSummaryPanel({
+  summary,
+  missingEvidence,
+  recommendedNextActions,
+}: {
+  summary?: { level: "high" | "medium" | "low" | "pending"; score: number | null; rationale: string };
+  missingEvidence?: string[];
+  recommendedNextActions?: string[];
+}) {
+  if (!summary) return null;
+
+  return (
+    <section className="space-y-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <SectionHeading title="Confidence Summary" />
+      <p className="text-sm text-slate-100">
+        {summary.level.toUpperCase()}
+        {typeof summary.score === "number" ? ` (${Math.round(summary.score * 100)}%)` : ""}
+      </p>
+      <p className="text-sm text-slate-300">{summary.rationale}</p>
+      {Array.isArray(missingEvidence) && missingEvidence.length > 0 && (
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-amber-300">Missing Evidence</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-300">
+            {missingEvidence.map((item, index) => (
+              <li key={`missing-evidence-${index}`}>{item}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {Array.isArray(recommendedNextActions) && recommendedNextActions.length > 0 && (
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-cyan-300">Recommended Next Actions</p>
+          <ol className="mt-2 space-y-1 text-sm text-slate-300">
+            {recommendedNextActions.map((item, index) => (
+              <li key={`recommended-next-${index}`}>{index + 1}. {item}</li>
+            ))}
+          </ol>
+        </div>
+      )}
     </section>
   );
 }
@@ -266,6 +422,7 @@ function collectClaims(detail: EngagementDetail): Array<{ department: string; st
 function getTopLevelSection(section: string): TopLevelSection {
   if (section === "agent-tasks") return "agent-tasks";
   if (section === "human-input") return "human-input";
+  if (section === "data-room") return "data-room";
   if (section.startsWith("department:")) return "department";
   if (section === "analysis") return "analysis";
   if (section === "evidence") return "evidence";
@@ -394,6 +551,8 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
   const onePageSummary = detail.deliverables?.onePageSummary;
   const deckOutline = detail.deliverables?.deckOutline;
   const publishing = detail.departments?.publishing as Record<string, unknown> | null | undefined;
+  const evidenceSummary = detail.deliverables?.evidenceSummary;
+  const evidenceReferences = detail.deliverables?.evidenceReferences || [];
   const recommendations = Array.isArray(publishing?.recommendations) ? publishing.recommendations : [];
   const firstRecommendation = recommendations.find((item) => item && typeof item === "object") as
     | { recommendation?: string; rationale?: string }
@@ -486,6 +645,25 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
 
       <DeckOutline deck={deckOutline} />
 
+      <EvidenceReferenceList
+        title="Sources Used"
+        references={evidenceSummary?.evidenceUsed || evidenceReferences}
+        emptyMessage="No evidence references are attached to this work product yet."
+      />
+
+      <AssumptionsPanel assumptions={evidenceSummary?.assumptions} />
+      <OpenQuestionsPanel questions={evidenceSummary?.openQuestions} />
+      <EvidenceReferenceList
+        title="Human Confirmations"
+        references={evidenceSummary?.humanConfirmations}
+        emptyMessage="No human confirmations have been recorded yet."
+      />
+      <ConfidenceSummaryPanel
+        summary={evidenceSummary?.confidenceSummary}
+        missingEvidence={evidenceSummary?.missingEvidence}
+        recommendedNextActions={evidenceSummary?.recommendedNextActions}
+      />
+
       {recommendations.length > 0 && (
         <section className="space-y-2">
           <SectionHeading title="Recommended Next Steps" />
@@ -549,6 +727,7 @@ function AnalysisPanel({ detail }: { detail: EngagementDetail }) {
 function EvidencePanel({ detail }: { detail: EngagementDetail }) {
   const unknowns = collectUnknowns(detail);
   const claims = collectClaims(detail);
+  const evidenceSummary = detail.deliverables?.evidenceSummary;
   return (
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
       <SectionHeading
@@ -566,6 +745,25 @@ function EvidencePanel({ detail }: { detail: EngagementDetail }) {
           <p className="mt-2 text-2xl font-semibold text-cyan-200">{claims.length}</p>
         </article>
       </div>
+
+      <EvidenceReferenceList
+        title="Sources Used"
+        references={evidenceSummary?.evidenceUsed}
+        emptyMessage="No safe evidence references are attached yet."
+      />
+
+      <AssumptionsPanel assumptions={evidenceSummary?.assumptions} />
+      <OpenQuestionsPanel questions={evidenceSummary?.openQuestions} />
+      <EvidenceReferenceList
+        title="Human Confirmations"
+        references={evidenceSummary?.humanConfirmations}
+        emptyMessage="No human-confirmed facts have been recorded yet."
+      />
+      <ConfidenceSummaryPanel
+        summary={evidenceSummary?.confidenceSummary}
+        missingEvidence={evidenceSummary?.missingEvidence}
+        recommendedNextActions={evidenceSummary?.recommendedNextActions}
+      />
 
       {unknowns.length > 0 && (
         <div className="space-y-2">
@@ -706,6 +904,13 @@ export function WorkProductViewer({
           >
             Human Input
           </button>
+          <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "data-room" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("data-room")}
+            type="button"
+          >
+            Data Room
+          </button>
         </div>
 
         {topSection === "department" && (
@@ -742,6 +947,10 @@ export function WorkProductViewer({
 
         {!isLoading && !loadError && detail && topSection === "human-input" && (
           <EngagementHumanInputPanel engagementId={project.id} />
+        )}
+
+        {!isLoading && !loadError && detail && topSection === "data-room" && (
+          <DataRoomPanel ownerId={project.id} scope="engagement" />
         )}
 
         {!isLoading &&

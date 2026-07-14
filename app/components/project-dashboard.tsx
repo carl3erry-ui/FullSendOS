@@ -7,6 +7,7 @@ import { ProjectForm, type ProjectFormState } from "./project-form";
 import { ProjectWorkspace } from "./project-workspace";
 import { AIWorkforceSection } from "./ai-workforce-section";
 import { HumanInputCenter } from "./human-input-center";
+import { DataRoomPanel } from "./data-room-panel";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
 import {
   createPollController,
@@ -840,9 +841,15 @@ export function ProjectDashboard() {
             <p className="mt-2 text-xs uppercase tracking-[0.18em] text-cyan-300">
               Select client → create engagement → run consulting workflow → review executive brief
             </p>
+            <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <p className="text-sm font-semibold text-slate-100">Data Room</p>
+              <p className="mt-1 text-sm text-slate-400">
+                Upload financials, brand assets, legal documents, real estate files, or other source materials for the selected client.
+              </p>
+            </div>
             {isClientLoading && <p className="mt-4 text-sm text-slate-400">Loading client workspace...</p>}
             {!isClientLoading && !selectedClient && (
-              <p className="mt-4 text-sm text-slate-400">Select a client to view associated engagements.</p>
+              <p className="mt-4 text-sm text-slate-400">Select a client to view associated engagements and open its Data Room.</p>
             )}
 
             {!isClientLoading && selectedClient && (
@@ -889,6 +896,16 @@ export function ProjectDashboard() {
                       </button>
                     )}
                   </div>
+                </div>
+
+                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-100">Client Data Room</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Source files for this client. Upload and review financials, legal documents, research, and other evidence here.
+                    </p>
+                  </div>
+                  <DataRoomPanel ownerId={selectedClient.id} scope="client" />
                 </div>
 
                 <div className="space-y-2">

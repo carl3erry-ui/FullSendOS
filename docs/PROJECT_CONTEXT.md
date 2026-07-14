@@ -210,6 +210,28 @@ Example chain:
 
 Each downstream deliverable should reference upstream validated work.
 
+### Evidence Requirement (Slice 15)
+
+Work products should include evidence context where available:
+
+- Sources used
+- Assumptions explicitly labeled
+- Open questions for unresolved fields
+- Human confirmations
+- Confidence summary with gaps and recommended follow-up
+
+Validation policy:
+
+- Agent-inferred facts are not treated as verified facts.
+- Human confirmation is required to move uncertain facts into trusted client memory.
+- Missing critical evidence should be surfaced, not silently omitted.
+
+### Data Room Visibility Requirement (Slice 15)
+
+- Data Room should be visible in both client and engagement workflows.
+- Empty-state guidance should direct teams to upload source materials.
+- Source processing metadata may be shown, but raw extracted text should not be rendered in UI.
+
 ## Client Memory Policy
 
 Client memory is persistent and reusable across engagements.

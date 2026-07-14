@@ -82,6 +82,67 @@ UI and API behavior should recover from persisted state rather than transient re
 
 Each engagement should end with validated work products and an executive-ready summary.
 
+## Data Room Access (Slice 15)
+
+- Client workspace includes a visible Client Data Room entry point.
+- Engagement workspace includes a visible Data Room section in the work product viewer.
+- Empty state copy:
+  - No files have been added to this data room yet.
+  - Upload financials, brand assets, legal documents, real estate files, or other source materials.
+- Upload action is available from Data Room panel controls.
+
+## Evidence-Based Work Products (Slice 15)
+
+Work product deliverables can include evidence metadata and evidence-backed summary sections.
+
+Evidence model includes:
+
+- Sources Used
+- Assumptions (separate from verified facts)
+- Open Questions
+- Human Confirmations
+- Confidence Summary
+- Missing Evidence and recommended next actions
+
+Evidence status semantics include:
+
+- user_provided
+- human_confirmed
+- retrieved_from_data_room
+- agent_inferred
+- unverified
+- assumption
+- open_question
+
+## Safety and Exposure Rules
+
+- Do not expose storage paths.
+- Do not expose full extracted document text.
+- Do not expose raw provider payloads, stack traces, or debug diagnostics.
+- Inferred facts remain unverified until confirmed through human input or explicit evidence.
+
+## Hardware Brewery Behavior
+
+- Missing address does not hard-fail work product generation.
+- Missing address is surfaced as an open question and/or human input request.
+- Confidence reflects unresolved evidence gaps.
+
+## Lifecycle Compatibility Status
+
+- Client archive/restore/soft-delete controls are preserved.
+- Engagement archive/restore/soft-delete controls are preserved.
+- Archived/deleted records are hidden by default unless lifecycle visibility filters are enabled.
+
+## Current Limitations
+
+- Deliverable export to PDF, DOCX, or PPTX is not implemented.
+- Client-facing evidence portal views are not implemented.
+
+## Future Follow-ups
+
+- Add professional export pipelines for executive deliverables.
+- Add client portal evidence views with governed redaction controls.
+
 ## Migration Guidance
 
 When touching existing project-based code paths:

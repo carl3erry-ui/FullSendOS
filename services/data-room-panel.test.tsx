@@ -3,11 +3,14 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DataRoomPanel } from "../app/components/data-room-panel";
+import { ProjectDashboard } from "../app/components/project-dashboard";
+import { WorkProductViewer } from "../app/components/work-product-viewer";
 
 test("DataRoomPanel renders default folder options when upload form is shown", () => {
   const html = renderToStaticMarkup(
     React.createElement(DataRoomPanel, {
-      engagementId: "ENG-UI-1",
+      ownerId: "client-ui-1",
+      scope: "client",
       disableAutoLoad: true,
       initialShowUpload: true,
       initialFolders: [
@@ -32,14 +35,16 @@ test("DataRoomPanel renders default folder options when upload form is shown", (
     })
   );
 
-  assert.match(html, /<option value="financials">Financials<\/option>/);
-  assert.match(html, /<option value="misc">Miscellaneous<\/option>/);
+  assert.match(html, /Financials/);
+  assert.match(html, /Miscellaneous/);
+  assert.match(html, /Upload File/);
 });
 
 test("DataRoomPanel renders empty state when no client/engagement-linked files exist", () => {
   const html = renderToStaticMarkup(
     React.createElement(DataRoomPanel, {
-      engagementId: "ENG-UI-2",
+      ownerId: "client-ui-2",
+      scope: "client",
       disableAutoLoad: true,
       initialFiles: [],
       initialFolders: [
@@ -55,13 +60,62 @@ test("DataRoomPanel renders empty state when no client/engagement-linked files e
     })
   );
 
-  assert.match(html, /No files uploaded yet/);
+  assert.match(html, /No files have been added to this data room yet\./);
+  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials\./);
+});
+
+test("DataRoomPanel shows upload action affordance when panel is loaded", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DataRoomPanel, {
+      ownerId: "client-ui-upload",
+      scope: "client",
+      disableAutoLoad: true,
+      initialFiles: [],
+      initialFolders: [
+        {
+          id: "misc",
+          name: "Miscellaneous",
+          slug: "misc",
+          category: "misc",
+          sortOrder: 10,
+          isSystem: true,
+        },
+      ],
+    })
+  );
+
+  assert.match(html, /\+ Upload/);
+});
+
+test("DataRoomPanel engagement scope renders the same empty state guidance", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DataRoomPanel, {
+      ownerId: "eng-ui-empty",
+      scope: "engagement",
+      disableAutoLoad: true,
+      initialFiles: [],
+      initialFolders: [
+        {
+          id: "misc",
+          name: "Miscellaneous",
+          slug: "misc",
+          category: "misc",
+          sortOrder: 10,
+          isSystem: true,
+        },
+      ],
+    })
+  );
+
+  assert.match(html, /No files have been added to this data room yet\./);
+  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials\./);
 });
 
 test("DataRoomPanel renders processing controls and status metadata", () => {
   const html = renderToStaticMarkup(
     React.createElement(DataRoomPanel, {
-      engagementId: "ENG-UI-3",
+      ownerId: "eng-ui-3",
+      scope: "engagement",
       disableAutoLoad: true,
       initialFolders: [
         {
@@ -89,11 +143,60 @@ test("DataRoomPanel renders processing controls and status metadata", () => {
           isArchived: false,
           approvedForAgentUse: false,
           sensitive: false,
-        },
+          storagePath: "/secret/path/should-not-render",
+          textExtracted: "FULL_EXTRACTED_TEXT_SHOULD_NOT_RENDER",
+        } as never,
       ],
     })
   );
 
   assert.match(html, /Process File/);
   assert.match(html, /Not Approved/);
+  assert.doesNotMatch(html, /storagePath/);
+  assert.doesNotMatch(html, /FULL_EXTRACTED_TEXT_SHOULD_NOT_RENDER/);
+});
+
+test("ProjectDashboard renders a visible Data Room entry point in the client workspace area", () => {
+  const html = renderToStaticMarkup(React.createElement(ProjectDashboard));
+
+  assert.match(html, /Client workspace/);
+  assert.match(html, /Data Room/);
+  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials for the selected client\./);
+});
+
+test("WorkProductViewer renders a Data Room tab for engagement workspace access", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(WorkProductViewer, {
+      project: {
+        id: "ENG-UI-4",
+        companyName: "Hardware Brewery",
+        objective: "Acquisition review",
+        status: "needs-review",
+        updatedAt: new Date().toISOString(),
+        completedDepartments: 7,
+        totalDepartments: 7,
+      },
+      detail: {
+        id: "ENG-UI-4",
+        status: "needs-review",
+        departments: {},
+        deliverables: {
+          executiveReport: "Report",
+          onePageSummary: "Summary",
+          deckOutline: [],
+        },
+        audit: { runs: [], warnings: [] },
+      },
+      isLoading: false,
+      loadError: null,
+      activeSection: "data-room",
+      onSectionChange: () => {},
+      runningProjectId: null,
+      onRun: () => {},
+    })
+  );
+
+  assert.match(html, /Data Room/);
+  assert.match(html, /Engagement Data Room/);
+  assert.match(html, /Loading files\.\.\./);
 });

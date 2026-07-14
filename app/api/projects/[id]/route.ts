@@ -1,11 +1,28 @@
 import { NextResponse } from "next/server";
 import { loadProject, updateProjectLifecycle } from "../../../../src/storage/projectStore.js";
+import { buildWorkProductEvidenceForDetail } from "@/services/work-product-evidence";
 
-function toDetailResponse(project: Record<string, any>) {
-  return {
+type ProjectDetailRecord = {
+  id: string;
+  clientId?: string | null;
+  status?: string;
+  lifecycleStatus?: string;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  client?: Record<string, any>;
+  brief?: Record<string, any>;
+  departments?: Record<string, any>;
+  deliverables?: Record<string, any>;
+  audit?: Record<string, any>;
+};
+
+async function toDetailResponse(project: ProjectDetailRecord) {
+  const baseDetail = {
     id: project.id,
     clientId: project.clientId || null,
-    status: project.status,
+    status: project.status || "draft",
     lifecycleStatus: project.lifecycleStatus || "active",
     archivedAt: project.archivedAt || null,
     deletedAt: project.deletedAt || null,
@@ -36,13 +53,25 @@ function toDetailResponse(project: Record<string, any>) {
       warnings: Array.isArray(project.audit?.warnings) ? project.audit.warnings : [],
     },
   };
+
+  const evidenceBundle = await buildWorkProductEvidenceForDetail(project, baseDetail);
+
+  return {
+    ...baseDetail,
+    deliverables: {
+      ...baseDetail.deliverables,
+      deckOutline: evidenceBundle.deckOutline,
+      evidenceReferences: evidenceBundle.evidenceReferences,
+      evidenceSummary: evidenceBundle.evidenceSummary,
+    },
+  };
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const project = await loadProject(id);
-    return NextResponse.json(toDetailResponse(project));
+    return NextResponse.json(await toDetailResponse(project));
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {
       return NextResponse.json({ error: "Project not found." }, { status: 404 });
