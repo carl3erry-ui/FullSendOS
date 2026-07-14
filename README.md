@@ -91,3 +91,9 @@ Client brief
 ## Important limitation
 
 This build does not yet perform independent live web research. The model receives the project evidence register and must label unsupported information as an estimate, assumption, recommendation, or unknown. The next production layer should add a controlled research connector and capture retrieved sources before analysis.
+
+## Operator readiness guide
+
+For operational setup, first-run steps, demo flow, and launch-readiness checklists, see:
+
+- [docs/OS_USE_READINESS.md](docs/OS_USE_READINESS.md)
