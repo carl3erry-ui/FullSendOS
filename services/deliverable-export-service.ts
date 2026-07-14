@@ -6,6 +6,7 @@ import {
   type DeliverableExportFormat,
 } from "@/schemas/deliverable-export";
 import type { DeliverableTemplate } from "@/schemas/deliverable-template";
+import { renderDeliverablePdf } from "@/services/deliverable-pdf-renderer";
 
 const UNSAFE_PATTERN = /(storagePath|textExtracted|rawProviderResponse|systemPrompt|apiKey|diagnosticTrace|stack|token|secret|hidden reasoning)/i;
 
@@ -286,6 +287,7 @@ export function contentTypeFor(format: DeliverableExportFormat): string {
   if (format === "markdown") return "text/markdown; charset=utf-8";
   if (format === "html") return "text/html; charset=utf-8";
   if (format === "json") return "application/json; charset=utf-8";
+  if (format === "pdf") return "application/pdf";
   return "text/plain; charset=utf-8";
 }
 
@@ -293,6 +295,7 @@ export function extensionFor(format: DeliverableExportFormat): string {
   if (format === "markdown") return "md";
   if (format === "html") return "html";
   if (format === "json") return "json";
+  if (format === "pdf") return "pdf";
   return "txt";
 }
 
@@ -320,12 +323,27 @@ function renderContent(
   return renderText(renderedSections);
 }
 
-export function buildDeliverableExport(params: BuildDeliverableExportParams): DeliverableExport {
+export async function buildDeliverableExport(params: BuildDeliverableExportParams): Promise<DeliverableExport> {
   const generatedAt = nowIso();
   const sections = buildSections(params);
   const renderedSections = mapTemplateSections(params.template, sections);
-  const content = renderContent(params.format, renderedSections, params);
-  const byteSize = Buffer.byteLength(content, "utf8");
+  const isPdf = params.format === "pdf";
+
+  const textContent = isPdf ? "" : renderContent(params.format, renderedSections, params);
+  const pdfBuffer = isPdf
+    ? await renderDeliverablePdf({
+      title: `${params.engagementTitle} Deliverable Export`,
+      engagementTitle: params.engagementTitle,
+      clientName: params.clientName,
+      generatedAt,
+      templateName: params.template.name,
+      sections: renderedSections,
+      exportMetadata: sections.exportMetadata,
+    })
+    : null;
+
+  const content = isPdf ? (pdfBuffer?.toString("base64") || "") : textContent;
+  const byteSize = isPdf ? (pdfBuffer?.byteLength || 0) : Buffer.byteLength(textContent, "utf8");
   const checksum = createHash("sha256").update(content).digest("hex");
   const exportId = `exp-${randomBytes(10).toString("hex")}`;
 
@@ -356,6 +374,8 @@ export function buildDeliverableExport(params: BuildDeliverableExportParams): De
     generatedAt,
     sourceWorkProductId: params.sourceWorkProductId,
     contentType: contentTypeFor(params.format),
+    contentEncoding: isPdf ? "base64" : "utf8",
+    isBinary: isPdf,
     byteSize,
     checksum,
     exportMetadata: {
@@ -375,6 +395,13 @@ export function buildDeliverableExport(params: BuildDeliverableExportParams): De
         "No full extracted document text is included.",
         "No storage paths or local file paths are included.",
       ],
+      binaryContent: isPdf
+        ? {
+          encoding: "base64",
+          mediaType: "application/pdf",
+          inlineContentExcluded: true,
+        }
+        : undefined,
     },
     safetySummary: {
       hiddenReasoningExcluded: true,

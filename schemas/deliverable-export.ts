@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DeliverableTemplateIdSchema } from "./deliverable-template";
 
-export const DeliverableExportFormatSchema = z.enum(["markdown", "html", "text", "json"]);
+export const DeliverableExportFormatSchema = z.enum(["markdown", "html", "text", "json", "pdf"]);
 export type DeliverableExportFormat = z.infer<typeof DeliverableExportFormatSchema>;
 
 export const DeliverableExportStatusSchema = z.enum(["created", "failed"]);
@@ -23,6 +23,11 @@ export const DeliverableExportMetadataSchema = z.object({
     rationale: z.string(),
   }).optional(),
   limitations: z.array(z.string()).default([]),
+  binaryContent: z.object({
+    encoding: z.literal("base64"),
+    mediaType: z.literal("application/pdf"),
+    inlineContentExcluded: z.literal(true),
+  }).optional(),
 });
 export type DeliverableExportMetadata = z.infer<typeof DeliverableExportMetadataSchema>;
 
@@ -52,6 +57,8 @@ export const DeliverableExportSchema = z.object({
   generatedAt: z.string(),
   sourceWorkProductId: z.string().optional(),
   contentType: z.string().min(1),
+  contentEncoding: z.enum(["utf8", "base64"]).default("utf8"),
+  isBinary: z.boolean().default(false),
   byteSize: z.number().int().nonnegative(),
   checksum: z.string().optional(),
   exportMetadata: DeliverableExportMetadataSchema,

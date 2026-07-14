@@ -15,6 +15,15 @@ export async function GET(
       return NextResponse.json({ error: "Export not found." }, { status: 404 });
     }
 
+    if (record.format === "pdf") {
+      const safePdfDetail = {
+        ...record,
+        content: "",
+        contentPreviewUnavailable: true,
+      };
+      return NextResponse.json(safePdfDetail);
+    }
+
     return NextResponse.json(record);
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {

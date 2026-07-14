@@ -20,6 +20,8 @@ test("deliverable export panel renders controls and empty state", () => {
   assert.match(html, /Generate HTML/);
   assert.match(html, /Generate TEXT/);
   assert.match(html, /Generate JSON/);
+  assert.match(html, /Generate PDF/);
+  assert.match(html, /PDF exports generate a downloadable client-ready file/i);
   assert.match(html, /No exports have been generated yet\./);
   assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
 });
@@ -75,6 +77,7 @@ test("work product viewer exposes export deliverables tab", () => {
   assert.match(html, /Generate HTML/);
   assert.match(html, /Generate TEXT/);
   assert.match(html, /Generate JSON/);
+  assert.match(html, /Generate PDF/);
   assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
 });
 
@@ -102,4 +105,32 @@ test("deliverable export panel shows download action", () => {
   assert.match(html, /Export History/);
   assert.match(html, /Executive Standard/);
   assert.match(html, /Download/);
+});
+
+test("deliverable export panel shows PDF entry and clear preview behavior", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DeliverableExportPanel, {
+      engagementId: "ENG-EXPORT-4",
+      disableAutoLoad: true,
+      initialExports: [
+        {
+          id: "exp-pdf-1",
+          format: "pdf",
+          templateId: "client-ready",
+          templateName: "Client Ready",
+          filename: "hardware-brewery-deliverable-pdf-2026-07-14.pdf",
+          generatedAt: new Date().toISOString(),
+          byteSize: 4096,
+          status: "created",
+          contentType: "application/pdf",
+        },
+      ],
+    }),
+  );
+
+  assert.match(html, /hardware-brewery-deliverable-pdf-2026-07-14\.pdf/);
+  assert.match(html, /PDF \| Client Ready/);
+  assert.match(html, /Preview unavailable/);
+  assert.match(html, /Download/);
+  assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
 });

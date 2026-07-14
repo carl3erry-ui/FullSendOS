@@ -13,7 +13,7 @@ export const DeliverableTemplateSchema = z.object({
   id: DeliverableTemplateIdSchema,
   name: z.string().min(1),
   description: z.string().min(1),
-  format: z.enum(["markdown", "html", "text", "json", "any"]),
+  format: z.enum(["markdown", "html", "text", "json", "pdf", "any"]),
   brandName: z.string().min(1),
   tone: z.string().min(1),
   layout: z.string().min(1),

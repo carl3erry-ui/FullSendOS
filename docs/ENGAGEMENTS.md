@@ -135,7 +135,7 @@ Evidence status semantics include:
 
 ## Current Limitations
 
-- Deliverable export to PDF, DOCX, or PPTX is not implemented.
+- Deliverable export to DOCX or PPTX is not implemented.
 - Client-facing evidence portal views are not implemented.
 
 ## Deliverable Export Foundation
@@ -195,6 +195,7 @@ Supported content types:
 - HTML: `text/html; charset=utf-8`
 - Text: `text/plain; charset=utf-8`
 - JSON: `application/json; charset=utf-8`
+- PDF: `application/pdf`
 
 Built-in templates:
 
@@ -221,10 +222,57 @@ Filename rules:
 
 Current limitations:
 
-- No PDF/DOCX/PPTX generation yet.
+- No DOCX/PPTX generation yet.
 - No template editor yet.
 - No Client Portal delivery yet.
 - No email/share flow yet.
+
+## Binary PDF Export Foundation
+
+This phase adds binary PDF generation on top of the existing deliverable export foundation.
+
+PDF generation approach:
+
+- Uses server-side `pdfkit` in API/runtime-safe Node execution.
+- Reuses existing template-driven section mapping and safety filters.
+- Generates consultant-grade, readable baseline PDFs without external network services or browser-only rendering.
+
+Why `pdfkit` was chosen:
+
+- Stable Node compatibility for Next.js route handlers.
+- No headless browser requirement.
+- Predictable binary output suitable for file-backed JSON persistence.
+
+Persistence behavior:
+
+- PDF bytes are stored as base64 in the existing export record `content` field.
+- Export metadata includes a binary indicator (`encoding: base64`, media type `application/pdf`, inline preview excluded).
+- No local storage paths are exposed through API responses.
+
+Detail and download behavior:
+
+- PDF detail route returns safe metadata and marks inline preview unavailable.
+- PDF download route validates ownership first, decodes base64 after validation, and returns binary bytes.
+- Download response keeps `Content-Disposition: attachment` and safe filename rules.
+
+Safety behavior:
+
+- Excludes private prompts, raw provider payloads, API keys, stack traces, hidden reasoning, storage paths, and full extracted document text.
+- Does not execute HTML/scripts and does not fetch remote assets.
+
+Limitations in this slice:
+
+- Inline PDF preview is intentionally not supported.
+- PDF layout is a professional foundation, not a final design system.
+- DOCX/PPTX export is intentionally out of scope.
+
+Future follow-ups:
+
+- Richer template-specific PDF layouts and branding controls.
+- DOCX export pipeline for editable client handoffs.
+- PPTX/deck generation pipeline.
+- Client Portal delivery workflow.
+- Email/share delivery workflow.
 
 ## Future Follow-ups
 

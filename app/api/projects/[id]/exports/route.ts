@@ -116,7 +116,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
-    const record = buildDeliverableExport({
+    const record = await buildDeliverableExport({
       engagementId: id,
       clientId: project.clientId || undefined,
       engagementTitle: project.client?.companyName || id,
