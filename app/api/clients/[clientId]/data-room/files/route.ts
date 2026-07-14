@@ -120,6 +120,11 @@ export async function POST(
     const allowedMimes = [
       "application/pdf",
       "text/plain",
+      "text/markdown",
+      "text/csv",
+      "application/json",
+      "application/xml",
+      "text/xml",
       "application/msword",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/vnd.ms-excel",

@@ -94,6 +94,23 @@ existing agent framework. This slice explicitly excludes:
 
 Note: richer export artifact generation remains deferred until after validated in-product review workflows.
 
+## Slice 12 Scope Note
+
+Data Room File Parsing and Indexing Foundation is implemented with strict
+safety boundaries. This slice includes:
+
+- Document processing statuses and metadata records
+- Safe parsing for selected text-like file types
+- Client and engagement-compatible processing/listing APIs
+- UI controls for manual processing and status visibility
+
+This slice explicitly excludes:
+
+- Prompt injection of parsed file content
+- Vector search/embeddings infrastructure
+- Client portal, export, or email workflow integrations
+- Exposure of raw private file text in public APIs
+
 ## Sprint 4
 
 - Client management

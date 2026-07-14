@@ -104,6 +104,59 @@ export const FileUploadRequestSchema = z.object({
 
 export type FileUploadRequest = z.infer<typeof FileUploadRequestSchema>;
 
+// ============ Data Room Document Processing Schemas (Slice 12) ============
+export const DataRoomDocumentProcessingStatusSchema = z.enum([
+  "not_started",
+  "queued",
+  "processing",
+  "completed",
+  "failed",
+  "skipped",
+  "unsupported",
+]);
+
+export type DataRoomDocumentProcessingStatus = z.infer<
+  typeof DataRoomDocumentProcessingStatusSchema
+>;
+
+export const DataRoomDocumentSchema = z.object({
+  id: z.string().min(1),
+  fileId: z.string().min(1),
+  clientId: z.string().min(1),
+  engagementId: z.string().optional(),
+  folderId: z.string().min(1),
+  originalFilename: z.string().min(1),
+  displayName: z.string().min(1),
+  mimeType: z.string().min(1),
+  extension: z.string().min(1),
+  sourceType: z.string().min(1),
+  processingStatus: DataRoomDocumentProcessingStatusSchema,
+  processingStartedAt: z.string().optional(),
+  processingCompletedAt: z.string().optional(),
+  parserVersion: z.string().min(1),
+  // Internal extracted text is intentionally omitted from safe API responses.
+  textExtracted: z.string().optional(),
+  textPreview: z.string().default(""),
+  textLength: z.number().int().nonnegative().default(0),
+  summary: z.string().default(""),
+  keywords: z.array(z.string()).default([]),
+  detectedDocumentType: z.string().default("unknown"),
+  confidence: z.number().min(0).max(1).default(0),
+  extractionWarnings: z.array(z.string()).default([]),
+  approvedForAgentUse: z.boolean().default(false),
+  sensitive: z.boolean().default(false),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type DataRoomDocument = z.infer<typeof DataRoomDocumentSchema>;
+
+export const DataRoomDocumentSafeSchema = DataRoomDocumentSchema.omit({
+  textExtracted: true,
+});
+
+export type DataRoomDocumentSafe = z.infer<typeof DataRoomDocumentSafeSchema>;
+
 // ============ Default Folders ============
 export const DEFAULT_FOLDERS: DataRoomFolder[] = [
   { id: "financials", name: "Financials", slug: "financials", category: "financials", sortOrder: 1, isSystem: true, clientId: "", description: "Financial documents and reports" },

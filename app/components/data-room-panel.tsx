@@ -8,6 +8,21 @@ interface DataRoomFile extends FileReferenceSafe {
   tags: string[];
 }
 
+interface DataRoomDocumentSafe {
+  id: string;
+  fileId: string;
+  processingStatus: string;
+  textPreview: string;
+  textLength: number;
+  summary: string;
+  keywords: string[];
+  detectedDocumentType: string;
+  confidence: number;
+  extractionWarnings: string[];
+  approvedForAgentUse: boolean;
+  sensitive: boolean;
+}
+
 interface DataRoomFolder {
   id: string;
   name: string;
@@ -40,6 +55,10 @@ export function DataRoomPanel({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(initialShowUpload);
+  const [processingFileId, setProcessingFileId] = useState<string | null>(null);
+  const [documentsByFileId, setDocumentsByFileId] = useState<
+    Record<string, DataRoomDocumentSafe>
+  >({});
 
   useEffect(() => {
     if (disableAutoLoad) return;
@@ -52,7 +71,24 @@ export function DataRoomPanel({
   }, [selectedFolderId, disableAutoLoad]);
 
   const loadFoldersAndFiles = async () => {
-    await Promise.all([loadFolders(), loadFiles()]);
+    await Promise.all([loadFolders(), loadFiles(), loadDocuments()]);
+  };
+
+  const loadDocuments = async () => {
+    try {
+      const response = await fetch(`/api/engagements/${engagementId}/data-room/documents`);
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const map: Record<string, DataRoomDocumentSafe> = {};
+      for (const doc of data.documents || []) {
+        map[doc.fileId] = doc;
+      }
+
+      setDocumentsByFileId(map);
+    } catch {
+      // Keep Data Room usable even if processing metadata cannot load.
+    }
   };
 
   const loadFolders = async () => {
@@ -134,6 +170,43 @@ export function DataRoomPanel({
     }
   };
 
+  const handleProcessFile = async (file: DataRoomFile) => {
+    if (!file.approvedForAgentUse) {
+      setError("Approve this file for agent use before processing.");
+      return;
+    }
+
+    if (file.sensitive) {
+      setError("Sensitive files are intentionally skipped for parsing.");
+      return;
+    }
+
+    try {
+      setProcessingFileId(file.id);
+      setError(null);
+
+      const response = await fetch(
+        `/api/engagements/${engagementId}/data-room/${file.id}/process`,
+        { method: "POST" }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "File processing failed");
+      }
+
+      await loadDocuments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "File processing failed");
+    } finally {
+      setProcessingFileId(null);
+    }
+  };
+
+  const getProcessButtonLabel = (fileId: string) => {
+    return processingFileId === fileId ? "Processing..." : "Process File";
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 B";
     const k = 1024;
@@ -174,7 +247,7 @@ export function DataRoomPanel({
               name="file"
               type="file"
               required
-              accept=".pdf,.txt,.doc,.docx,.xls,.xlsx,.jpg,.png,.gif"
+              accept=".pdf,.txt,.md,.csv,.json,.xml,.doc,.docx,.xls,.xlsx,.jpg,.png,.gif"
               disabled={uploading}
             />
           </div>
@@ -286,14 +359,67 @@ export function DataRoomPanel({
                       ))}
                     </div>
                   )}
+                  <div className="file-flags">
+                    <span
+                      className={`flag ${file.approvedForAgentUse ? "flag-yes" : "flag-no"}`}
+                    >
+                      {file.approvedForAgentUse ? "Approved" : "Not Approved"}
+                    </span>
+                    {file.sensitive && <span className="flag flag-sensitive">Sensitive</span>}
+                  </div>
+                  {documentsByFileId[file.id] && (
+                    <div className="processing-card">
+                      <div className="processing-header">
+                        <span className="processing-title">Parsing Status</span>
+                        <span className="processing-status">
+                          {documentsByFileId[file.id].processingStatus}
+                        </span>
+                      </div>
+                      <div className="processing-meta">
+                        <span>Type: {documentsByFileId[file.id].detectedDocumentType}</span>
+                        <span>Length: {documentsByFileId[file.id].textLength}</span>
+                        <span>
+                          Confidence: {(documentsByFileId[file.id].confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      {documentsByFileId[file.id].summary && (
+                        <div className="processing-summary">
+                          {documentsByFileId[file.id].summary}
+                        </div>
+                      )}
+                      {documentsByFileId[file.id].textPreview && (
+                        <pre className="processing-preview">
+                          {documentsByFileId[file.id].textPreview}
+                        </pre>
+                      )}
+                      {documentsByFileId[file.id].extractionWarnings.length > 0 && (
+                        <div className="processing-warnings">
+                          {documentsByFileId[file.id].extractionWarnings.join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <button
-                  onClick={() => handleDelete(file.id)}
-                  className="btn btn-sm btn-ghost"
-                  aria-label="Delete file"
-                >
-                  ✕
-                </button>
+                <div className="file-actions">
+                  <button
+                    onClick={() => handleProcessFile(file)}
+                    className="btn btn-sm btn-secondary"
+                    disabled={
+                      processingFileId === file.id ||
+                      !file.approvedForAgentUse ||
+                      file.sensitive
+                    }
+                  >
+                    {getProcessButtonLabel(file.id)}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(file.id)}
+                    className="btn btn-sm btn-ghost"
+                    aria-label="Delete file"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -383,6 +509,21 @@ export function DataRoomPanel({
           color: white;
         }
 
+        .btn-secondary {
+          background-color: #0f766e;
+          color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+          background-color: #115e59;
+        }
+
+        .btn-secondary:disabled {
+          background-color: #99f6e4;
+          color: #134e4a;
+          cursor: not-allowed;
+        }
+
         .btn-primary:hover:not(:disabled) {
           background-color: #2563eb;
         }
@@ -466,6 +607,12 @@ export function DataRoomPanel({
           border-radius: 4px;
         }
 
+        .file-actions {
+          display: flex;
+          gap: 0.5rem;
+          align-items: center;
+        }
+
         .file-info {
           flex: 1;
           min-width: 0;
@@ -496,6 +643,110 @@ export function DataRoomPanel({
           display: flex;
           gap: 0.5rem;
           flex-wrap: wrap;
+        }
+
+        .file-flags {
+          display: flex;
+          gap: 0.5rem;
+          margin-top: 0.5rem;
+        }
+
+        .flag {
+          display: inline-block;
+          padding: 0.2rem 0.45rem;
+          border-radius: 4px;
+          font-size: 0.72rem;
+          font-weight: 600;
+        }
+
+        .flag-yes {
+          background: #dcfce7;
+          color: #166534;
+        }
+
+        .flag-no {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        .flag-sensitive {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        .processing-card {
+          margin-top: 0.75rem;
+          padding: 0.65rem;
+          border-radius: 6px;
+          border: 1px solid #d1fae5;
+          background: #f0fdfa;
+        }
+
+        .processing-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 0.75rem;
+          margin-bottom: 0.4rem;
+        }
+
+        .processing-title {
+          font-size: 0.75rem;
+          color: #0f766e;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.03em;
+        }
+
+        .processing-status {
+          font-size: 0.75rem;
+          color: #115e59;
+          font-weight: 600;
+        }
+
+        .processing-meta {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.75rem;
+          font-size: 0.72rem;
+          color: #0f766e;
+          margin-bottom: 0.4rem;
+        }
+
+        .processing-summary {
+          font-size: 0.79rem;
+          color: #134e4a;
+          margin-bottom: 0.35rem;
+        }
+
+        .processing-preview {
+          white-space: pre-wrap;
+          font-size: 0.72rem;
+          line-height: 1.35;
+          color: #134e4a;
+          background: #ffffff;
+          border: 1px solid #ccfbf1;
+          border-radius: 4px;
+          padding: 0.45rem;
+          margin: 0 0 0.35rem 0;
+          max-height: 140px;
+          overflow: auto;
+        }
+
+        .processing-warnings {
+          font-size: 0.72rem;
+          color: #b45309;
+        }
+
+        @media (max-width: 768px) {
+          .file-item {
+            flex-direction: column;
+            gap: 0.75rem;
+          }
+
+          .file-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
         }
 
         .tag {

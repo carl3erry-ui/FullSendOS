@@ -53,6 +53,9 @@ Client routes:
 - `GET /api/clients/[clientId]/data-room/files/[fileId]`
 - `PATCH /api/clients/[clientId]/data-room/files/[fileId]`
 - `DELETE /api/clients/[clientId]/data-room/files/[fileId]`
+- `POST /api/clients/[clientId]/data-room/files/[fileId]/process`
+- `GET /api/clients/[clientId]/data-room/documents`
+- `GET /api/clients/[clientId]/data-room/documents/[documentId]`
 
 Engagement compatibility routes:
 
@@ -62,6 +65,8 @@ Engagement compatibility routes:
 - `GET /api/engagements/[id]/data-room/[fileId]`
 - `PATCH /api/engagements/[id]/data-room/[fileId]`
 - `DELETE /api/engagements/[id]/data-room/[fileId]`
+- `POST /api/engagements/[id]/data-room/[fileId]/process`
+- `GET /api/engagements/[id]/data-room/documents`
 
 Compatibility routes resolve engagement owner via project lookup, then delegate to the client data room while enforcing engagement-level filtering.
 
@@ -73,15 +78,30 @@ Compatibility routes resolve engagement owner via project lookup, then delegate 
 - folder filter for file listing
 - folder selection on upload
 - existing engagement endpoint compatibility
+- manual file processing action with policy guardrails
+- processing status and safe parsed metadata previews
 
 ## Out of Scope (Explicit)
 
 - No QuickBooks or external integrations.
 - No client portal.
-- No file content parsing/indexing.
 - No prompt wiring of uploaded file content.
 - No deliverable export changes.
 - No rate limiting in this slice.
+
+### Parsing/Indexing Foundation Scope (Slice 12)
+
+- Safe parsing/indexing foundation is now implemented for selected text-like formats (`txt`, `md`, `csv`, `json`, `xml`).
+- Parsed records are metadata-first and stored separately from file upload references.
+- Internal extracted text is never returned from safe document APIs.
+- Sensitive files and unapproved files are intentionally skipped.
+
+### Parsing/Indexing Still Out of Scope
+
+- No embeddings/vector database retrieval.
+- No automatic injection of parsed content into agent prompts.
+- No raw file-content exposure from public APIs.
+- No client portal/export/email workflow changes.
 
 ## Architecture Summary
 
@@ -104,6 +124,12 @@ Core service functions in `services/client-data-room-store.ts`:
 - `getFolders`
 - `linkFileToEngagement`
 - `unlinkFileFromEngagement`
+
+Core slice-12 services:
+
+- `services/data-room-document-parser.ts`
+- `services/data-room-document-store.ts`
+- `services/data-room-processing-service.ts`
 
 ## Validation and Testing
 

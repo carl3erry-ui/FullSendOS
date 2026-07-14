@@ -7,6 +7,8 @@ import { saveProject } from "../src/storage/projectStore.js";
 import { addFileReference, loadClientDataRoom } from "./client-data-room-store";
 import { GET as getEngagementDataRoom } from "../app/api/engagements/[id]/data-room/route";
 import { POST as postEngagementDataRoom } from "../app/api/engagements/[id]/data-room/route";
+import { POST as postEngagementProcess } from "../app/api/engagements/[id]/data-room/[fileId]/process/route";
+import { GET as getEngagementDocuments } from "../app/api/engagements/[id]/data-room/documents/route";
 import {
   GET as getEngagementFile,
   PATCH as patchEngagementFile,
@@ -277,6 +279,62 @@ test("engagement upload writes a single client-owned record without duplication"
       .catch(() => false);
 
     assert.equal(legacyExists, false);
+  } finally {
+    await cleanupProject(project.id);
+    await cleanupClientDataRoom(clientId);
+  }
+});
+
+test("engagement processing route returns safe document metadata", async () => {
+  const clientId = uniqueId("compat-client-process");
+  const project = createEmptyProject({
+    clientId,
+    companyName: "Compat Process Co",
+    objective: "Validate processing compatibility route",
+  });
+
+  await saveProject(project);
+
+  try {
+    const uploadPath = path.join("data", "uploads", `${clientId}-compat-process.txt`);
+    await fs.mkdir(path.dirname(uploadPath), { recursive: true });
+    await fs.writeFile(uploadPath, "Operational notes and projections.");
+
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "compat-process.txt",
+        mimeType: "text/plain",
+        size: 64,
+        engagementIds: [project.id],
+        approvedForAgentUse: true,
+      },
+      "tester",
+      uploadPath
+    );
+
+    const processResponse = await postEngagementProcess(
+      new Request("http://127.0.0.1/api/engagements/id/data-room/file/process", {
+        method: "POST",
+      }) as any,
+      { params: Promise.resolve({ id: project.id, fileId: file.id }) }
+    );
+    const processBody = await processResponse.json();
+
+    assert.equal(processResponse.status, 200);
+    assert.equal(processBody.success, true);
+    assert.equal(processBody.document.fileId, file.id);
+    assert.equal("textExtracted" in processBody.document, false);
+
+    const listResponse = await getEngagementDocuments(
+      new Request("http://127.0.0.1/api/engagements/id/data-room/documents"),
+      { params: Promise.resolve({ id: project.id }) }
+    );
+    const listBody = await listResponse.json();
+
+    assert.equal(listResponse.status, 200);
+    assert.equal(listBody.count, 1);
+    assert.equal(listBody.documents[0].fileId, file.id);
   } finally {
     await cleanupProject(project.id);
     await cleanupClientDataRoom(clientId);

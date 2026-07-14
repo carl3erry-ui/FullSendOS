@@ -57,3 +57,43 @@ test("DataRoomPanel renders empty state when no client/engagement-linked files e
 
   assert.match(html, /No files uploaded yet/);
 });
+
+test("DataRoomPanel renders processing controls and status metadata", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DataRoomPanel, {
+      engagementId: "ENG-UI-3",
+      disableAutoLoad: true,
+      initialFolders: [
+        {
+          id: "misc",
+          name: "Miscellaneous",
+          slug: "misc",
+          category: "misc",
+          sortOrder: 10,
+          isSystem: true,
+        },
+      ],
+      initialFiles: [
+        {
+          id: "file-1",
+          clientId: "client-1",
+          folderId: "misc",
+          name: "memo.txt",
+          type: "document",
+          mimeType: "text/plain",
+          size: 128,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: "tester",
+          tags: ["memo"],
+          engagementIds: ["ENG-UI-3"],
+          isArchived: false,
+          approvedForAgentUse: false,
+          sensitive: false,
+        },
+      ],
+    })
+  );
+
+  assert.match(html, /Process File/);
+  assert.match(html, /Not Approved/);
+});
