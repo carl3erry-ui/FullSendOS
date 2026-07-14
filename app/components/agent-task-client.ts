@@ -77,6 +77,15 @@ export type TaskDetailResponse = {
     updatedAt: string;
     completedAt?: string;
     output?: unknown;
+    sources?: string[];
+    evidence?: Array<{
+      type: string;
+      title: string;
+      content: string;
+      source: string;
+      confidence?: number;
+      retrievedAt?: string;
+    }>;
     error?: string | null;
     usage?: {
       input_tokens?: number;

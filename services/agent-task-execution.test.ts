@@ -15,6 +15,9 @@ import { AgentExecutor } from "../agents/executor";
 import { AgentInstanceRegistry, AgentRegistry } from "../agents/registry";
 import { AgentTaskStore } from "../agents/task-store";
 import { AgentTaskSchema, type AgentTask } from "../agents/types";
+import { addFileReference } from "./client-data-room-store";
+import { upsertDataRoomDocument } from "./data-room-document-store";
+import { loadDataRoomRetrievalAuditEntry } from "./data-room-retrieval-audit-store";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -24,8 +27,17 @@ function tmpDir(label: string) {
   return join(tmpdir(), `fsos-agent-test-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 }
 
+function uniqueClientId(label: string) {
+  return `slice13-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function cleanDir(dir: string) {
   await rm(dir, { recursive: true, force: true });
+}
+
+async function cleanupClientRetrievalData(clientId: string) {
+  await rm(join(process.cwd(), "data", "clients", `${clientId}-data-room.json`), { force: true });
+  await rm(join(process.cwd(), "data", "clients", `${clientId}-documents.json`), { force: true });
 }
 
 function buildTask(overrides: Partial<AgentTask> = {}): AgentTask {
@@ -666,6 +678,129 @@ test("AgentExecutor: persisted task and execution do not contain API key strings
     }
   } finally {
     process.env.XAI_API_KEY = prev;
+    await cleanDir(taskDir);
+    await cleanDir(execDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 22. Retrieval-enabled task appends safe sources + evidence
+// ---------------------------------------------------------------------------
+
+test("AgentExecutor: retrieval-enabled task records retrieval citations and audit", async () => {
+  const taskDir = tmpDir("retrieval-tasks");
+  const execDir = tmpDir("retrieval-execs");
+  const taskStore = new AgentTaskStore(taskDir);
+  const executionStore = new AgentExecutionStore(execDir);
+  const executor = createExecutor(taskStore, executionStore);
+  const clientId = uniqueClientId("executor");
+
+  try {
+    const file = await addFileReference(
+      clientId,
+      {
+        name: "q2-summary.txt",
+        mimeType: "text/plain",
+        size: 1024,
+        folderId: "financials",
+        approvedForAgentUse: true,
+        engagementIds: ["eng-123"],
+      },
+      "test-user",
+      "/internal/q2-summary.txt"
+    );
+
+    await upsertDataRoomDocument(clientId, {
+      fileId: file.id,
+      clientId,
+      engagementId: "eng-123",
+      folderId: "financials",
+      originalFilename: file.name,
+      displayName: "Q2 Summary",
+      mimeType: file.mimeType,
+      extension: "txt",
+      sourceType: "upload",
+      processingStatus: "completed",
+      processingStartedAt: new Date().toISOString(),
+      processingCompletedAt: new Date().toISOString(),
+      parserVersion: "slice13-test",
+      textExtracted: "Revenue increased 24 percent while operating margin improved to 14 percent.",
+      textPreview: "Revenue increased 24 percent while operating margin improved.",
+      textLength: 78,
+      summary: "Q2 performance summary with revenue and margin growth.",
+      keywords: ["revenue", "margin", "q2"],
+      detectedDocumentType: "financial",
+      confidence: 0.9,
+      extractionWarnings: [],
+      approvedForAgentUse: true,
+      sensitive: false,
+    });
+
+    const task = buildTask({
+      agentId: "researcher",
+      engagementId: "eng-123",
+      dataRoomRetrieval: {
+        enabled: true,
+        clientId,
+        query: "revenue margin",
+      },
+    });
+
+    await taskStore.saveTask(task);
+    const result = await executor.execute(task.id);
+
+    assert.ok(result.ok, result.ok ? "" : result.error.message);
+    if (result.ok) {
+      assert.equal(result.task.status, "completed");
+      assert.equal((result.task.sources || []).length > 0, true);
+      assert.equal((result.task.evidence || []).length > 0, true);
+      assert.equal((result.task.sources || [])[0].includes("Source"), true);
+
+      const retrievalContext = (result.task.context as { dataRoomRetrieval?: { retrievalAuditId?: string } })
+        ?.dataRoomRetrieval;
+      assert.ok(retrievalContext?.retrievalAuditId);
+
+      if (retrievalContext?.retrievalAuditId) {
+        const audit = await loadDataRoomRetrievalAuditEntry(retrievalContext.retrievalAuditId);
+        assert.equal(audit.clientId, clientId);
+        assert.equal(audit.taskId, task.id);
+      }
+    }
+  } finally {
+    await cleanupClientRetrievalData(clientId);
+    await cleanDir(taskDir);
+    await cleanDir(execDir);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 23. Retrieval permission is enforced
+// ---------------------------------------------------------------------------
+
+test("AgentExecutor: retrieval-enabled task without retrieval permission is denied", async () => {
+  const taskDir = tmpDir("retrieval-perm-tasks");
+  const execDir = tmpDir("retrieval-perm-execs");
+  const taskStore = new AgentTaskStore(taskDir);
+  const executionStore = new AgentExecutionStore(execDir);
+  const executor = createExecutor(taskStore, executionStore);
+
+  const task = buildTask({
+    agentId: "orchestrator",
+    dataRoomRetrieval: {
+      enabled: true,
+      clientId: uniqueClientId("perm"),
+      query: "revenue",
+    },
+  });
+
+  try {
+    await taskStore.saveTask(task);
+    const result = await executor.execute(task.id);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.error.code, "permission_denied");
+    }
+  } finally {
     await cleanDir(taskDir);
     await cleanDir(execDir);
   }

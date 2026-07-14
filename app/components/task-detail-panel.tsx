@@ -327,6 +327,19 @@ export function TaskDetailPanel({ taskId, onTaskCompleted }: TaskDetailPanelProp
           )}
         </div>
       )}
+
+      {Array.isArray(task.task.sources) && task.task.sources.length > 0 && (
+        <div className="mt-4 rounded border border-slate-700 bg-slate-800/50 p-3">
+          <h4 className="mb-2 font-medium text-cyan-300">Sources Used</h4>
+          <ul className="space-y-1 text-xs text-slate-300">
+            {task.task.sources.map((source) => (
+              <li key={source} className="rounded border border-slate-700 bg-slate-900/50 px-2 py-1">
+                {source}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ZodType } from "zod";
+import { AgentTaskDataRoomRetrievalConfigSchema } from "../schemas/data-room-retrieval";
 
 // ---------------------------------------------------------------------------
 // Status enums
@@ -132,6 +133,7 @@ export const AgentTaskSchema = z.object({
   instructions: z.string().optional(),
   input: z.record(z.unknown()).optional(),
   context: z.record(z.unknown()).optional(),
+  dataRoomRetrieval: AgentTaskDataRoomRetrievalConfigSchema.optional(),
   status: AgentTaskStatusSchema,
   priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
   provider: ProviderNameSchema,

@@ -10,6 +10,7 @@ import {
   globalTaskStore,
   globalAgentRegistry,
 } from "@/agents";
+import { AgentTaskDataRoomRetrievalConfigSchema } from "@/schemas/data-room-retrieval";
 import {
   successResponse,
   validationErrorResponse,
@@ -32,6 +33,8 @@ const CreateAgentTaskInputSchema = z.object({
   instructions: z.string().optional(),
   input: z.record(z.unknown()).optional(),
   context: z.record(z.unknown()).optional(),
+  enableDataRoomRetrieval: z.boolean().optional(),
+  dataRoomRetrieval: AgentTaskDataRoomRetrievalConfigSchema.optional(),
   priority: z
     .enum(["low", "medium", "high", "critical"])
     .default("medium")
@@ -95,6 +98,13 @@ export async function POST(request: Request) {
       instructions: parsed.instructions,
       input: parsed.input,
       context: parsed.context,
+      dataRoomRetrieval:
+        parsed.enableDataRoomRetrieval || parsed.dataRoomRetrieval?.enabled
+          ? {
+              ...parsed.dataRoomRetrieval,
+              enabled: true,
+            }
+          : undefined,
       status: "queued",
       priority: parsed.priority ?? "medium",
       provider: parsed.provider ?? agentDef.defaultProvider,

@@ -1,5 +1,6 @@
 import type { AgentTask } from "../agents/types";
 import type { Project } from "../types/project";
+import type { AgentTaskDataRoomRetrievalConfig } from "../schemas/data-room-retrieval";
 import { AgentExecutor } from "../agents/executor";
 import { globalTaskStore } from "../agents/task-store";
 import { globalAgentRegistry, globalInstanceRegistry } from "../agents/registry";
@@ -16,6 +17,7 @@ export type WorkflowAgentStepConfig = {
   requiresApproval?: boolean;
   provider?: string;
   model?: string;
+  dataRoomRetrieval?: AgentTaskDataRoomRetrievalConfig;
 };
 
 export type WorkflowAgentAuditEntry = {
@@ -92,6 +94,7 @@ export async function executeWorkflowAgentStep(options: {
       workflowRunId,
       departmentId,
       instructions: step.instructions,
+      dataRoomRetrieval: step.dataRoomRetrieval,
       status: "queued",
       approvalStatus: step.requiresApproval ? "pending" : "not_required",
       priority: "high",

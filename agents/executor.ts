@@ -6,6 +6,8 @@ import type { AgentInstanceRegistry, AgentRegistry } from "./registry";
 import type { AgentTaskStore } from "./task-store";
 import type { AgentExecution, AgentTask } from "./types";
 import type { AIProviderRegistry } from "../ai/provider-registry";
+import { loadProject } from "../src/storage/projectStore.js";
+import { retrieveDataRoomContext } from "../services/data-room-retrieval-service";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -136,6 +138,31 @@ function mapProviderError(error: unknown): AgentExecutorError {
   });
 }
 
+async function resolveTaskClientId(task: AgentTask): Promise<string | null> {
+  const explicitClientId =
+    task.dataRoomRetrieval &&
+    typeof task.dataRoomRetrieval.clientId === "string" &&
+    task.dataRoomRetrieval.clientId.trim().length > 0
+      ? task.dataRoomRetrieval.clientId.trim()
+      : null;
+
+  if (explicitClientId) {
+    return explicitClientId;
+  }
+
+  const entityId = task.engagementId || task.projectId;
+  if (!entityId) {
+    return null;
+  }
+
+  try {
+    const project = await loadProject(entityId);
+    return project.clientId || project.id;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // AgentExecutor
 // ---------------------------------------------------------------------------
@@ -156,10 +183,11 @@ function mapProviderError(error: unknown): AgentExecutorError {
  * 10. Determine execution attempt number
  * 11. Create execution record (status: running)
  * 12. Update task status to running
- * 13. Call agent.execute(task, provider)
- * 14. On success: persist output, mark task + execution completed
- * 15. On failure: persist error, mark task + execution failed
- * 16. Return normalized ExecutorResult
+ * 13. Optionally retrieve safe data-room context (if enabled)
+ * 14. Call agent.execute(task, provider)
+ * 15. On success: persist output, mark task + execution completed
+ * 16. On failure: persist error, mark task + execution failed
+ * 17. Return normalized ExecutorResult
  */
 export class AgentExecutor {
   private readonly taskStore: AgentTaskStore;
@@ -386,10 +414,93 @@ export class AgentExecutor {
     };
     await this.taskStore.saveTask(runningTask);
 
-    // ----- Steps 13–16: Call provider, handle result -----
+    let executionTask = runningTask;
+    let retrievalContext: Awaited<ReturnType<typeof retrieveDataRoomContext>> | null = null;
+
+    if (runningTask.dataRoomRetrieval?.enabled === true) {
+      const clientId = await resolveTaskClientId(runningTask);
+      if (!clientId) {
+        return {
+          ok: false,
+          error: new AgentExecutorError({
+            code: "invalid_task_input",
+            message:
+              "Data room retrieval enabled, but no client context could be resolved from task.",
+            taskId,
+            agentId: task.agentId,
+          }),
+          task: runningTask,
+          execution,
+        };
+      }
+
+      try {
+        retrievalContext = await retrieveDataRoomContext({
+          clientId,
+          engagementId: runningTask.engagementId || undefined,
+          agentId: runningTask.agentId,
+          agentPermissions: definition.permissions,
+          taskId: runningTask.id,
+          query: runningTask.dataRoomRetrieval.query || runningTask.objective,
+          documentTypes: runningTask.dataRoomRetrieval.documentTypes || [],
+          folderIds: runningTask.dataRoomRetrieval.folderIds || [],
+          fileIds: runningTask.dataRoomRetrieval.fileIds || [],
+          keywords: runningTask.dataRoomRetrieval.keywords || [],
+          maxDocuments: runningTask.dataRoomRetrieval.maxDocuments || 5,
+          maxExcerpts: runningTask.dataRoomRetrieval.maxExcerpts || 12,
+          maxCharacters: runningTask.dataRoomRetrieval.maxCharacters || 280,
+          maxTotalCharacters: runningTask.dataRoomRetrieval.maxTotalCharacters || 2400,
+          includeSummaries: runningTask.dataRoomRetrieval.includeSummaries ?? true,
+          includePreviews: runningTask.dataRoomRetrieval.includePreviews ?? true,
+          allowSensitive: runningTask.dataRoomRetrieval.allowSensitive ?? false,
+        });
+
+        executionTask = {
+          ...runningTask,
+          context: {
+            ...(runningTask.context || {}),
+            dataRoomRetrieval: {
+              retrievalAuditId: retrievalContext.retrievalAuditId,
+              query: runningTask.dataRoomRetrieval.query || runningTask.objective,
+              sources: retrievalContext.sources,
+              excerpts: retrievalContext.excerpts,
+              summaries: retrievalContext.summaries,
+              warnings: retrievalContext.warnings,
+              totalCharacters: retrievalContext.totalCharacters,
+              confidence: retrievalContext.confidence,
+            },
+          },
+          updatedAt: new Date().toISOString(),
+        };
+        await this.taskStore.saveTask(executionTask);
+      } catch (retrievalError) {
+        if (retrievalError instanceof AgentExecutorError) {
+          return {
+            ok: false,
+            error: retrievalError,
+            task: runningTask,
+            execution,
+          };
+        }
+
+        return {
+          ok: false,
+          error: new AgentExecutorError({
+            code: "provider_request_failed",
+            message: "Data room retrieval failed before agent execution.",
+            taskId,
+            agentId: task.agentId,
+          }),
+          task: runningTask,
+          execution,
+        };
+      }
+    }
+
+    // ----- Steps 13–17: Call provider, handle result -----
     let output: unknown;
     try {
-      output = await agent.execute(runningTask, provider);
+      output = await agent.execute(executionTask, provider);
     } catch (providerError) {
       const executorError = mapProviderError(providerError);
       const failedAt = new Date().toISOString();
@@ -403,7 +514,7 @@ export class AgentExecutor {
       await this.executionStore.saveExecution(failedExecution);
 
       const failedTask: AgentTask = {
-        ...runningTask,
+        ...executionTask,
         status: "failed",
         failedAt,
         error: toSafeError(providerError),
@@ -438,12 +549,36 @@ export class AgentExecutor {
     };
     await this.executionStore.saveExecution(completedExecution);
 
+    const retrievalEvidence =
+      retrievalContext?.sources.map((source) => {
+        const excerpt = retrievalContext?.excerpts.find(
+          (candidate) =>
+            candidate.documentId === source.documentId && candidate.fileId === source.fileId,
+        );
+
+        return {
+          type: "document" as const,
+          title: `${source.citationLabel} - ${source.displayName}`,
+          content: excerpt?.text || "No excerpt available.",
+          source: source.documentId,
+          confidence: excerpt?.confidence ?? retrievalContext?.confidence ?? 0.6,
+          retrievedAt: completedAt,
+        };
+      }) || [];
+
     const completedTask: AgentTask = {
-      ...runningTask,
+      ...executionTask,
       status: "completed",
       completedAt,
       structuredOutput,
       output: typeof output === "object" ? JSON.stringify(output) : String(output),
+      evidence: [...(executionTask.evidence || []), ...retrievalEvidence],
+      sources: [
+        ...(executionTask.sources || []),
+        ...((retrievalContext?.sources || []).map(
+          (source) => `${source.citationLabel}: ${source.displayName}`,
+        )),
+      ],
       updatedAt: completedAt,
     };
     await this.taskStore.saveTask(completedTask);

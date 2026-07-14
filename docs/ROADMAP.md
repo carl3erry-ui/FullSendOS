@@ -111,6 +111,24 @@ This slice explicitly excludes:
 - Client portal, export, or email workflow integrations
 - Exposure of raw private file text in public APIs
 
+## Slice 13 Scope Note
+
+Agent Retrieval from Data Room is implemented as an internal retrieval layer
+integrated into task execution with explicit task opt-in. This slice includes:
+
+- Retrieval permission gating via `RETRIEVE_DATA_ROOM_CONTEXT`
+- Eligibility filtering for approved, non-sensitive, completed documents
+- Bounded excerpts and citation-ready source references for agent context
+- Retrieval audit records linked to task and agent identifiers
+- Safe source visibility in agent task detail surfaces
+
+This slice explicitly excludes:
+
+- Broad public retrieval APIs
+- Full extracted text exposure in public responses
+- Embeddings or vector-search infrastructure
+- Client portal, exports, external integrations, and unrelated security scope
+
 ## Sprint 4
 
 - Client management
