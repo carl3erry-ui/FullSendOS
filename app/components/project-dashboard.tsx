@@ -605,7 +605,7 @@ export function ProjectDashboard() {
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
-            Human Input
+            Human Input / Action Center
           </button>
         </div>
 

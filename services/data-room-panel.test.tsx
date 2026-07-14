@@ -161,6 +161,10 @@ test("ProjectDashboard renders a visible Data Room entry point in the client wor
 
   assert.match(html, /Client workspace/);
   assert.match(html, /Data Room/);
+  assert.match(html, /Human Input \/ Action Center/);
+  assert.match(html, /Lifecycle visibility/);
+  assert.match(html, /Show archived/);
+  assert.match(html, /Show deleted/);
   assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials for the selected client\./);
 });
 

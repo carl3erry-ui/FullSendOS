@@ -57,6 +57,8 @@ test("AI Workforce tab renders in the dashboard", () => {
   const html = renderToStaticMarkup(React.createElement(ProjectDashboard));
   assert.match(html, /AI Workforce/);
   assert.match(html, /Engagements/);
+  assert.match(html, /Human Input \/ Action Center/);
+  assert.match(html, /Consulting command center/);
 });
 
 test("Agent list renders and hides private prompts", () => {
