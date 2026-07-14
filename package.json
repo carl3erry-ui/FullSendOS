@@ -1,16 +1,30 @@
 {
-  "name": "consulting-os-starter",
+  "name": "fullsendos",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
-    "test": "node src/self-test.js"
+    "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "start": "next start --hostname 0.0.0.0 --port 3000",
+    "test": "node --import tsx --test services/**/*.test.ts ai/**/*.test.ts departments/**/*.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "jsonrepair": "^3.15.0",
+    "next": "16.2.10",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
     "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.3",
+    "typescript": "^5.7.3"
   }
 }

@@ -18,12 +18,18 @@ export const ProjectStatusSchema = z.enum([
   "failed"
 ]);
 
+export const ProjectLifecycleStatusSchema = z.enum(["active", "archived", "deleted"]);
+
 export const ProjectSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   id: z.string().min(1),
+  clientId: z.string().min(1).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
   status: ProjectStatusSchema,
+  lifecycleStatus: ProjectLifecycleStatusSchema.default("active"),
+  archivedAt: z.string().optional(),
+  deletedAt: z.string().optional(),
 
   client: z.object({
     companyName: z.string().min(1),
@@ -73,6 +79,12 @@ export const ProjectSchema = z.object({
   }),
 
   audit: z.object({
+    activeRun: z.object({
+      id: z.string(),
+      startedAt: z.string(),
+      updatedAt: z.string(),
+      model: z.string()
+    }).nullable().default(null),
     runs: z.array(z.object({
       department: z.string(),
       startedAt: z.string(),
@@ -96,9 +108,11 @@ export function createEmptyProject(input) {
   return ProjectSchema.parse({
     schemaVersion: "1.0.0",
     id: `${slug}-${Date.now()}`,
+    clientId: input.clientId,
     createdAt: now,
     updatedAt: now,
     status: "draft",
+    lifecycleStatus: "active",
     client: {
       companyName: input.companyName,
       contactName: input.contactName,
@@ -132,6 +146,6 @@ export function createEmptyProject(input) {
       publishing: null
     },
     deliverables: { deckOutline: [] },
-    audit: { runs: [], warnings: [] }
+    audit: { activeRun: null, runs: [], warnings: [] }
   });
 }

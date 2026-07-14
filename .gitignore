@@ -1,6 +1,10 @@
 node_modules/
+.next/
 .env
+.env.local
 .env.*
 !.env.example
+*.zip
 data/
 *.log
+tsconfig.tsbuildinfo
