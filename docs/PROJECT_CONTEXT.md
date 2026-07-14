@@ -226,6 +226,25 @@ Validation policy:
 - Human confirmation is required to move uncertain facts into trusted client memory.
 - Missing critical evidence should be surfaced, not silently omitted.
 
+### Deliverable Export Foundation
+
+Deliverables should be exportable from safe work-product data.
+
+Current export formats:
+
+- Markdown
+- HTML
+- Plain text
+- JSON package
+
+Export outputs should contain consultant-grade sections (executive report, summary, deck outline, sources, assumptions, open questions, confirmations, confidence, next actions) while excluding unsafe internals.
+
+Not implemented in this phase:
+
+- PDF, DOCX, and PPTX generation
+- Email delivery flow
+- Client portal delivery flow
+
 ### Data Room Visibility Requirement (Slice 15)
 
 - Data Room should be visible in both client and engagement workflows.

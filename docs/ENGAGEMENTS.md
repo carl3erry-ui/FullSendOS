@@ -138,6 +138,41 @@ Evidence status semantics include:
 - Deliverable export to PDF, DOCX, or PPTX is not implemented.
 - Client-facing evidence portal views are not implemented.
 
+## Deliverable Export Foundation
+
+Supported export formats in this phase:
+
+- Markdown
+- HTML
+- Plain text
+- JSON export package
+
+Export packages include:
+
+- Executive report
+- One-page summary
+- Deck outline
+- Sources used
+- Assumptions
+- Open questions
+- Human confirmations
+- Confidence summary
+- Recommended next actions
+- Export metadata
+
+Export safety rules:
+
+- Do not include raw provider payloads.
+- Do not include private prompts.
+- Do not include stack traces.
+- Do not include storage paths or local file paths.
+- Do not include full extracted document text.
+
+Future delivery roadmap:
+
+- Add PDF, DOCX, and PPTX generation on top of this foundation.
+- Add share/email and client portal delivery workflows in later slices.
+
 ## Future Follow-ups
 
 - Add professional export pipelines for executive deliverables.
