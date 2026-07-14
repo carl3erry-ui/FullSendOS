@@ -17,6 +17,7 @@ export type WorkspaceProjectSummary = {
   companyName: string;
   objective: string;
   status: string;
+  lifecycleStatus?: "active" | "archived" | "deleted";
   updatedAt?: string;
   completedDepartments: number;
   totalDepartments: number;

@@ -17,6 +17,14 @@ type ProjectCardProps = {
   isSelected: boolean;
 };
 
+function formatStatusLabel(value: string) {
+  return value.replace(/-/g, " ");
+}
+
+function formatLifecycleLabel(value: "active" | "archived" | "deleted") {
+  return `Lifecycle: ${value}`;
+}
+
 export function ProjectCard({
   id,
   companyName,
@@ -52,11 +60,11 @@ export function ProjectCard({
         <div>
           <h3 className="font-medium">{companyName}</h3>
           <p className="text-sm text-slate-400">{objective || "No objective provided yet"}</p>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{lifecycleStatus}</p>
+          <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{formatLifecycleLabel(lifecycleStatus)}</p>
         </div>
         <div className="flex items-center gap-3">
           <span className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.2em] ${statusStyle}`}>
-            {status}
+            {formatStatusLabel(status)}
           </span>
           <button
             className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200"
@@ -68,8 +76,9 @@ export function ProjectCard({
             className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => onRun(id)}
             disabled={Boolean(runningProjectId) || status === "running" || lifecycleStatus !== "active"}
+            title={lifecycleStatus !== "active" ? "Restore this engagement before running workflow." : undefined}
           >
-            {runningProjectId === id ? "Running..." : status === "running" ? "Running" : "Run"}
+            {runningProjectId === id ? "Running..." : status === "running" ? "Running" : "Run Workflow"}
           </button>
         </div>
       </div>

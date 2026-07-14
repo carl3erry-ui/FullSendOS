@@ -173,7 +173,20 @@ test("top-level navigation uses executive, analysis, department, and evidence se
   assert.match(html, /Supporting Analysis/);
   assert.match(html, /Department Work Product/);
   assert.match(html, /Evidence and Unknowns/);
+  assert.match(html, /Human Input \/ Action Center/);
   assert.match(html, /Data Room/);
+});
+
+test("archived lifecycle state explains why workflow run is disabled", () => {
+  const html = renderViewer({
+    project: {
+      ...baseProject,
+      lifecycleStatus: "archived",
+    },
+  });
+
+  assert.match(html, /This engagement is archived\./);
+  assert.match(html, /Restore it to active before running workflow again\./);
 });
 
 test("department selector renders configured departments in department view", () => {

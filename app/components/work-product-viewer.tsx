@@ -38,9 +38,10 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 }
 
 function StatusPill({ status }: { status: string }) {
+  const label = status.replace(/-/g, " ");
   return (
     <span className="inline-flex w-fit rounded-full border border-slate-700 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-300">
-      {status}
+      {label}
     </span>
   );
 }
@@ -797,6 +798,8 @@ export function WorkProductViewer({
   const progressText = `${project.completedDepartments}/${project.totalDepartments} departments`;
   const runFailure = getLastPersistedFailure(detail);
   const isRunActive = project.status === "running" || runningProjectId === project.id;
+  const lifecycleStatus = project.lifecycleStatus || "active";
+  const canRun = lifecycleStatus === "active";
   const topSection = getTopLevelSection(activeSection);
   const selectedDepartment = getDepartmentSection(activeSection);
 
@@ -830,11 +833,18 @@ export function WorkProductViewer({
         <button
           className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => onRun(project.id)}
-          disabled={Boolean(runningProjectId) || project.status === "running"}
+          disabled={Boolean(runningProjectId) || project.status === "running" || !canRun}
+          title={!canRun ? "Restore this engagement before running workflow." : undefined}
         >
           {runningProjectId === project.id ? "Running..." : project.status === "running" ? "In Progress" : "Run engagement workflow"}
         </button>
       </div>
+
+      {!canRun && (
+        <div className="mt-4 rounded-xl border border-amber-800 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
+          This engagement is {lifecycleStatus}. Restore it to active before running workflow again.
+        </div>
+      )}
 
       {project.status === "draft" && (
         <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950/50 px-4 py-3 text-sm text-slate-300">
@@ -902,7 +912,7 @@ export function WorkProductViewer({
             onClick={() => onSectionChange("human-input")}
             type="button"
           >
-            Human Input
+            Human Input / Action Center
           </button>
           <button
             className={`rounded-lg border px-3 py-2 text-sm ${topSection === "data-room" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
