@@ -235,3 +235,7 @@ Reason:
 ## 9) Recommended Next Issue
 
 - `Enforce lifecycle guardrails for workflow run endpoint (block archived/deleted engagements with clear message)`
+
+## 10) Resolution Follow-Up
+
+- Lifecycle workflow guardrail has been fixed: archived/deleted engagements are now blocked from workflow execution and must be restored before running.

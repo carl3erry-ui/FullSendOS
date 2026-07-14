@@ -44,10 +44,32 @@ export function normalizeRouteError(error: unknown): RouteError {
   return { status: 500, message };
 }
 
+function normalizeLifecycleStatus(project: { lifecycleStatus?: string }) {
+  return project.lifecycleStatus || "active";
+}
+
+function notRunnableLifecycleResponse(lifecycleStatus: string) {
+  return NextResponse.json(
+    {
+      error: {
+        code: "ENGAGEMENT_NOT_RUNNABLE",
+        message: "This engagement cannot be run because it is archived or deleted. Restore the engagement before running the workflow.",
+        status: lifecycleStatus,
+      },
+    },
+    { status: 409 },
+  );
+}
+
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const project = await loadProject(id);
+    const lifecycleStatus = normalizeLifecycleStatus(project);
+
+    if (lifecycleStatus !== "active") {
+      return notRunnableLifecycleResponse(lifecycleStatus);
+    }
 
     const blockingRequests = await listHumanInputRequests({
       engagementId: project.id,
