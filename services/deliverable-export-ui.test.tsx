@@ -20,6 +20,18 @@ test("deliverable export panel renders controls and empty state", () => {
   assert.match(html, /Export TEXT/);
   assert.match(html, /Export JSON/);
   assert.match(html, /No exports have been generated yet\./);
+  assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
+});
+
+test("deliverable export panel shows loading state when auto-load is enabled", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(DeliverableExportPanel, {
+      engagementId: "ENG-EXPORT-LOADING",
+    }),
+  );
+
+  assert.match(html, /Loading exports\.\.\./);
+  assert.match(html, /Refreshing\.\.\./);
 });
 
 test("work product viewer exposes export deliverables tab", () => {
@@ -55,7 +67,12 @@ test("work product viewer exposes export deliverables tab", () => {
   );
 
   assert.match(html, /Export Deliverables/);
-  assert.match(html, /No exports have been generated yet\./);
+  assert.match(html, /Loading exports\.\.\./);
   assert.match(html, /Data Room/);
   assert.match(html, /Human Input \/ Action Center/);
+  assert.match(html, /Export MARKDOWN/);
+  assert.match(html, /Export HTML/);
+  assert.match(html, /Export TEXT/);
+  assert.match(html, /Export JSON/);
+  assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
 });
