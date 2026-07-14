@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDeliverableExport } from "./deliverable-export-service";
+import {
+  buildDeliverableExport,
+  buildSafeExportFilename,
+} from "./deliverable-export-service";
+import { resolveDeliverableTemplate } from "./deliverable-template-service";
 import type { EngagementDetail } from "@/app/components/work-product-model";
+
+function requireTemplate(id: "executive-standard" | "client-ready" | "investor-brief" | "internal-review") {
+  const template = resolveDeliverableTemplate(id, "markdown");
+  assert.ok(template, `Template ${id} should resolve`);
+  return template;
+}
 
 function makeDetail(overrides: Partial<EngagementDetail> = {}): EngagementDetail {
   return {
@@ -92,6 +102,7 @@ test("markdown export includes core deliverable sections", () => {
     clientName: "Hardware Brewery",
     detail: makeDetail(),
     format: "markdown",
+    template: requireTemplate("executive-standard"),
   });
 
   assert.equal(result.format, "markdown");
@@ -108,11 +119,12 @@ test("html export uses semantic safe markup", () => {
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
     format: "html",
+    template: requireTemplate("executive-standard"),
   });
 
   assert.equal(result.format, "html");
   assert.match(result.content, /<!doctype html>/i);
-  assert.match(result.content, /<section>/);
+  assert.match(result.content, /<section class="card">/);
   assert.doesNotMatch(result.content, /<script/i);
 });
 
@@ -122,6 +134,7 @@ test("text export includes all major sections", () => {
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
     format: "text",
+    template: requireTemplate("executive-standard"),
   });
 
   assert.equal(result.format, "text");
@@ -137,12 +150,13 @@ test("json export package is structured and safe", () => {
     engagementTitle: "Hardware Brewery",
     detail: makeDetail(),
     format: "json",
+    template: requireTemplate("executive-standard"),
   });
 
   assert.equal(result.format, "json");
-  const parsed = JSON.parse(result.content) as { executiveReport?: string; exportMetadata?: string };
-  assert.equal(typeof parsed.executiveReport, "string");
-  assert.equal(typeof parsed.exportMetadata, "string");
+  const parsed = JSON.parse(result.content) as { sections?: Array<{ title: string; content: string }> };
+  assert.equal(Array.isArray(parsed.sections), true);
+  assert.ok(parsed.sections?.some((section) => section.title === "Executive Report"));
 });
 
 test("export handles missing optional sections gracefully", () => {
@@ -178,6 +192,7 @@ test("export handles missing optional sections gracefully", () => {
       },
     }),
     format: "markdown",
+    template: requireTemplate("executive-standard"),
   });
 
   assert.match(result.content, /No executive report recorded\./);
@@ -230,6 +245,7 @@ test("export safety excludes unsafe fields", () => {
     engagementTitle: "Unsafe Check",
     detail: unsafeDetail,
     format: "text",
+    template: requireTemplate("internal-review"),
   });
 
   assert.doesNotMatch(result.content, /storagePath/i);
@@ -237,4 +253,71 @@ test("export safety excludes unsafe fields", () => {
   assert.doesNotMatch(result.content, /textExtracted/i);
   assert.equal(result.safetySummary.storagePathExcluded, true);
   assert.equal(result.safetySummary.providerPayloadExcluded, true);
+});
+
+test("template metadata is stored on export record", () => {
+  const result = buildDeliverableExport({
+    engagementId: "EXPORT-ENG-TEMPLATE",
+    engagementTitle: "Template Co",
+    detail: makeDetail(),
+    format: "markdown",
+    template: requireTemplate("client-ready"),
+  });
+
+  assert.equal(result.templateId, "client-ready");
+  assert.equal(result.templateName, "Client Ready");
+  assert.equal(result.templateVersion, "1.0.0");
+});
+
+test("client-ready template renders client-facing section set", () => {
+  const result = buildDeliverableExport({
+    engagementId: "EXPORT-ENG-CLIENT",
+    engagementTitle: "Client Co",
+    detail: makeDetail(),
+    format: "markdown",
+    template: requireTemplate("client-ready"),
+  });
+
+  assert.match(result.content, /## Executive Summary/);
+  assert.match(result.content, /## Recommendations/);
+  assert.match(result.content, /## Next Actions/);
+  assert.doesNotMatch(result.content, /## Human Confirmations/);
+  assert.doesNotMatch(result.content, /## Assumptions/);
+});
+
+test("investor-brief template renders investor section set", () => {
+  const result = buildDeliverableExport({
+    engagementId: "EXPORT-ENG-INVESTOR",
+    engagementTitle: "Investor Co",
+    detail: makeDetail(),
+    format: "markdown",
+    template: requireTemplate("investor-brief"),
+  });
+
+  assert.match(result.content, /## Investment Thesis/);
+  assert.match(result.content, /## Opportunity Summary/);
+  assert.match(result.content, /## Risks/);
+  assert.match(result.content, /## Evidence/);
+});
+
+test("filename slug removes unsafe characters and uses correct extension", () => {
+  const filename = buildSafeExportFilename({
+    engagementTitle: "Hardware Brewery: Test / Engagement #1",
+    format: "markdown",
+    generatedAtIso: "2026-07-14T15:10:00.000Z",
+  });
+
+  assert.match(filename, /^hardware-brewery-test-engagement-1-deliverable-markdown-2026-07-14\.md$/);
+  assert.doesNotMatch(filename, /[^a-z0-9._-]/);
+});
+
+test("filename length is safely bounded", () => {
+  const filename = buildSafeExportFilename({
+    engagementTitle: "A".repeat(300),
+    format: "json",
+    generatedAtIso: "2026-07-14T15:10:00.000Z",
+  });
+
+  assert.ok(filename.length <= 100);
+  assert.match(filename, /\.json$/);
 });

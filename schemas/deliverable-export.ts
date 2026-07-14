@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DeliverableTemplateIdSchema } from "./deliverable-template";
 
 export const DeliverableExportFormatSchema = z.enum(["markdown", "html", "text", "json"]);
 export type DeliverableExportFormat = z.infer<typeof DeliverableExportFormatSchema>;
@@ -41,6 +42,9 @@ export const DeliverableExportSchema = z.object({
   engagementId: z.string().min(1),
   clientId: z.string().optional(),
   format: DeliverableExportFormatSchema,
+  templateId: DeliverableTemplateIdSchema,
+  templateName: z.string().min(1),
+  templateVersion: z.string().min(1),
   filename: z.string().min(1),
   title: z.string().min(1),
   status: DeliverableExportStatusSchema,
@@ -62,5 +66,6 @@ export type DeliverableExportSummary = z.infer<typeof DeliverableExportSummarySc
 
 export const DeliverableExportCreateInputSchema = z.object({
   format: DeliverableExportFormatSchema,
+  templateId: DeliverableTemplateIdSchema.optional(),
 });
 export type DeliverableExportCreateInput = z.infer<typeof DeliverableExportCreateInputSchema>;

@@ -173,6 +173,59 @@ Future delivery roadmap:
 - Add PDF, DOCX, and PPTX generation on top of this foundation.
 - Add share/email and client portal delivery workflows in later slices.
 
+## Export File Downloads + Branded Templates
+
+The export foundation now supports direct file download and built-in branded templates.
+
+Download routes:
+
+- `GET /api/projects/[id]/exports/[exportId]/download`
+- `GET /api/engagements/[id]/exports/[exportId]/download`
+
+Download behavior:
+
+- Validates engagement/project exists.
+- Validates export exists and belongs to that engagement/project.
+- Returns `Content-Disposition: attachment` with a safe filename.
+- Returns format-specific content type.
+
+Supported content types:
+
+- Markdown: `text/markdown; charset=utf-8`
+- HTML: `text/html; charset=utf-8`
+- Text: `text/plain; charset=utf-8`
+- JSON: `application/json; charset=utf-8`
+
+Built-in templates:
+
+- `executive-standard`
+- `client-ready`
+- `investor-brief`
+- `internal-review`
+
+Template API:
+
+- `GET /api/deliverable-templates`
+
+Export generation accepts:
+
+- `format`
+- `templateId` (optional; defaults to `executive-standard`)
+
+Filename rules:
+
+- Uses engagement/client slug + deliverable marker + format + date.
+- Removes unsafe characters.
+- Uses format-correct file extension.
+- Bounded length to keep filenames portable.
+
+Current limitations:
+
+- No PDF/DOCX/PPTX generation yet.
+- No template editor yet.
+- No Client Portal delivery yet.
+- No email/share flow yet.
+
 ## Future Follow-ups
 
 - Add professional export pipelines for executive deliverables.

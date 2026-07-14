@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadProject } from "../../../../../src/storage/projectStore.js";
 import { buildWorkProductEvidenceForDetail } from "@/services/work-product-evidence";
 import { buildDeliverableExport } from "@/services/deliverable-export-service";
+import { resolveDeliverableTemplate } from "@/services/deliverable-template-service";
 import {
   createDeliverableExport,
   listDeliverableExports,
@@ -107,6 +108,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       );
     }
 
+    const template = resolveDeliverableTemplate(input.templateId, input.format);
+    if (!template) {
+      return NextResponse.json(
+        { error: "Invalid template selection for the requested format." },
+        { status: 422 },
+      );
+    }
+
     const record = buildDeliverableExport({
       engagementId: id,
       clientId: project.clientId || undefined,
@@ -115,6 +124,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       sourceWorkProductId: `${id}:${project.updatedAt || "latest"}`,
       detail,
       format: input.format,
+      template,
     });
 
     const created = await createDeliverableExport(record);
