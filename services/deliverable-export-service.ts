@@ -5,6 +5,7 @@ import {
   type DeliverableExport,
   type DeliverableExportFormat,
 } from "@/schemas/deliverable-export";
+import type { DeliverableTemplate } from "@/schemas/deliverable-template";
 
 const UNSAFE_PATTERN = /(storagePath|textExtracted|rawProviderResponse|systemPrompt|apiKey|diagnosticTrace|stack|token|secret|hidden reasoning)/i;
 
@@ -16,9 +17,10 @@ type BuildDeliverableExportParams = {
   sourceWorkProductId?: string;
   detail: EngagementDetail;
   format: DeliverableExportFormat;
+  template: DeliverableTemplate;
 };
 
-type SectionBundle = {
+type SectionMap = {
   executiveReport: string;
   onePageSummary: string;
   deckOutline: string;
@@ -31,6 +33,11 @@ type SectionBundle = {
   exportMetadata: string;
 };
 
+type RenderedSection = {
+  title: string;
+  content: string;
+};
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -41,6 +48,17 @@ function safeText(input: unknown, fallback = "Not available"): string {
   if (!trimmed) return fallback;
   if (UNSAFE_PATTERN.test(trimmed)) return fallback;
   return trimmed;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 function escapeHtml(text: string): string {
@@ -61,7 +79,7 @@ function sanitizeDetail(detail: EngagementDetail): EngagementDetail {
   return JSON.parse(serialized) as EngagementDetail;
 }
 
-function buildSections(params: BuildDeliverableExportParams): SectionBundle {
+function buildSections(params: BuildDeliverableExportParams): SectionMap {
   const detail = sanitizeDetail(params.detail);
   const deliverables = detail.deliverables || {};
   const evidenceSummary = deliverables.evidenceSummary;
@@ -132,6 +150,7 @@ function buildSections(params: BuildDeliverableExportParams): SectionBundle {
     `Generated at: ${nowIso()}`,
     `Engagement: ${safeText(params.engagementTitle, params.engagementId)}`,
     `Client: ${safeText(params.clientName, "Not available")}`,
+    `Template: ${params.template.name} (${params.template.id})`,
     `Evidence references: ${evidenceReferences.length}`,
     `Assumptions: ${Array.isArray(evidenceSummary?.assumptions) ? evidenceSummary.assumptions.length : 0}`,
     `Open questions: ${Array.isArray(evidenceSummary?.openQuestions) ? evidenceSummary.openQuestions.length : 0}`,
@@ -153,165 +172,159 @@ function buildSections(params: BuildDeliverableExportParams): SectionBundle {
   };
 }
 
-function renderMarkdown(sections: SectionBundle): string {
-  return [
-    "# Engagement Deliverable",
-    "",
-    "## Executive Report",
-    sections.executiveReport,
-    "",
-    "## One-Page Summary",
-    sections.onePageSummary,
-    "",
-    "## Deck Outline",
-    sections.deckOutline,
-    "",
-    "## Sources Used",
-    sections.sourcesUsed,
-    "",
-    "## Assumptions",
-    sections.assumptions,
-    "",
-    "## Open Questions",
-    sections.openQuestions,
-    "",
-    "## Human Confirmations",
-    sections.humanConfirmations,
-    "",
-    "## Confidence Summary",
-    sections.confidenceSummary,
-    "",
-    "## Recommended Next Actions",
-    sections.recommendedNextActions,
-    "",
-    "## Export Metadata",
-    sections.exportMetadata,
-    "",
-  ].join("\n");
+function mapTemplateSections(template: DeliverableTemplate, sections: SectionMap): RenderedSection[] {
+  const mapped: RenderedSection[] = [];
+
+  const include = {
+    sources: template.includeSources,
+    assumptions: template.includeAssumptions,
+    openQuestions: template.includeOpenQuestions,
+    confirmations: template.includeHumanConfirmations,
+    confidence: template.includeConfidenceSummary,
+    metadata: template.includeMetadata,
+  };
+
+  for (const title of template.sections) {
+    if (title === "Executive Report") mapped.push({ title, content: sections.executiveReport });
+    else if (title === "One-Page Summary") mapped.push({ title, content: sections.onePageSummary });
+    else if (title === "Deck Outline") mapped.push({ title, content: sections.deckOutline });
+    else if (title === "Sources Used" && include.sources) mapped.push({ title, content: sections.sourcesUsed });
+    else if (title === "Assumptions" && include.assumptions) mapped.push({ title, content: sections.assumptions });
+    else if (title === "Open Questions" && include.openQuestions) mapped.push({ title, content: sections.openQuestions });
+    else if (title === "Human Confirmations" && include.confirmations) mapped.push({ title, content: sections.humanConfirmations });
+    else if (title === "Confidence Summary" && include.confidence) mapped.push({ title, content: sections.confidenceSummary });
+    else if (title === "Recommended Next Actions") mapped.push({ title, content: sections.recommendedNextActions });
+    else if (title === "Executive Summary") mapped.push({ title, content: sections.onePageSummary });
+    else if (title === "Recommendations") mapped.push({ title, content: sections.executiveReport });
+    else if (title === "Next Actions") mapped.push({ title, content: sections.recommendedNextActions });
+    else if (title === "Investment Thesis") mapped.push({ title, content: sections.executiveReport });
+    else if (title === "Opportunity Summary") mapped.push({ title, content: sections.onePageSummary });
+    else if (title === "Risks") mapped.push({ title, content: sections.openQuestions });
+    else if (title === "Evidence") mapped.push({ title, content: sections.sourcesUsed });
+    else if (title === "Export Metadata" && include.metadata) mapped.push({ title, content: sections.exportMetadata });
+  }
+
+  return mapped;
 }
 
-function renderText(sections: SectionBundle): string {
-  return [
-    "ENGAGEMENT DELIVERABLE",
-    "====================",
-    "",
-    "EXECUTIVE REPORT",
-    "----------------",
-    sections.executiveReport,
-    "",
-    "ONE-PAGE SUMMARY",
-    "----------------",
-    sections.onePageSummary,
-    "",
-    "DECK OUTLINE",
-    "------------",
-    sections.deckOutline,
-    "",
-    "SOURCES USED",
-    "------------",
-    sections.sourcesUsed,
-    "",
-    "ASSUMPTIONS",
-    "-----------",
-    sections.assumptions,
-    "",
-    "OPEN QUESTIONS",
-    "--------------",
-    sections.openQuestions,
-    "",
-    "HUMAN CONFIRMATIONS",
-    "-------------------",
-    sections.humanConfirmations,
-    "",
-    "CONFIDENCE SUMMARY",
-    "------------------",
-    sections.confidenceSummary,
-    "",
-    "RECOMMENDED NEXT ACTIONS",
-    "------------------------",
-    sections.recommendedNextActions,
-    "",
-    "EXPORT METADATA",
-    "---------------",
-    sections.exportMetadata,
-    "",
-  ].join("\n");
+function renderMarkdown(renderedSections: RenderedSection[]): string {
+  const lines = ["# Engagement Deliverable", ""];
+  for (const section of renderedSections) {
+    lines.push(`## ${section.title}`);
+    lines.push(section.content);
+    lines.push("");
+  }
+  return lines.join("\n");
 }
 
-function renderHtml(sections: SectionBundle): string {
-  const block = (title: string, content: string) => `<section><h2>${escapeHtml(title)}</h2><pre>${escapeHtml(content)}</pre></section>`;
+function renderText(renderedSections: RenderedSection[]): string {
+  const lines = ["ENGAGEMENT DELIVERABLE", "====================", ""];
+  for (const section of renderedSections) {
+    lines.push(section.title.toUpperCase());
+    lines.push("-".repeat(section.title.length));
+    lines.push(section.content);
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+function renderHtml(renderedSections: RenderedSection[], params: BuildDeliverableExportParams): string {
+  const generatedDate = new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  const sectionsHtml = renderedSections
+    .map((section) => `
+      <section class="card">
+        <h2>${escapeHtml(section.title)}</h2>
+        <pre>${escapeHtml(section.content)}</pre>
+      </section>
+    `)
+    .join("\n");
 
   return [
     "<!doctype html>",
-    "<html lang=\"en\">",
+    '<html lang="en">',
     "<head>",
-    "<meta charset=\"utf-8\" />",
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />",
+    '<meta charset="utf-8" />',
+    '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     "<title>Engagement Deliverable Export</title>",
+    "<style>",
+    "body{margin:0;font-family:Arial,sans-serif;background:#f8fafc;color:#0f172a}",
+    "main{max-width:900px;margin:0 auto;padding:24px}",
+    ".header{border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:18px}",
+    ".meta{color:#475569;font-size:13px}",
+    ".card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:16px;margin-bottom:12px}",
+    "h1{margin:0 0 8px 0;font-size:28px}",
+    "h2{margin:0 0 10px 0;font-size:18px}",
+    "pre{white-space:pre-wrap;margin:0;font-family:inherit;line-height:1.4}",
+    "footer{border-top:1px solid #cbd5e1;margin-top:20px;padding-top:12px;color:#334155;font-size:12px}",
+    "</style>",
     "</head>",
     "<body>",
     "<main>",
-    "<h1>Engagement Deliverable</h1>",
-    block("Executive Report", sections.executiveReport),
-    block("One-Page Summary", sections.onePageSummary),
-    block("Deck Outline", sections.deckOutline),
-    block("Sources Used", sections.sourcesUsed),
-    block("Assumptions", sections.assumptions),
-    block("Open Questions", sections.openQuestions),
-    block("Human Confirmations", sections.humanConfirmations),
-    block("Confidence Summary", sections.confidenceSummary),
-    block("Recommended Next Actions", sections.recommendedNextActions),
-    block("Export Metadata", sections.exportMetadata),
+    '<header class="header">',
+    `<h1>${escapeHtml(params.template.brandName)} Deliverable</h1>`,
+    `<div class="meta">Engagement: ${escapeHtml(params.engagementTitle)} | Generated: ${escapeHtml(generatedDate)} | Template: ${escapeHtml(params.template.name)}</div>`,
+    "</header>",
+    sectionsHtml,
+    `<footer>Export metadata is included per template settings. Safety filters applied by FullSendOS.</footer>`,
     "</main>",
     "</body>",
     "</html>",
   ].join("\n");
 }
 
-function renderJson(sections: SectionBundle): string {
+function renderJson(renderedSections: RenderedSection[]): string {
   return JSON.stringify(
     {
-      executiveReport: sections.executiveReport,
-      onePageSummary: sections.onePageSummary,
-      deckOutline: sections.deckOutline,
-      sourcesUsed: sections.sourcesUsed,
-      assumptions: sections.assumptions,
-      openQuestions: sections.openQuestions,
-      humanConfirmations: sections.humanConfirmations,
-      confidenceSummary: sections.confidenceSummary,
-      recommendedNextActions: sections.recommendedNextActions,
-      exportMetadata: sections.exportMetadata,
+      sections: renderedSections,
     },
     null,
     2,
   );
 }
 
-function contentTypeFor(format: DeliverableExportFormat): string {
+export function contentTypeFor(format: DeliverableExportFormat): string {
   if (format === "markdown") return "text/markdown; charset=utf-8";
   if (format === "html") return "text/html; charset=utf-8";
   if (format === "json") return "application/json; charset=utf-8";
   return "text/plain; charset=utf-8";
 }
 
-function extensionFor(format: DeliverableExportFormat): string {
+export function extensionFor(format: DeliverableExportFormat): string {
   if (format === "markdown") return "md";
   if (format === "html") return "html";
   if (format === "json") return "json";
   return "txt";
 }
 
-function renderContent(format: DeliverableExportFormat, sections: SectionBundle): string {
-  if (format === "markdown") return renderMarkdown(sections);
-  if (format === "html") return renderHtml(sections);
-  if (format === "json") return renderJson(sections);
-  return renderText(sections);
+export function buildSafeExportFilename(input: {
+  engagementTitle?: string;
+  clientName?: string;
+  format: DeliverableExportFormat;
+  generatedAtIso: string;
+}): string {
+  const base = slugify(input.clientName || input.engagementTitle || "engagement");
+  const date = input.generatedAtIso.slice(0, 10);
+  const root = `${base || "engagement"}-deliverable-${input.format}-${date}`;
+  const trimmed = root.slice(0, 90).replace(/-+$/g, "");
+  return `${trimmed}.${extensionFor(input.format)}`;
+}
+
+function renderContent(
+  format: DeliverableExportFormat,
+  renderedSections: RenderedSection[],
+  params: BuildDeliverableExportParams,
+): string {
+  if (format === "markdown") return renderMarkdown(renderedSections);
+  if (format === "html") return renderHtml(renderedSections, params);
+  if (format === "json") return renderJson(renderedSections);
+  return renderText(renderedSections);
 }
 
 export function buildDeliverableExport(params: BuildDeliverableExportParams): DeliverableExport {
   const generatedAt = nowIso();
   const sections = buildSections(params);
-  const content = renderContent(params.format, sections);
+  const renderedSections = mapTemplateSections(params.template, sections);
+  const content = renderContent(params.format, renderedSections, params);
   const byteSize = Buffer.byteLength(content, "utf8");
   const checksum = createHash("sha256").update(content).digest("hex");
   const exportId = `exp-${randomBytes(10).toString("hex")}`;
@@ -321,25 +334,22 @@ export function buildDeliverableExport(params: BuildDeliverableExportParams): De
     ? params.detail.deliverables?.evidenceReferences
     : [];
 
-  const includedSections = [
-    "Executive Report",
-    "One-Page Summary",
-    "Deck Outline",
-    "Sources Used",
-    "Assumptions",
-    "Open Questions",
-    "Human Confirmations",
-    "Confidence Summary",
-    "Recommended Next Actions",
-    "Export Metadata",
-  ];
+  const includedSections = renderedSections.map((section) => section.title);
 
   return DeliverableExportSchema.parse({
     id: exportId,
     engagementId: params.engagementId,
     clientId: params.clientId,
     format: params.format,
-    filename: `${params.engagementId}-deliverable-${generatedAt.replace(/[:.]/g, "-")}.${extensionFor(params.format)}`,
+    templateId: params.template.id,
+    templateName: params.template.name,
+    templateVersion: params.template.version,
+    filename: buildSafeExportFilename({
+      engagementTitle: params.engagementTitle,
+      clientName: params.clientName,
+      format: params.format,
+      generatedAtIso: generatedAt,
+    }),
     title: `${params.engagementTitle} Deliverable Export`,
     status: "created",
     createdAt: generatedAt,
@@ -358,7 +368,7 @@ export function buildDeliverableExport(params: BuildDeliverableExportParams): De
       assumptionCount: Array.isArray(evidenceSummary?.assumptions) ? evidenceSummary.assumptions.length : 0,
       openQuestionCount: Array.isArray(evidenceSummary?.openQuestions) ? evidenceSummary.openQuestions.length : 0,
       humanConfirmationCount: Array.isArray(evidenceSummary?.humanConfirmations) ? evidenceSummary.humanConfirmations.length : 0,
-      confidenceSummary: evidenceSummary?.confidenceSummary,
+      confidenceSummary: params.template.includeConfidenceSummary ? evidenceSummary?.confidenceSummary : undefined,
       limitations: [
         "No raw provider payloads are included.",
         "No private prompts are included.",
