@@ -7,7 +7,10 @@
     "dev": "next dev --webpack --hostname 0.0.0.0 --port 3000",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3000",
-    "test": "node --import tsx --test services/**/*.test.ts services/**/*.test.tsx ai/**/*.test.ts ai/**/*.test.tsx departments/**/*.test.ts departments/**/*.test.tsx"
+    "test": "node --import tsx --test services/**/*.test.ts services/**/*.test.tsx ai/**/*.test.ts ai/**/*.test.tsx departments/**/*.test.ts departments/**/*.test.tsx",
+    "verify:grok": "node --import tsx scripts/verify-grok-provider.ts",
+    "verify:agent-live": "node --import tsx scripts/verify-live-agent-task.ts",
+    "verify:agent-collaboration": "node --import tsx scripts/verify-agent-collaboration.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
