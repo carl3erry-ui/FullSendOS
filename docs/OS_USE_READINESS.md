@@ -220,3 +220,7 @@ Scenario: `Hardware Brewery Acquisition Review`
 - `confusing but usable`: export-before-work-product expectation not explicit enough for first-time operators.
 - `cosmetic`: docs cross-linking can be improved further.
 - `future feature`: DOCX/PPTX, portal delivery, email/share flow.
+
+## Resolution Follow-Up
+
+- Lifecycle workflow guardrail fixed: archived/deleted engagements are blocked from workflow execution and must be restored before running.
