@@ -347,10 +347,15 @@ export function DataRoomPanel({
         <div className="loading">Loading files...</div>
       ) : files.length === 0 ? (
         <div className="empty-state">
-          <p>No files have been added to this data room yet.</p>
+          <p className="empty-state-title">No files in the Data Room yet.</p>
           <p className="mt-2 text-sm text-gray-600">
-            Upload financials, brand assets, legal documents, real estate files, or other source materials.
+            The Data Room is the source of truth for the AI Workforce. Upload documents to improve output quality.
           </p>
+          <div className="category-hints">
+            {["Business Plan", "Financials", "Pitch Deck", "Brand Guide", "Market Research", "SOPs", "Investor Docs", "Property/Lease", "Other"].map((cat) => (
+              <span key={cat} className="category-tag">{cat}</span>
+            ))}
+          </div>
         </div>
       ) : (
         <>
@@ -593,6 +598,31 @@ export function DataRoomPanel({
           background-color: #dcfce7;
           color: #166534;
           border: 1px solid #86efac;
+        }
+
+        .empty-state-title {
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 0.25rem;
+        }
+
+        .category-hints {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-top: 0.75rem;
+          justify-content: center;
+        }
+
+        .category-tag {
+          display: inline-block;
+          padding: 0.2rem 0.6rem;
+          background-color: #f1f5f9;
+          color: #475569;
+          border: 1px solid #e2e8f0;
+          border-radius: 999px;
+          font-size: 0.72rem;
+          font-weight: 500;
         }
 
         .form-checkboxes {
