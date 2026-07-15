@@ -67,7 +67,12 @@ export function ProjectCard({
     <div className={`rounded-xl border p-4 ${isSelected ? "border-cyan-600 bg-slate-900/80" : "border-slate-800 bg-slate-950/70"}`}>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="font-medium">{companyName}</h3>
+          <h3 className="font-medium">
+            {companyName}
+            {id.startsWith("DEMO-APEX-ENG") && (
+              <span className="ml-2 rounded-full border border-indigo-700 bg-indigo-950/40 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] text-indigo-300">Demo</span>
+            )}
+          </h3>
           <p className="text-sm text-slate-400">{objective || "No objective provided yet"}</p>
           <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-slate-500">{formatLifecycleLabel(lifecycleStatus)}</p>
         </div>

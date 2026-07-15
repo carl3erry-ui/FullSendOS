@@ -1,8 +1,12 @@
 "use client";
 
+import { useState } from "react";
+
 type FirstRunDashboardProps = {
   onCreateClient: () => void;
   onCreateEngagement: () => void;
+  onTakeTour?: () => void;
+  onViewDemo?: () => void;
 };
 
 const SETUP_STEPS = [
@@ -47,7 +51,24 @@ const colorMap: Record<string, { border: string; bg: string; text: string; label
   emerald: { border: "border-emerald-800",bg: "bg-emerald-950/20",text: "text-emerald-200",label: "text-emerald-400",btn: "border-emerald-700 text-emerald-200 hover:border-emerald-500" },
 };
 
-export function FirstRunDashboard({ onCreateClient, onCreateEngagement }: FirstRunDashboardProps) {
+export function FirstRunDashboard({ onCreateClient, onCreateEngagement, onTakeTour, onViewDemo }: FirstRunDashboardProps) {
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  async function handleViewDemo() {
+    setIsSeedingDemo(true);
+    setDemoError(null);
+    try {
+      const response = await fetch("/api/demo/seed", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || "Demo seed failed");
+      onViewDemo?.();
+    } catch (error) {
+      setDemoError(error instanceof Error ? error.message : "Unable to load demo workspace.");
+      setIsSeedingDemo(false);
+    }
+  }
+
   return (
     <section className="space-y-10">
       {/* Hero */}
@@ -68,12 +89,25 @@ export function FirstRunDashboard({ onCreateClient, onCreateEngagement }: FirstR
             Start Client Onboarding
           </button>
           <button
-            onClick={onCreateEngagement}
-            className="rounded-xl border border-slate-600 bg-slate-800/60 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-400 hover:text-slate-50"
+            onClick={() => void handleViewDemo()}
+            disabled={isSeedingDemo}
+            className="rounded-xl border border-indigo-600 bg-indigo-950/30 px-5 py-3 text-sm font-medium text-indigo-200 transition hover:border-indigo-400 hover:bg-indigo-950/50 disabled:opacity-60"
           >
-            Create Quick Engagement
+            {isSeedingDemo ? "Loading demo…" : "View Demo Workspace"}
           </button>
+          {onTakeTour && (
+            <button
+              onClick={onTakeTour}
+              className="rounded-xl border border-slate-600 bg-slate-800/60 px-5 py-3 text-sm font-medium text-slate-200 transition hover:border-slate-400 hover:text-slate-50"
+            >
+              Take Guided Tour
+            </button>
+          )}
         </div>
+
+        {demoError && (
+          <p className="mt-3 text-sm text-rose-300">{demoError}</p>
+        )}
 
         {/* Capability pills */}
         <div className="mt-8 flex flex-wrap gap-2">
