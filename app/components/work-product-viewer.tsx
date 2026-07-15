@@ -14,6 +14,13 @@ import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
 import { EngagementHumanInputPanel } from "./engagement-human-input-panel";
 import { DataRoomPanel } from "./data-room-panel";
 import { DeliverableExportPanel } from "./deliverable-export-panel";
+import {
+  inferReadiness,
+  READINESS_LABELS,
+  READINESS_DISCLAIMER,
+  HUMAN_REVIEW_CHECKLIST,
+  isClientSafe,
+} from "@/services/deliverable-readiness";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -586,6 +593,11 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
     .map((item) => item.method || item.question)
     .filter((item): item is string => Boolean(item));
 
+  const readiness = inferReadiness(detail.status);
+  const readinessLabel = READINESS_LABELS[readiness];
+  const readinessDisclaimer = READINESS_DISCLAIMER[readiness];
+  const clientSafe = isClientSafe(readiness);
+
   if (!report && !onePageSummary && (!Array.isArray(deckOutline) || deckOutline.length === 0)) {
     return (
       <section className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
@@ -596,10 +608,19 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
 
   return (
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
-      <SectionHeading
-        title="Executive Brief"
-        subtitle="Final consulting outputs synthesized from validated department work product."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionHeading
+          title="Executive Brief"
+          subtitle="Final consulting outputs synthesized from validated department work product."
+        />
+        <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${clientSafe ? "border-emerald-700 bg-emerald-950/30 text-emerald-200" : "border-amber-700 bg-amber-950/30 text-amber-200"}`}>
+          {readinessLabel}
+        </span>
+      </div>
+
+      <div className={`rounded-lg border px-3 py-2 text-sm ${clientSafe ? "border-emerald-800 bg-emerald-950/20 text-emerald-200" : "border-amber-800 bg-amber-950/20 text-amber-200"}`}>
+        {readinessDisclaimer}
+      </div>
 
       <section className="space-y-4 rounded-xl border border-cyan-900/60 bg-cyan-950/20 p-4">
         <SectionHeading
@@ -695,6 +716,20 @@ function ExecutiveDeliverables({ detail }: { detail: EngagementDetail }) {
           </ul>
         </section>
       )}
+
+      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-amber-300">Human Review Checklist</p>
+        <p className="text-xs text-slate-400">Complete each item before approving this work product for client delivery.</p>
+        <ul className="space-y-2">
+          {HUMAN_REVIEW_CHECKLIST.map((item, index) => (
+            <li key={`review-${index}`} className="flex items-start gap-2 text-sm text-slate-300">
+              <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border border-slate-600 text-[10px] text-slate-500">✓</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-amber-400">Status: {readinessLabel} — {clientSafe ? "This work product has been marked as client-ready." : "This work product has not been approved for client delivery."}</p>
+      </section>
     </section>
   );
 }
