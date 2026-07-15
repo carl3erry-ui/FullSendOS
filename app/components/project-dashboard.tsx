@@ -8,7 +8,9 @@ import { ProjectWorkspace } from "./project-workspace";
 import { AIWorkforceSection } from "./ai-workforce-section";
 import { HumanInputCenter } from "./human-input-center";
 import { DataRoomPanel } from "./data-room-panel";
+import { ClientOnboardingWizard } from "./client-onboarding-wizard";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
+import type { ClientBaseline } from "@/schemas/client-baseline";
 import {
   createPollController,
   hasRunningProjects,
@@ -71,6 +73,7 @@ type ClientDetail = {
   updatedAt: string;
   engagementCount: number;
   engagements: ProjectSummary[];
+  baseline?: ClientBaseline;
 };
 
 type ClientFormState = {
@@ -120,6 +123,7 @@ export function ProjectDashboard() {
   const [isCreatingClient, setIsCreatingClient] = useState(false);
   const [isCreatingClientEngagement, setIsCreatingClientEngagement] = useState(false);
   const [isClientLoading, setIsClientLoading] = useState(true);
+  const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
   const [runningProjectId, setRunningProjectId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -222,11 +226,13 @@ export function ProjectDashboard() {
   useEffect(() => {
     if (!selectedClientId) {
       setSelectedClient(null);
+      setShowOnboardingWizard(false);
       return;
     }
 
     let active = true;
     setIsClientLoading(true);
+    setShowOnboardingWizard(false);
 
     (async () => {
       try {
@@ -559,6 +565,18 @@ export function ProjectDashboard() {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) || null;
   const selectedProjectStep = selectedProject ? Math.max(0, Math.min(selectedProject.completedDepartments, executivePipeline.length)) : 0;
+  const selectedClientBaseline = selectedClient?.baseline || null;
+  const baselineScore = selectedClientBaseline
+    ? [
+        selectedClientBaseline.companyOverview.companyName,
+        selectedClientBaseline.companyOverview.industry,
+        selectedClientBaseline.customers.targetCustomers,
+        selectedClientBaseline.goals.engagementPurpose,
+        selectedClientBaseline.availableDocuments.length ? "docs" : "",
+      ].filter((item) => Boolean(String(item).trim())).length
+    : 0;
+  const baselinePercent = Math.round((baselineScore / 5) * 100);
+  const needsOnboarding = !selectedClientBaseline || baselinePercent < 60;
   const estimatedMinutes = {
     min: Math.round(6 + requestedDeliverables.length * 1.2),
     max: Math.round(10 + requestedDeliverables.length * 1.6),
@@ -898,6 +916,95 @@ export function ProjectDashboard() {
                   </div>
                 </div>
 
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-100">Company Baseline</p>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Onboarding captures company context, customer profile, and operating constraints before running AI workflows.
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-[0.18em] text-cyan-300">Baseline completion</p>
+                      <p className="text-lg font-semibold text-cyan-100">{baselinePercent}%</p>
+                    </div>
+                  </div>
+
+                  {needsOnboarding ? (
+                    <div className="mt-3 rounded-lg border border-amber-700/60 bg-amber-950/20 px-3 py-2 text-sm text-amber-100">
+                      Complete onboarding to establish a stronger baseline before launching engagements.
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-emerald-700/60 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">
+                      Baseline is ready for engagement planning and AI execution.
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-200 hover:border-cyan-500"
+                      onClick={() => setShowOnboardingWizard((previous) => !previous)}
+                    >
+                      {showOnboardingWizard ? "Hide onboarding wizard" : "Complete onboarding"}
+                    </button>
+                    <button
+                      className="rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-slate-500"
+                      onClick={() => {
+                        window.location.assign(`/clients/new/onboarding?clientId=${selectedClient.id}`);
+                      }}
+                    >
+                      Open full-page onboarding
+                    </button>
+                  </div>
+
+                  {showOnboardingWizard && selectedClientBaseline && (
+                    <div className="mt-3">
+                      <ClientOnboardingWizard
+                        clientId={selectedClient.id}
+                        clientName={selectedClient.name}
+                        initialBaseline={selectedClientBaseline}
+                        onSaved={(baseline) => setSelectedClient((previous) => (previous ? { ...previous, baseline } : previous))}
+                        onComplete={(baseline) => {
+                          setSelectedClient((previous) => (previous ? { ...previous, baseline } : previous));
+                          setNotice("Client baseline saved. Next step: upload documents and create engagement.");
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-sm font-semibold text-slate-100">Next Steps</p>
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    <div className={`rounded-lg border px-3 py-2 text-sm ${needsOnboarding ? "border-amber-700 bg-amber-950/20 text-amber-100" : "border-emerald-700 bg-emerald-950/20 text-emerald-100"}`}>
+                      {needsOnboarding ? "Complete onboarding" : "Onboarding complete"}
+                    </div>
+                    <div className={`rounded-lg border px-3 py-2 text-sm ${selectedClient.engagementCount === 0 ? "border-amber-700 bg-amber-950/20 text-amber-100" : "border-emerald-700 bg-emerald-950/20 text-emerald-100"}`}>
+                      {selectedClient.engagementCount === 0 ? "Create first engagement" : "Engagement created"}
+                    </div>
+                    <div className="rounded-lg border border-cyan-800 bg-cyan-950/20 px-3 py-2 text-sm text-cyan-100">
+                      Upload documents
+                    </div>
+                    <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-300">
+                      Run AI Workforce and review deliverables
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-sm font-semibold text-slate-100">AI Recommendations</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Suggested engagement tracks inferred from baseline context.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(selectedClientBaseline?.recommendedEngagementTypes || ["Executive Baseline Discovery Sprint"]).slice(0, 4).map((item) => (
+                      <span key={item} className="rounded-full border border-cyan-800 bg-cyan-950/25 px-2 py-1 text-xs text-cyan-200">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-100">Client Data Room</p>
@@ -905,6 +1012,11 @@ export function ProjectDashboard() {
                       Source files for this client. Upload and review financials, legal documents, research, and other evidence here.
                     </p>
                   </div>
+                  {!needsOnboarding && selectedClient.engagementCount > 0 && (
+                    <div className="rounded-lg border border-emerald-800 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-100">
+                      Data Room is ready. After upload, run the engagement workflow and generate exports.
+                    </div>
+                  )}
                   <DataRoomPanel ownerId={selectedClient.id} scope="client" />
                 </div>
 

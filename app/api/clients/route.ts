@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "../../../src/schemas/clientSchema.js";
 import { listClients, saveClient } from "../../../src/storage/clientStore.js";
 import { listProjects } from "../../../src/storage/projectStore.js";
+import { ensureClientBaseline } from "@/services/client-baseline-store";
 
 function toClientSummary(client: {
   id: string;
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const client = createClient(payload);
     await saveClient(client);
+    await ensureClientBaseline(client.id, client.name);
     const [engagements] = await Promise.all([listProjects()]);
     const safeEngagements = engagements.filter((engagement): engagement is NonNullable<(typeof engagements)[number]> => Boolean(engagement));
     return NextResponse.json(toClientSummary(client, safeEngagements), { status: 201 });

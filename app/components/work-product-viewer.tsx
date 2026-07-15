@@ -2,6 +2,7 @@
 
 import {
   formatDepartmentName,
+  hasExecutiveDeliverables,
   getDepartmentRunStatus,
   getLastPersistedFailure,
   type DepartmentName,
@@ -812,6 +813,7 @@ export function WorkProductViewer({
   const canRun = lifecycleStatus === "active";
   const topSection = getTopLevelSection(activeSection);
   const selectedDepartment = getDepartmentSection(activeSection);
+  const hasDeliverables = hasExecutiveDeliverables(detail);
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -932,9 +934,10 @@ export function WorkProductViewer({
             Data Room
           </button>
           <button
-            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "exports" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
-            onClick={() => onSectionChange("exports")}
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "exports" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"} ${!hasDeliverables ? "opacity-60" : ""}`}
+            onClick={() => hasDeliverables && onSectionChange("exports")}
             type="button"
+            title={!hasDeliverables ? "Exports unlock after executive deliverables are generated." : undefined}
           >
             Export Deliverables
           </button>
@@ -981,7 +984,7 @@ export function WorkProductViewer({
         )}
 
         {!isLoading && !loadError && detail && topSection === "exports" && (
-          <DeliverableExportPanel engagementId={project.id} />
+          <DeliverableExportPanel engagementId={project.id} hasDeliverables={hasDeliverables} />
         )}
 
         {!isLoading &&
