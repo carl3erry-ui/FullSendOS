@@ -1,5 +1,10 @@
 import { createXAIProvider } from "../ai/xai-provider";
 import { evaluateLiveVerificationGuard, redactSecrets } from "../services/live-verification-utils";
+import { GrokProviderError } from "../ai/types";
+
+const VERIFICATION_MARKER = "GROK_PROVIDER_OK";
+const ENDPOINT = "/responses";
+const REQUEST_SHAPE = "responses-minimal";
 
 async function main() {
   const guard = evaluateLiveVerificationGuard();
@@ -19,20 +24,34 @@ async function main() {
 
   const startedAt = new Date().toISOString();
   const response = await providerResult.provider.generateText({
-    userPrompt:
-      "Return one short sentence confirming live provider connectivity and include the word CONNECTED.",
+    userPrompt: `Reply with exactly: ${VERIFICATION_MARKER}`,
     model: guard.config.defaultModel,
-    metadata: { verification: "grok-provider-smoke" },
+    maxOutputTokens: 32,
   });
   const completedAt = new Date().toISOString();
 
   const safePreview = redactSecrets(response.text).slice(0, 160);
+  const markerMatched = safePreview.includes(VERIFICATION_MARKER);
+
+  if (!markerMatched) {
+    console.error("Live Grok verification failed.");
+    console.error("Status: 200");
+    console.error(`Endpoint: ${ENDPOINT}`);
+    console.error(`Model: ${response.model}`);
+    console.error(`Request shape: ${REQUEST_SHAPE}`);
+    console.error("Likely cause: response did not include expected verification marker.");
+    process.exit(1);
+  }
 
   console.log(
     JSON.stringify(
       {
         verification: "grok-provider",
         status: "ok",
+        marker: VERIFICATION_MARKER,
+        markerMatched,
+        endpoint: ENDPOINT,
+        requestShape: REQUEST_SHAPE,
         provider: response.provider,
         model: response.model,
         requestId: response.requestId || null,
@@ -49,6 +68,15 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : "Unknown error";
-  console.error(`Verification failed: ${redactSecrets(message)}`);
+  const safeMessage = redactSecrets(message);
+  const status = error instanceof GrokProviderError ? error.statusCode || "unknown" : "unknown";
+  const model = process.env.XAI_DEFAULT_MODEL || process.env.XAI_MODEL || "grok-4.5";
+
+  console.error("Live Grok verification failed.");
+  console.error(`Status: ${status}`);
+  console.error(`Endpoint: ${ENDPOINT}`);
+  console.error(`Model: ${model}`);
+  console.error(`Request shape: ${REQUEST_SHAPE}`);
+  console.error(`Likely cause: ${safeMessage}`);
   process.exit(1);
 });

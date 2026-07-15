@@ -101,6 +101,82 @@ test("generateText maps abort to timeout error", async () => {
   );
 });
 
+test("generateText posts to /responses with model and max_output_tokens", async () => {
+  let capturedUrl = "";
+  let capturedBody: Record<string, unknown> = {};
+
+  const fetchImpl: typeof fetch = async (url, init) => {
+    capturedUrl = String(url);
+    capturedBody = JSON.parse(String(init?.body));
+
+    return new Response(
+      JSON.stringify({
+        id: "resp_req_shape",
+        model: "grok-4.5",
+        output_text: "GROK_PROVIDER_OK",
+      }),
+      { status: 200 },
+    );
+  };
+
+  const client = createGrokClient({ apiKey: "test-key", fetchImpl });
+  await client.generateText({ userPrompt: "Hi", model: "grok-4.5", maxOutputTokens: 32 });
+
+  assert.match(capturedUrl, /\/responses$/);
+  assert.equal(capturedBody.model, "grok-4.5");
+  assert.equal(capturedBody.max_output_tokens, 32);
+  assert.equal(capturedBody.store, false);
+});
+
+test("generateText omits optional unsupported fields when undefined", async () => {
+  let capturedBody: Record<string, unknown> = {};
+
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ model: "grok-4.5", output_text: "ok" }), { status: 200 });
+  };
+
+  const client = createGrokClient({ apiKey: "test-key", fetchImpl });
+  await client.generateText({ userPrompt: "Hi" });
+
+  assert.equal("temperature" in capturedBody, false);
+  assert.equal("metadata" in capturedBody, false);
+  assert.equal("max_output_tokens" in capturedBody, false);
+});
+
+test("createGrokClient uses XAI_DEFAULT_MODEL ahead of XAI_MODEL", async () => {
+  const previousDefault = process.env.XAI_DEFAULT_MODEL;
+  const previousModel = process.env.XAI_MODEL;
+  process.env.XAI_DEFAULT_MODEL = "grok-4.20-0309-reasoning";
+  process.env.XAI_MODEL = "grok-4.5";
+
+  let capturedBody: Record<string, unknown> = {};
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ model: "grok-4.20-0309-reasoning", output_text: "ok" }), {
+      status: 200,
+    });
+  };
+
+  try {
+    const client = createGrokClient({ apiKey: "test-key", fetchImpl });
+    await client.generateText({ userPrompt: "Hi" });
+    assert.equal(capturedBody.model, "grok-4.20-0309-reasoning");
+  } finally {
+    if (previousDefault === undefined) {
+      delete process.env.XAI_DEFAULT_MODEL;
+    } else {
+      process.env.XAI_DEFAULT_MODEL = previousDefault;
+    }
+
+    if (previousModel === undefined) {
+      delete process.env.XAI_MODEL;
+    } else {
+      process.env.XAI_MODEL = previousModel;
+    }
+  }
+});
+
 test("createGrokClient fails when API key is missing", () => {
   assert.throws(
     () => createGrokClient({ apiKey: "" }),

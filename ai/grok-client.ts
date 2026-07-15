@@ -59,7 +59,8 @@ function buildInput(request: GrokGenerateRequest) {
 
 export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
   const apiKey = config.apiKey || process.env.XAI_API_KEY;
-  const defaultModel = config.defaultModel || process.env.XAI_MODEL || DEFAULT_MODEL;
+  const defaultModel =
+    config.defaultModel || process.env.XAI_DEFAULT_MODEL || process.env.XAI_MODEL || DEFAULT_MODEL;
   const baseUrl = config.baseUrl || DEFAULT_BASE_URL;
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const includeRawResponse = config.includeRawResponse ?? false;
@@ -75,6 +76,30 @@ export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
   async function generateText(request: GrokGenerateRequest): Promise<GrokTextResponse> {
     const model = request.model || defaultModel;
     const controller = createTimeoutController(timeoutMs);
+    const requestBody: {
+      model: string;
+      input: Array<{ role: "system" | "user"; content: string }>;
+      store: false;
+      temperature?: number;
+      max_output_tokens?: number;
+      metadata?: Record<string, string | number | boolean | null>;
+    } = {
+      model,
+      input: buildInput(request),
+      store: false,
+    };
+
+    if (typeof request.temperature === "number") {
+      requestBody.temperature = request.temperature;
+    }
+
+    if (typeof request.maxOutputTokens === "number") {
+      requestBody.max_output_tokens = request.maxOutputTokens;
+    }
+
+    if (request.metadata && Object.keys(request.metadata).length > 0) {
+      requestBody.metadata = request.metadata;
+    }
 
     try {
       const response = await fetchImpl(`${baseUrl}/responses`, {
@@ -84,14 +109,7 @@ export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
           Authorization: `Bearer ${apiKey}`,
         },
         signal: controller.signal,
-        body: JSON.stringify({
-          model,
-          input: buildInput(request),
-          temperature: request.temperature,
-          max_output_tokens: request.maxOutputTokens,
-          metadata: request.metadata,
-          store: false,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const responseBody = await response.json().catch(() => null);
@@ -118,9 +136,9 @@ export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
         provider: "xai",
         usage: parsed.usage
           ? {
-              inputTokens: parsed.usage.input_tokens,
-              outputTokens: parsed.usage.output_tokens,
-              totalTokens: parsed.usage.total_tokens,
+              inputTokens: parsed.usage.input_tokens ?? undefined,
+              outputTokens: parsed.usage.output_tokens ?? undefined,
+              totalTokens: parsed.usage.total_tokens ?? undefined,
             }
           : undefined,
         requestId: requestId || parsed.id,
