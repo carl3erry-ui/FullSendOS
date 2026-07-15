@@ -144,6 +144,23 @@ test("generateText omits optional unsupported fields when undefined", async () =
   assert.equal("max_output_tokens" in capturedBody, false);
 });
 
+test("generateText does not send metadata field to xAI responses API", async () => {
+  let capturedBody: Record<string, unknown> = {};
+
+  const fetchImpl: typeof fetch = async (_url, init) => {
+    capturedBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ model: "grok-4.5", output_text: "ok" }), { status: 200 });
+  };
+
+  const client = createGrokClient({ apiKey: "test-key", fetchImpl });
+  await client.generateText({
+    userPrompt: "Hi",
+    metadata: { agentId: "orchestrator", verification: true },
+  });
+
+  assert.equal("metadata" in capturedBody, false);
+});
+
 test("createGrokClient uses XAI_DEFAULT_MODEL ahead of XAI_MODEL", async () => {
   const previousDefault = process.env.XAI_DEFAULT_MODEL;
   const previousModel = process.env.XAI_MODEL;
