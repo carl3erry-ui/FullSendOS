@@ -24,3 +24,34 @@ test("normalizeProviderError classifies validation errors", () => {
   assert.ok(normalized instanceof GrokProviderError);
   assert.equal(normalized.kind, "validation");
 });
+
+test("extractResponseText supports modern xAI responses payload variants", () => {
+  const response = {
+    model: "grok-4.5",
+    usage: {
+      input_tokens: null,
+      output_tokens: 12,
+      total_tokens: 12,
+    },
+    output: [
+      {
+        type: "reasoning",
+        status: "completed",
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: [
+          {
+            type: "output_text",
+            text: "GROK_PROVIDER_OK",
+            annotations: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  const text = extractResponseText(response);
+  assert.equal(text, "GROK_PROVIDER_OK");
+});

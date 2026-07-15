@@ -81,19 +81,19 @@ export type ParsedXaiResponse = {
   model?: string;
   output_text?: string;
   usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    total_tokens?: number;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    total_tokens?: number | null;
   };
   output?: Array<{
     content?: Array<{
       type?: string;
-      text?: string;
+      text?: string | null;
     }>;
   }>;
   error?: {
     message?: string;
     type?: string;
     code?: string;
-  };
+  } | null;
 };

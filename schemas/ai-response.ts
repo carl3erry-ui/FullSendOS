@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const XaiContentBlockSchema = z.object({
   type: z.string().optional(),
-  text: z.string().optional(),
+  text: z.string().nullable().optional(),
 });
 
 const XaiOutputItemSchema = z.object({
@@ -10,9 +10,9 @@ const XaiOutputItemSchema = z.object({
 });
 
 export const XaiUsageSchema = z.object({
-  input_tokens: z.number().optional(),
-  output_tokens: z.number().optional(),
-  total_tokens: z.number().optional(),
+  input_tokens: z.number().nullable().optional(),
+  output_tokens: z.number().nullable().optional(),
+  total_tokens: z.number().nullable().optional(),
 });
 
 export const XaiErrorSchema = z.object({
@@ -27,7 +27,7 @@ export const XaiResponsesApiSchema = z.object({
   output_text: z.string().optional(),
   usage: XaiUsageSchema.optional(),
   output: z.array(XaiOutputItemSchema).optional(),
-  error: XaiErrorSchema.optional(),
+  error: XaiErrorSchema.nullable().optional(),
 });
 
 export type XaiResponsesApiInput = z.infer<typeof XaiResponsesApiSchema>;
