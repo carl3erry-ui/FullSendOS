@@ -10,6 +10,7 @@ import { HumanInputCenter } from "./human-input-center";
 import { DataRoomPanel } from "./data-room-panel";
 import { ClientOnboardingWizard } from "./client-onboarding-wizard";
 import { FirstRunDashboard } from "./first-run-dashboard";
+import { GuidedTour } from "./guided-tour";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
 import type { ClientBaseline } from "@/schemas/client-baseline";
 import {
@@ -125,6 +126,7 @@ export function ProjectDashboard() {
   const [isCreatingClientEngagement, setIsCreatingClientEngagement] = useState(false);
   const [isClientLoading, setIsClientLoading] = useState(true);
   const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+  const [showGuidedTour, setShowGuidedTour] = useState(false);
   const [runningProjectId, setRunningProjectId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -606,14 +608,28 @@ export function ProjectDashboard() {
                 + Onboard Client
               </button>
               <button
-                onClick={() => setView("engagements")}
+                onClick={() => setShowGuidedTour(true)}
                 className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300 hover:border-slate-500"
               >
-                View Engagements
+                Take Guided Tour
               </button>
             </div>
           </div>
         </header>
+
+        {showGuidedTour && (
+          <GuidedTour
+            onClose={() => setShowGuidedTour(false)}
+            onViewDemo={async () => {
+              setShowGuidedTour(false);
+              try {
+                await Promise.all([loadClients({ clearError: false }), loadProjects({ clearError: false })]);
+              } catch {
+                // Refresh if needed
+              }
+            }}
+          />
+        )}
 
         {/* View Tabs */}
         <div className="flex gap-2 border-b border-slate-700">
@@ -670,6 +686,15 @@ export function ProjectDashboard() {
                   // Scroll to quick engagement form as a fallback
                   const el = document.getElementById("client-create-form");
                   if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                onTakeTour={() => setShowGuidedTour(true)}
+                onViewDemo={async () => {
+                  // Reload clients and projects after demo seed
+                  try {
+                    await Promise.all([loadClients({ clearError: false }), loadProjects({ clearError: false })]);
+                  } catch {
+                    // If reload fails the user can refresh
+                  }
                 }}
               />
             )}
@@ -855,7 +880,12 @@ export function ProjectDashboard() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <button onClick={() => setSelectedClientId(client.id)}>
-                      <p className="text-sm font-medium text-slate-100">{client.name}</p>
+                      <p className="text-sm font-medium text-slate-100">
+                        {client.name}
+                        {client.id.startsWith("DEMO-APEX-BREW") && (
+                          <span className="ml-2 rounded-full border border-indigo-700 bg-indigo-950/40 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.2em] text-indigo-300">Demo</span>
+                        )}
+                      </p>
                       <p className="text-xs text-slate-400">
                         {client.engagementCount} engagement{client.engagementCount === 1 ? "" : "s"}
                         {client.lastActivityAt ? ` | activity ${new Date(client.lastActivityAt).toLocaleString()}` : ""}

@@ -16,7 +16,7 @@ test("FirstRunDashboard renders hero section with primary CTA", () => {
 
   assert.match(html, /Build your first AI-powered consulting engagement/);
   assert.match(html, /Start Client Onboarding/);
-  assert.match(html, /Create Quick Engagement/);
+  assert.match(html, /View Demo Workspace/);
   assert.doesNotMatch(html, /XAI_API_KEY|\.env\.local|rawProviderResponse|storagePath|textExtracted/i);
 });
 
