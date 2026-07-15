@@ -86,3 +86,38 @@ test("buildCollaborationTraceSummary produces handoff links and safe status", ()
   assert.equal(summary.safetyStatus, "redacted");
   assert.equal(summary.finalSynthesis.includes("secret-value"), false);
 });
+
+test("buildCollaborationTraceSummary surfaces researcher failure safely", () => {
+  const summary = buildCollaborationTraceSummary({
+    workflowRunId: "wf-fail-1",
+    steps: [
+      {
+        taskId: "task-a",
+        agentId: "orchestrator",
+        provider: "xai",
+        model: "grok-4.5",
+        status: "completed",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        completedAt: "2026-01-01T00:00:10.000Z",
+        summary: "Handoff prepared",
+      },
+      {
+        taskId: "task-b",
+        agentId: "researcher",
+        provider: "xai",
+        model: "grok-4.5",
+        status: "failed",
+        startedAt: "2026-01-01T00:00:11.000Z",
+        completedAt: "2026-01-01T00:00:20.000Z",
+        error: "provider error (validation): api_key=secret-value",
+      },
+    ],
+  });
+
+  assert.equal(summary.agentIds.includes("orchestrator"), true);
+  assert.equal(summary.agentIds.includes("researcher"), true);
+  assert.equal(summary.statuses[1].status, "failed");
+  assert.equal(summary.highLevelSummary.includes("1/2"), true);
+  assert.equal(summary.finalSynthesis.includes("secret-value"), false);
+  assert.equal(summary.safetyStatus, "redacted");
+});

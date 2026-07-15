@@ -45,11 +45,11 @@ Command:
 - LIVE_PROVIDER_SMOKE=1 npm run verify:agent-collaboration
 
 Result:
-- FAIL (safe)
+- PASS
 - provider: xai
 - orchestrator: completed
-- researcher: failed
-- highLevelSummary: 1/2 agent steps completed
+- researcher: completed
+- highLevelSummary: 2/2 agent steps completed
 - safetyStatus: clean
 
 ## 7) Provider/model used
@@ -57,27 +57,38 @@ Result:
 - Model: grok-4.5
 
 ## 8) Root cause
-Two issues blocked live agent-task execution:
+Two issues blocked live collaboration execution:
 - xAI /responses requests failed when metadata was included for this runtime path.
 - Model JSON often arrived markdown-fenced and/or slightly malformed for strict direct JSON.parse.
-- Orchestrator live outputs also used key-shape variants that needed safe normalization into the strict Orchestrator schema.
+- Researcher live outputs used alternate key shapes that did not directly match the strict ResearchOutput schema.
 
 ## 9) Fix summary
 - Omitted metadata from xAI /responses payload construction in Grok client.
 - Added safe structured JSON parsing support for markdown-fenced output and repaired near-valid JSON.
 - Kept invalid non-JSON output failing safely.
-- Updated orchestrator execution path to:
+- Updated researcher execution path to:
   - call generateText,
   - parse safely,
   - normalize common field-shape variants,
-  - validate against strict OrchestratorOutputSchema.
-- Added targeted tests for:
-  - metadata omission,
-  - fenced/plain JSON parsing,
-  - invalid JSON safe failure,
-  - orchestrator normalization path.
+  - validate against strict ResearchOutputSchema.
 
-## 10) Safety result
+## 10) Researcher normalization summary
+- Added a narrow compatibility layer for common live variants:
+  - summary/overview/notes -> executiveSummary
+  - questions/checks -> researchQuestions
+  - findings/insights/results variants -> findings with required topic/summary/confidence/sources mapping
+  - evidence/sources/supportingEvidence variants -> evidence mapping with safe type/source/url normalization
+  - unknowns/openQuestions -> gaps
+  - limitations -> risks
+  - nextActions/actions -> recommendations
+- Preserved strict validation and fail-closed behavior when researcher fields are insufficient.
+
+## 11) Collaboration robustness summary
+- Collaboration summary now reports both orchestrator and researcher completion in live mode.
+- Safe failure/summary behavior remains intact (agent-level status + redaction guardrails).
+- Added focused tests for researcher structured-output robustness and collaboration failure surfacing.
+
+## 12) Safety result
 - Secrets printed: NO
 - API key printed: NO
 - .env.local echoed: NO
@@ -85,18 +96,17 @@ Two issues blocked live agent-task execution:
 - Hidden reasoning exposed: NO
 - Unsafe diagnostics exposed: NO
 
-## 11) Runtime artifacts cleanup result
+## 13) Runtime artifacts cleanup result
 - Runtime data artifacts committed: NONE
 - Working tree changes are source/test/docs only.
 
-## 12) AI Workforce live mode readiness
-- PARTIAL
-- Rationale: provider and live agent-task gates now pass; collaboration gate still fails safely.
+## 14) AI Workforce live mode readiness
+- YES
+- Rationale: provider, live agent-task, and collaboration gates all pass with live xAI/Grok.
 
-## 13) Full live workflow next?
-- NO
-- Rationale: collaboration gate should pass before full live workflow execution.
+## 15) Full live workflow next?
+- YES
+- Rationale: collaboration blocker is resolved; full live workflow can be considered next under standard safety controls.
 
-## 14) Recommended next issue
-- Fix live researcher structured output normalization/validation path for collaboration gate, then re-run:
-  - LIVE_PROVIDER_SMOKE=1 npm run verify:agent-collaboration
+## 16) Recommended next issue
+- Add a dedicated live-smoke script for 3+ agent collaboration chains (orchestrator -> researcher -> quality-control) with safe, redacted pass/fail diagnostics.
