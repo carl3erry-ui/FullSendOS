@@ -82,7 +82,6 @@ export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
       store: false;
       temperature?: number;
       max_output_tokens?: number;
-      metadata?: Record<string, string | number | boolean | null>;
     } = {
       model,
       input: buildInput(request),
@@ -95,10 +94,6 @@ export function createGrokClient(config: GrokClientConfig = {}): GrokClient {
 
     if (typeof request.maxOutputTokens === "number") {
       requestBody.max_output_tokens = request.maxOutputTokens;
-    }
-
-    if (request.metadata && Object.keys(request.metadata).length > 0) {
-      requestBody.metadata = request.metadata;
     }
 
     try {

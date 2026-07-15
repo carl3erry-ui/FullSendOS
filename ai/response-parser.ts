@@ -1,6 +1,40 @@
 import { ZodError, type ZodType } from "zod";
+import { jsonrepair } from "jsonrepair";
 import { XaiResponsesApiSchema } from "../schemas/ai-response";
 import { GrokProviderError, type ParsedXaiResponse } from "./types";
+
+function buildJsonCandidates(rawText: string): string[] {
+  const trimmed = rawText.trim();
+  const candidates = new Set<string>([trimmed]);
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    candidates.add(fenced[1].trim());
+  }
+
+  const firstBrace = trimmed.indexOf("{");
+  const lastBrace = trimmed.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    candidates.add(trimmed.slice(firstBrace, lastBrace + 1).trim());
+  }
+
+  return Array.from(candidates).filter((candidate) => candidate.length > 0);
+}
+
+function tryParseJson(text: string): unknown {
+  const candidate = text.trim();
+  const looksJsonLike = candidate.startsWith("{") || candidate.startsWith("[");
+  if (!looksJsonLike) {
+    throw new Error("Candidate does not look like JSON.");
+  }
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    const repaired = jsonrepair(candidate);
+    return JSON.parse(repaired);
+  }
+}
 
 export function extractResponseText(response: unknown): string {
   const parsed = XaiResponsesApiSchema.parse(response);
@@ -30,13 +64,23 @@ export function extractResponseText(response: unknown): string {
 
 export function parseStructuredJson<T>(text: string, schema: ZodType<T>): T {
   let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(text);
-  } catch (error) {
+  let parseError: unknown;
+
+  for (const candidate of buildJsonCandidates(text)) {
+    try {
+      parsedJson = tryParseJson(candidate);
+      parseError = undefined;
+      break;
+    } catch (error) {
+      parseError = error;
+    }
+  }
+
+  if (parseError !== undefined || parsedJson === undefined) {
     throw new GrokProviderError({
       kind: "validation",
       message: "Model output is not valid JSON.",
-      details: error instanceof Error ? error.message : error,
+      details: parseError instanceof Error ? parseError.message : parseError,
     });
   }
 
