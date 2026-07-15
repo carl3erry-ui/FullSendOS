@@ -9,6 +9,7 @@ import { AIWorkforceSection } from "./ai-workforce-section";
 import { HumanInputCenter } from "./human-input-center";
 import { DataRoomPanel } from "./data-room-panel";
 import { ClientOnboardingWizard } from "./client-onboarding-wizard";
+import { FirstRunDashboard } from "./first-run-dashboard";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
 import type { ClientBaseline } from "@/schemas/client-baseline";
 import {
@@ -585,12 +586,33 @@ export function ProjectDashboard() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10 text-slate-100">
       <div className="mx-auto flex max-w-6xl flex-col gap-8">
-        <header className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-2xl shadow-slate-950/40">
-          <p className="text-sm uppercase tracking-[0.35em] text-cyan-400">FullSendOS Alpha</p>
-          <h1 className="mt-3 text-4xl font-semibold">Consulting command center</h1>
-          <p className="mt-3 max-w-2xl text-slate-300">
-            Manage active clients, triage action-required engagements, and review decision-ready executive work products in one place.
-          </p>
+        <header className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 p-8 shadow-2xl shadow-slate-950/50">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-400">FullSendOS Executive OS</p>
+              <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-50">Client Command Center</h1>
+              <p className="mt-3 max-w-2xl text-base leading-7 text-slate-300">
+                Manage client baselines, deploy the AI Workforce, review decision-ready deliverables, and export executive reports.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 text-right">
+              <button
+                onClick={() => {
+                  setSelectedClientId(null);
+                  setClientForm(initialClientForm);
+                }}
+                className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950 shadow shadow-cyan-900/30 hover:bg-cyan-400"
+              >
+                + Onboard Client
+              </button>
+              <button
+                onClick={() => setView("engagements")}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-xs text-slate-300 hover:border-slate-500"
+              >
+                View Engagements
+              </button>
+            </div>
+          </div>
         </header>
 
         {/* View Tabs */}
@@ -636,11 +658,28 @@ export function ProjectDashboard() {
         {/* Engagements View */}
         {view === "engagements" && (
           <>
+            {/* First-run empty state */}
+            {!isLoading && !isClientLoading && clients.length === 0 && projects.length === 0 && (
+              <FirstRunDashboard
+                onCreateClient={() => {
+                  // Scroll/focus client creation form
+                  const el = document.getElementById("client-create-form");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                onCreateEngagement={() => {
+                  // Scroll to quick engagement form as a fallback
+                  const el = document.getElementById("client-create-form");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
+            )}
+
             <DashboardSummary
               activeClients={clients.length}
               readyForReview={readyForReviewProjects.length}
               actionRequired={actionRequiredProjects.length}
               recentWorkProducts={recentWorkProducts}
+              engagementsInProgress={projects.filter((p) => p.status === "running" || p.status === "in-progress").length}
             />
 
             {(error || notice) && (
@@ -654,9 +693,9 @@ export function ProjectDashboard() {
               </section>
             )}
 
-            <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+            <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
               <div className="flex flex-wrap items-center gap-4">
-                <p className="text-sm font-medium text-slate-200">Lifecycle visibility</p>
+                <p className="text-sm font-medium text-slate-400">Visibility filters</p>
                 <label className="flex items-center gap-2 text-sm text-slate-300">
                   <input
                     type="checkbox"
@@ -678,9 +717,9 @@ export function ProjectDashboard() {
 
             <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 className="text-xl font-semibold">Executive office</h2>
+            <h2 className="text-xl font-semibold">AI Workforce Pipeline</h2>
             <p className="mt-2 text-sm text-slate-400">
-              {selectedProject ? `Engagement ${selectedProject.id} is ${selectedProject.status}.` : "Choose an engagement to monitor workflow stage by stage."}
+              {selectedProject ? `${selectedProject.companyName} — ${selectedProject.status.replace(/-/g, " ")}.` : "Select an engagement to track the AI Workforce stage by stage."}
             </p>
             <div className="mt-4 space-y-2 text-sm text-slate-200">
               {executivePipeline.map((stage, index) => {
@@ -714,8 +753,8 @@ export function ProjectDashboard() {
               </div>
 
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-                <h2 className="text-xl font-semibold">Decision queue</h2>
-            <p className="mt-2 text-sm text-slate-400">Focus first on work products that are ready for leadership review, then clear blockers.</p>
+                <h2 className="text-xl font-semibold">Decision Queue</h2>
+                <p className="mt-2 text-sm text-slate-400">Focus on work products ready for leadership review, then clear blockers.</p>
 
             <div className="mt-4 space-y-4">
               <div>
@@ -758,11 +797,11 @@ export function ProjectDashboard() {
             <section className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Active clients</h2>
+              <h2 className="text-xl font-semibold">Client Command Centers</h2>
               <span className="text-sm text-slate-400">{clients.length} total</span>
             </div>
 
-            <form className="mt-4 space-y-3" onSubmit={handleCreateClient}>
+            <form id="client-create-form" className="mt-4 space-y-3" onSubmit={handleCreateClient}>
               <input
                 className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2"
                 placeholder="Client name"
@@ -799,7 +838,12 @@ export function ProjectDashboard() {
             </form>
 
             <div className="mt-5 space-y-2">
-              {!clients.length && <p className="text-sm text-slate-400">No clients yet. Create your first client above.</p>}
+              {!clients.length && (
+                <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 py-6 text-center">
+                  <p className="text-sm font-semibold text-slate-300">Start your first client command center.</p>
+                  <p className="mt-1 text-xs text-slate-500">Create a client to begin onboarding, build a baseline, and deploy the AI Workforce.</p>
+                </div>
+              )}
               {clients.map((client) => (
                 <div
                   key={client.id}
@@ -855,19 +899,22 @@ export function ProjectDashboard() {
           </div>
 
           <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 className="text-xl font-semibold">Client workspace</h2>
+            <h2 className="text-xl font-semibold">Client Command Center</h2>
             <p className="mt-2 text-xs uppercase tracking-[0.18em] text-cyan-300">
-              Select client → create engagement → run consulting workflow → review executive brief
+              Select client → build baseline → upload documents → create engagement → deploy AI Workforce → review deliverables
             </p>
             <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
               <p className="text-sm font-semibold text-slate-100">Data Room</p>
               <p className="mt-1 text-sm text-slate-400">
-                Upload financials, brand assets, legal documents, real estate files, or other source materials for the selected client.
+                The Data Room is the source of truth for the AI Workforce. Upload business plans, financials, pitch decks, brand guides, SOPs, and other documents to improve output quality.
               </p>
             </div>
-            {isClientLoading && <p className="mt-4 text-sm text-slate-400">Loading client workspace...</p>}
+            {isClientLoading && <p className="mt-4 text-sm text-slate-400">Loading client command center...</p>}
             {!isClientLoading && !selectedClient && (
-              <p className="mt-4 text-sm text-slate-400">Select a client to view associated engagements and open its Data Room.</p>
+              <div className="mt-4 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 py-6 text-center">
+                <p className="text-sm font-semibold text-slate-300">Select a client to open its command center.</p>
+                <p className="mt-1 text-xs text-slate-500">Baseline, Data Room, engagements, AI recommendations, and next steps live here.</p>
+              </div>
             )}
 
             {!isClientLoading && selectedClient && (
@@ -1009,7 +1056,7 @@ export function ProjectDashboard() {
                   <div>
                     <p className="text-sm font-semibold text-slate-100">Client Data Room</p>
                     <p className="mt-1 text-sm text-slate-400">
-                      Source files for this client. Upload and review financials, legal documents, research, and other evidence here.
+                      Source files for this client. Upload business plans, financials, pitch decks, market research, brand guides, SOPs, and other documents. The AI Workforce reads these to produce better deliverables.
                     </p>
                   </div>
                   {!needsOnboarding && selectedClient.engagementCount > 0 && (
@@ -1146,7 +1193,7 @@ export function ProjectDashboard() {
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Recent engagements</h2>
+            <h2 className="text-xl font-semibold">Active Engagements</h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-400">{projects.length} tracked</span>
               <button
@@ -1191,7 +1238,12 @@ export function ProjectDashboard() {
                 isSelected={project.id === selectedProjectId}
               />
             ))}
-            {!isLoading && !projects.length && <p className="text-sm text-slate-400">No engagements yet. Create your first engagement to begin.</p>}
+            {!isLoading && !projects.length && (
+              <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 px-4 py-6 text-center">
+                <p className="text-sm font-semibold text-slate-300">No engagements yet.</p>
+                <p className="mt-1 text-xs text-slate-500">Create a client first, then start an engagement to deploy the AI Workforce.</p>
+              </div>
+            )}
             {!isLoading && completeCount > 0 && (
               <p className="text-sm text-emerald-300">{completeCount} engagement{completeCount === 1 ? "" : "s"} completed and ready for delivery.</p>
             )}
@@ -1199,9 +1251,9 @@ export function ProjectDashboard() {
             </section>
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-              <h2 className="text-xl font-semibold">Secondary intake</h2>
+              <h2 className="text-xl font-semibold">Quick Engagement</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Use quick engagement only when work cannot be attached to an existing client.
+                For unassigned work that cannot be attached to an existing client. Primary flow: create client → onboard → engage.
               </p>
               <div className="mt-4">
                 <ProjectForm

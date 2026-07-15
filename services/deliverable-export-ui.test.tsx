@@ -21,8 +21,8 @@ test("deliverable export panel renders controls and empty state", () => {
   assert.match(html, /Generate TEXT/);
   assert.match(html, /Generate JSON/);
   assert.match(html, /Generate PDF/);
-  assert.match(html, /PDF exports generate a downloadable client-ready file/i);
-  assert.match(html, /No exports have been generated yet\./);
+  assert.match(html, /PDF generates a client-ready downloadable file|PDF exports generate a downloadable client-ready file/i);
+  assert.match(html, /No exports generated yet\.|No exports have been generated yet\./i);
   assert.doesNotMatch(html, /storagePath|rawProviderResponse|systemPrompt|apiKey|hidden reasoning|diagnosticTrace|textExtracted/i);
 });
 

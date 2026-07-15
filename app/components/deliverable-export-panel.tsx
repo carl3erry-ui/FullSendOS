@@ -183,11 +183,17 @@ export function DeliverableExportPanel({
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
       <div>
         <h3 className="text-lg font-semibold text-slate-100">Export Deliverables</h3>
-        <p className="mt-1 text-sm text-slate-400">
-          Generate a safe, branded deliverable from the executive report, summary, deck outline, sources, assumptions, open questions, and confirmations.
-        </p>
+        {hasDeliverables ? (
+          <p className="mt-1 text-sm text-emerald-400">
+            Executive deliverables are ready. Generate a branded export for client delivery or internal review.
+          </p>
+        ) : (
+          <p className="mt-1 text-sm text-amber-400">
+            No deliverables yet. Run the engagement workflow to generate executive-ready work products before exporting.
+          </p>
+        )}
         <p className="mt-1 text-xs text-slate-500">
-          PDF exports generate a downloadable client-ready file using the selected template.
+          Available formats: Markdown, HTML, Plain text, JSON, PDF. PDF generates a client-ready downloadable file.
         </p>
       </div>
 
@@ -240,7 +246,7 @@ export function DeliverableExportPanel({
 
       {!hasDeliverables && (
         <p className="rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
-          Exports become available after the engagement produces executive deliverables.
+          Export buttons are unavailable until the engagement produces executive deliverables. Deploy the AI Workforce first.
         </p>
       )}
 
@@ -262,7 +268,9 @@ export function DeliverableExportPanel({
 
         {!isLoading && exports.length === 0 && (
           <p className="rounded-lg border border-slate-800 bg-slate-900/30 px-3 py-2 text-sm text-slate-400">
-            No exports have been generated yet.
+            {hasDeliverables
+              ? "No exports generated yet. Use the buttons above to generate your first export."
+              : "No exports available. Run the engagement workflow to produce deliverables."}
           </p>
         )}
 

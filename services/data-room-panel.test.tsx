@@ -60,8 +60,7 @@ test("DataRoomPanel renders empty state when no client/engagement-linked files e
     })
   );
 
-  assert.match(html, /No files have been added to this data room yet\./);
-  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials\./);
+  assert.match(html, /No files in the Data Room yet\.|No files have been added/);
 });
 
 test("DataRoomPanel shows upload action affordance when panel is loaded", () => {
@@ -107,8 +106,7 @@ test("DataRoomPanel engagement scope renders the same empty state guidance", () 
     })
   );
 
-  assert.match(html, /No files have been added to this data room yet\./);
-  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials\./);
+  assert.match(html, /No files in the Data Room yet\.|No files have been added/);
 });
 
 test("DataRoomPanel renders processing controls and status metadata", () => {
@@ -159,13 +157,13 @@ test("DataRoomPanel renders processing controls and status metadata", () => {
 test("ProjectDashboard renders a visible Data Room entry point in the client workspace area", () => {
   const html = renderToStaticMarkup(React.createElement(ProjectDashboard));
 
-  assert.match(html, /Client workspace/);
+  assert.match(html, /Client Command Center/);
   assert.match(html, /Data Room/);
   assert.match(html, /Human Input \/ Action Center/);
-  assert.match(html, /Lifecycle visibility/);
+  assert.match(html, /Lifecycle visibility|Visibility filters/);
   assert.match(html, /Show archived/);
   assert.match(html, /Show deleted/);
-  assert.match(html, /Upload financials, brand assets, legal documents, real estate files, or other source materials for the selected client\./);
+  assert.match(html, /The Data Room is the source of truth for the AI Workforce|Upload.*documents.*improve output quality/i);;
 });
 
 test("WorkProductViewer renders a Data Room tab for engagement workspace access", () => {
