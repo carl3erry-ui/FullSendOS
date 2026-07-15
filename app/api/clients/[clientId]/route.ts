@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadClient, updateClientLifecycle } from "../../../../src/storage/clientStore.js";
 import { listProjects } from "../../../../src/storage/projectStore.js";
+import { ensureClientBaseline } from "@/services/client-baseline-store";
 
 function toEngagementSummary(project: {
   id: string;
@@ -41,6 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
       loadClient(clientId),
       listProjects({ includeArchived, includeDeleted, includeAll }),
     ]);
+    const baseline = await ensureClientBaseline(client.id, client.name);
     const engagements = projects
       .filter((project): project is NonNullable<(typeof projects)[number]> => Boolean(project))
       .filter((project) => project.clientId === client.id)
@@ -59,6 +61,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
       updatedAt: client.updatedAt,
       engagements,
       engagementCount: engagements.length,
+      baseline,
     });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {

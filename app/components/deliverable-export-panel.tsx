@@ -43,6 +43,7 @@ type ExportDetail = ExportSummary & {
 
 type DeliverableExportPanelProps = {
   engagementId: string;
+  hasDeliverables?: boolean;
   disableAutoLoad?: boolean;
   initialExports?: ExportSummary[];
 };
@@ -57,6 +58,7 @@ function bytesLabel(bytes: number): string {
 
 export function DeliverableExportPanel({
   engagementId,
+  hasDeliverables = true,
   disableAutoLoad = false,
   initialExports = [],
 }: DeliverableExportPanelProps) {
@@ -227,7 +229,7 @@ export function DeliverableExportPanel({
             type="button"
             className="rounded-lg border border-cyan-700 px-3 py-2 text-sm text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
             onClick={() => void generateExport(format)}
-            disabled={Boolean(isGenerating) || isTemplateLoading || templates.length === 0}
+            disabled={Boolean(isGenerating) || isTemplateLoading || templates.length === 0 || !hasDeliverables}
           >
             {isGenerating === format
               ? `Generating ${format.toUpperCase()}...`
@@ -235,6 +237,12 @@ export function DeliverableExportPanel({
           </button>
         ))}
       </div>
+
+      {!hasDeliverables && (
+        <p className="rounded-lg border border-amber-800 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
+          Exports become available after the engagement produces executive deliverables.
+        </p>
+      )}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">

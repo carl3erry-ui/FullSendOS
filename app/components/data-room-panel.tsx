@@ -56,6 +56,7 @@ export function DataRoomPanel({
   const [loading, setLoading] = useState(!disableAutoLoad);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(initialShowUpload);
   const [processingFileId, setProcessingFileId] = useState<string | null>(null);
   const [documentsByFileId, setDocumentsByFileId] = useState<
@@ -137,9 +138,12 @@ export function DataRoomPanel({
   const handleUpload = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setUploading(true);
+    setError(null);
+    setNotice(null);
 
     try {
       const formData = new FormData(e.currentTarget);
+      const selectedFolder = String(formData.get("folderId") || "");
       const response = await fetch(
         filesPath,
         {
@@ -154,7 +158,9 @@ export function DataRoomPanel({
       }
 
       await loadFiles();
+      if (selectedFolder) setSelectedFolderId(selectedFolder);
       setShowUpload(false);
+      setNotice("File uploaded to Data Room.");
       (e.target as HTMLFormElement).reset();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -228,6 +234,8 @@ export function DataRoomPanel({
     return new Date(isoString).toLocaleDateString();
   };
 
+  const folderNameById = new Map(folders.map((folder) => [folder.id, folder.name]));
+
   return (
     <div className="data-room-panel">
       <div className="data-room-header">
@@ -246,6 +254,7 @@ export function DataRoomPanel({
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+  {notice && <div className="alert alert-success">{notice}</div>}
 
       {showUpload && (
         <form onSubmit={handleUpload} className="data-room-upload-form">
@@ -317,6 +326,17 @@ export function DataRoomPanel({
             />
           </div>
 
+          <div className="form-group form-checkboxes">
+            <label>
+              <input id="approvedForAgentUse" name="approvedForAgentUse" type="checkbox" value="true" />
+              Approved for AI workflow use
+            </label>
+            <label>
+              <input id="sensitive" name="sensitive" type="checkbox" value="true" />
+              Mark as sensitive (skip parsing)
+            </label>
+          </div>
+
           <button type="submit" className="btn btn-primary" disabled={uploading}>
             {uploading ? "Uploading..." : "Upload File"}
           </button>
@@ -357,6 +377,7 @@ export function DataRoomPanel({
                   <div className="file-meta">
                     <span className="file-size">{formatFileSize(file.size)}</span>
                     <span className="file-type">{file.type}</span>
+                    <span className="file-folder">{folderNameById.get(file.folderId) || file.folderId}</span>
                     <span className="file-date">{formatDate(file.uploadedAt)}</span>
                   </div>
                   {file.description && (
@@ -433,7 +454,7 @@ export function DataRoomPanel({
         </>
       )}
 
-      <style jsx>{`
+      <style>{`
         .data-room-panel {
           padding: 1.5rem;
           border: 1px solid #e5e7eb;
@@ -568,6 +589,30 @@ export function DataRoomPanel({
           border: 1px solid #fecaca;
         }
 
+        .alert-success {
+          background-color: #dcfce7;
+          color: #166534;
+          border: 1px solid #86efac;
+        }
+
+        .form-checkboxes {
+          display: grid;
+          gap: 0.5rem;
+        }
+
+        .form-checkboxes label {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.8125rem;
+          color: #374151;
+        }
+
+        .form-checkboxes input[type="checkbox"] {
+          width: auto;
+          margin: 0;
+        }
+
         .loading,
         .empty-state {
           padding: 2rem 1rem;
@@ -635,6 +680,7 @@ export function DataRoomPanel({
         .file-meta {
           display: flex;
           gap: 1rem;
+          flex-wrap: wrap;
           font-size: 0.75rem;
           color: #9ca3af;
           margin-bottom: 0.5rem;
