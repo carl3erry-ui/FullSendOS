@@ -72,6 +72,7 @@ export function CollaborationTracePanel({
           <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-cyan-400">Agent Collaboration Trace</p>
           <h3 className="mt-1 text-lg font-semibold text-slate-100">Engagement {trace.engagementId}</h3>
           <p className="mt-1 text-xs text-slate-500">Internal view — not for client delivery</p>
+          <p className="mt-1 text-xs text-indigo-300">Leadership Doctrine v{trace.leadershipDoctrineVersion}</p>
         </div>
         <div className="text-right">
           <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Confidence</p>

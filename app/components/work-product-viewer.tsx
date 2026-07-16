@@ -14,6 +14,7 @@ import { EngagementAgentTasksPanel } from "./engagement-agent-tasks-panel";
 import { EngagementHumanInputPanel } from "./engagement-human-input-panel";
 import { DataRoomPanel } from "./data-room-panel";
 import { DeliverableExportPanel } from "./deliverable-export-panel";
+import { CollaborationTracePanel } from "./collaboration-trace-panel";
 import {
   inferReadiness,
   READINESS_LABELS,
@@ -21,6 +22,14 @@ import {
   HUMAN_REVIEW_CHECKLIST,
   isClientSafe,
 } from "@/services/deliverable-readiness";
+import { selectAgentTeam } from "@/lib/agents/team-selection";
+import {
+  addHumanApprovalGate,
+  addTimelineEvent,
+  createCollaborationTrace,
+  summarizeCollaborationTrace,
+  type CollaborationTrace,
+} from "@/lib/agents/collaboration-trace";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -41,6 +50,7 @@ type TopLevelSection =
   | "agent-tasks"
   | "human-input"
   | "data-room"
+  | "collaboration"
   | "exports";
 
 const INTERNAL_FIELD_PATTERN = /(debug|diagnostic|raw|provider|prompt|token|secret|api.?key|stack)/i;
@@ -439,6 +449,7 @@ function collectClaims(detail: EngagementDetail): Array<{ department: string; st
 
 function getTopLevelSection(section: string): TopLevelSection {
   if (section === "exports") return "exports";
+  if (section === "collaboration") return "collaboration";
   if (section === "agent-tasks") return "agent-tasks";
   if (section === "human-input") return "human-input";
   if (section === "data-room") return "data-room";
@@ -446,6 +457,155 @@ function getTopLevelSection(section: string): TopLevelSection {
   if (section === "analysis") return "analysis";
   if (section === "evidence") return "evidence";
   return "executive";
+}
+
+function inferEngagementType(project: WorkspaceProjectSummary): string {
+  const objective = (project.objective || "").toLowerCase();
+  if (objective.includes("sba") || objective.includes("loan")) return "sba-loan";
+  if (objective.includes("investor") || objective.includes("deck") || objective.includes("fundraising")) return "investor-deck";
+  if (objective.includes("market") || objective.includes("entry") || objective.includes("expansion")) return "market-entry";
+  if (objective.includes("brand")) return "brand-strategy";
+  if (objective.includes("website") || objective.includes("digital")) return "website-strategy";
+  if (objective.includes("operations") || objective.includes("process")) return "operations-review";
+  if (objective.includes("financial") || objective.includes("finance")) return "financial-analysis";
+  if (objective.includes("business plan") || objective.includes("plan")) return "business-plan";
+  return "general-consulting";
+}
+
+function getProviderStatus(detail: EngagementDetail | null): "Configured" | "Not configured" | "Unknown" | "Live verification not run" {
+  const activeModel = detail?.audit?.activeRun?.model || "";
+  const runModels = Array.isArray(detail?.audit?.runs) ? detail.audit?.runs?.map((run) => run.model || "") : [];
+  const combined = [activeModel, ...(runModels || [])].join(" ").toLowerCase();
+
+  if (combined.includes("grok") || combined.includes("xai")) return "Configured";
+  if (combined.trim().length === 0) return "Live verification not run";
+  return "Unknown";
+}
+
+function buildCollaborationTracePreview(project: WorkspaceProjectSummary, detail: EngagementDetail | null): CollaborationTrace {
+  const engagementType = inferEngagementType(project);
+  const requestedDeliverables = detail?.brief?.requestedDeliverables || [];
+  const team = selectAgentTeam({
+    engagementType,
+    title: project.companyName,
+    description: project.objective,
+    requestedDeliverables,
+  });
+
+  let trace = createCollaborationTrace(project.id, team.selectedAgents, team.selectionReasons);
+
+  trace = addTimelineEvent(trace, {
+    type: "task-assigned",
+    message: `Workforce assigned for ${engagementType} workflow (${project.completedDepartments}/${project.totalDepartments} departments complete).`,
+  });
+
+  if (project.status === "running") {
+    trace = addTimelineEvent(trace, {
+      type: "task-assigned",
+      message: "Live workflow in progress. Departments are actively generating output.",
+    });
+  }
+
+  if (team.humanApprovalRequired) {
+    for (const reason of team.humanApprovalReasons.slice(0, 2)) {
+      trace = addHumanApprovalGate(trace, reason, "workflow-team-selection");
+    }
+  }
+
+  if (project.status === "needs-review" || project.status === "complete") {
+    trace = addTimelineEvent(trace, {
+      type: "executive-review-completed",
+      message: "Executive deliverables generated. Human review required before client delivery.",
+    });
+  }
+
+  trace.confidenceSummary = summarizeCollaborationTrace(trace);
+  trace.principlesApplied = [
+    "ACT_WITH_PURPOSE",
+    "UNDERSTAND_BEFORE_RECOMMENDING",
+    "COLLABORATE_ACROSS_DEPARTMENTS",
+    "FINISH_WITH_ACTION",
+  ];
+  trace.leadershipDecisionCheck = {
+    "Does this recommendation advance the stated engagement objective?": true,
+    "Have relevant specialists been consulted?": team.selectedAgents.length > 2,
+    "Are assumptions and risks visible?": true,
+    "Would Executive Review be comfortable defending it?": project.status !== "failed",
+  };
+
+  return trace;
+}
+
+function AgentWorkforceStatusSection({
+  project,
+  detail,
+  hasDeliverables,
+}: {
+  project: WorkspaceProjectSummary;
+  detail: EngagementDetail | null;
+  hasDeliverables: boolean;
+}) {
+  const providerStatus = getProviderStatus(detail);
+  const readiness = inferReadiness(project.status);
+  const readinessLabel = READINESS_LABELS[readiness];
+  const engagementType = inferEngagementType(project);
+  const team = selectAgentTeam({
+    engagementType,
+    title: project.companyName,
+    description: project.objective,
+    requestedDeliverables: detail?.brief?.requestedDeliverables || [],
+  });
+
+  const statusClass =
+    providerStatus === "Configured"
+      ? "border-emerald-700 bg-emerald-950/30 text-emerald-200"
+      : providerStatus === "Not configured"
+        ? "border-rose-700 bg-rose-950/30 text-rose-200"
+        : "border-slate-700 bg-slate-950/40 text-slate-300";
+
+  return (
+    <section className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionHeading
+          title="Agent Workforce Status"
+          subtitle="Internal Owner/Admin visibility: provider health, selected team, workflow status, review gates, and export readiness."
+        />
+        <span className={`rounded-full border px-3 py-1 text-xs uppercase tracking-[0.18em] ${statusClass}`}>
+          Provider: {providerStatus}
+        </span>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Workflow status</p>
+          <p className="mt-1 text-sm text-slate-200">{project.status.replace(/-/g, " ")}</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Human review status</p>
+          <p className="mt-1 text-sm text-slate-200">{readinessLabel}</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Client-readiness</p>
+          <p className="mt-1 text-sm text-slate-200">{isClientSafe(readiness) ? "Client-safe" : "Internal only"}</p>
+        </div>
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Export availability</p>
+          <p className="mt-1 text-sm text-slate-200">{hasDeliverables ? "Available" : "Pending deliverables"}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/30 p-3">
+        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Selected agent team</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {team.selectedAgents.map((agentId) => (
+            <span key={agentId} className="rounded-full border border-cyan-800 bg-cyan-950/20 px-2 py-0.5 text-xs text-cyan-200">
+              {agentId}
+            </span>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function getDepartmentSection(section: string): DepartmentName {
@@ -849,6 +1009,15 @@ export function WorkProductViewer({
   const topSection = getTopLevelSection(activeSection);
   const selectedDepartment = getDepartmentSection(activeSection);
   const hasDeliverables = hasExecutiveDeliverables(detail);
+  const collaborationTrace = buildCollaborationTracePreview(project, detail);
+  const runLabel =
+    runningProjectId === project.id
+      ? "Running..."
+      : project.status === "running"
+        ? "In Progress"
+        : project.id.startsWith("DEMO-")
+          ? "Run demo workflow"
+          : "Run live Grok workflow";
 
   return (
     <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
@@ -883,9 +1052,13 @@ export function WorkProductViewer({
           disabled={Boolean(runningProjectId) || project.status === "running" || !canRun}
           title={!canRun ? "Restore this engagement before running workflow." : undefined}
         >
-          {runningProjectId === project.id ? "Running..." : project.status === "running" ? "In Progress" : "Run engagement workflow"}
+          {runLabel}
         </button>
       </div>
+
+      <p className="mt-2 text-xs text-slate-500">
+        Trigger workflow manually only. Live provider execution is never automatic.
+      </p>
 
       {!canRun && (
         <div className="mt-4 rounded-xl border border-amber-800 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
@@ -916,6 +1089,8 @@ export function WorkProductViewer({
           Ready for review. Executive brief leads, supporting analysis follows, then department work product and evidence details.
         </div>
       )}
+
+      <AgentWorkforceStatusSection project={project} detail={detail} hasDeliverables={hasDeliverables} />
 
       <section className="mt-8 space-y-4">
         <div className="flex flex-wrap gap-2">
@@ -969,6 +1144,13 @@ export function WorkProductViewer({
             Data Room
           </button>
           <button
+            className={`rounded-lg border px-3 py-2 text-sm ${topSection === "collaboration" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"}`}
+            onClick={() => onSectionChange("collaboration")}
+            type="button"
+          >
+            Collaboration Trace
+          </button>
+          <button
             className={`rounded-lg border px-3 py-2 text-sm ${topSection === "exports" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-slate-700 bg-slate-950/40 text-slate-300"} ${!hasDeliverables ? "opacity-60" : ""}`}
             onClick={() => hasDeliverables && onSectionChange("exports")}
             type="button"
@@ -1016,6 +1198,15 @@ export function WorkProductViewer({
 
         {!isLoading && !loadError && detail && topSection === "data-room" && (
           <DataRoomPanel ownerId={project.id} scope="engagement" />
+        )}
+
+        {!isLoading && !loadError && detail && topSection === "collaboration" && (
+          <section className="space-y-3">
+            <div className="rounded-lg border border-cyan-800 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-200">
+              Static Collaboration Preview — live trace persistence is deferred in this slice.
+            </div>
+            <CollaborationTracePanel trace={collaborationTrace} showGuardrailEvents />
+          </section>
         )}
 
         {!isLoading && !loadError && detail && topSection === "exports" && (

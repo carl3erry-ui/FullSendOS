@@ -89,8 +89,9 @@ test("IMPLEMENTED_FEATURES includes key shipped features", () => {
 test("UPCOMING_EPICS includes production infrastructure (client portal is now implemented)", () => {
   const epics = [...UPCOMING_EPICS];
   assert.ok(epics.some((e) => e.toLowerCase().includes("production")));
-  // Client Portal v1 is now implemented — should not appear in upcoming
-  assert.ok(!epics.some((e) => e.toLowerCase().includes("client portal")));
+  assert.ok(epics.some((e) => e.toLowerCase().includes("secure client portal production foundation")));
+  // Client Portal / External Access Layer v1 is now implemented — should not appear in upcoming
+  assert.ok(!epics.some((e) => e.toLowerCase().includes("external access layer")));
 });
 
 // ----- Reviewer behavior -----
