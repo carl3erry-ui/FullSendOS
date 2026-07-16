@@ -52,6 +52,7 @@ Commands run with safe output handling (pass/fail only):
 - Observed status after bounded polling: `running`
 - Last observed run stage: `brand/running`
 - Bounded polling result: `terminal_reached=NO`
+- Result: **stalled / abandoned for containment**
 
 ## 10) Departments/agents observed
 
@@ -128,7 +129,7 @@ At timeout window:
 
 ## 20) Preview URL/screenshots result
 
-- External share/tunnel URL: not captured in this pass.
+- External share/tunnel URL: not reliably available to Carl before shutdown.
 - Dev server routes validated locally (`/` and `/client-portal/[clientId]`).
 - Screenshots were not captured in this pass.
 
@@ -146,18 +147,33 @@ At timeout window:
 - Persisted live collaboration traces are not yet fully connected (deterministic preview shown).
 - No screenshot package or external preview URL captured.
 
-## 23) Recommended next branch
+## 23) What went wrong
 
-- `feature/live-agent-workflow-deep-test-followup`
+- The workflow stalled in the `brand` department and never reached a terminal state.
+- Live provider output was surfaced in terminal logs during the test run.
+- The preview URL was not stable enough to hand to Carl before the session ended.
 
-## 24) Recommended next issue
+## 24) Remediation before next live test
 
-- `Stabilize Long-Running Department Completion + Persist Live Collaboration Traces`
+1. Add safe timeout and cancellation handling for stuck department runs.
+2. Prevent raw provider payloads from being printed in live test scripts.
+3. Add redacted logging helpers for live test status.
+4. Add workflow recovery/abort status for stalled engagements.
+5. Keep preview server/tunnel alive until Carl confirms testing is complete.
+6. Prefer a stable Codespaces forwarded port or cloudflared tunnel over unstable localtunnel.
+
+## 25) Recommended next branch
+
+- `feature/live-workflow-preview-stability`
+
+## 26) Recommended next issue
+
+- `Stabilize Live Workflow Preview and Redacted Test Harness`
 
 ## Safety notes
 
 - No secrets printed
 - `.env.local` not echoed
-- No raw provider payloads committed
+- Raw provider payloads were exposed during test output
 - No runtime data committed
 - No generated exports committed
