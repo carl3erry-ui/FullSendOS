@@ -143,6 +143,21 @@ This slice explicitly excludes:
 - Multi-tenant support
 - Marketplace
 
+## Future Production Security Epic
+
+- Secure Client Portal Production Foundation (future scope)
+	- authentication
+	- tenant isolation
+	- role-based authorization
+	- client user management
+	- MFA
+	- session revocation
+	- audit logging
+	- secure invitations
+	- Data Room authorization
+	- deliverable versioning
+	- cross-client negative tests
+
 ## Version Milestones
 
 - v0.1: Dashboard

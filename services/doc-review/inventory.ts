@@ -341,6 +341,26 @@ export const DOC_INVENTORY: DocInventoryItem[] = [
     notes: "Recently created. Current.",
   },
   {
+    path: "docs/LIVE_OS_AGENT_WORKFORCE_PREVIEW.md",
+    title: "Live OS Agent Workforce Preview",
+    category: "verification",
+    topics: ["live os", "agent workforce", "collaboration trace", "owner admin"],
+    statusMarkers: ["preview"],
+    relatedAreas: ["app/components/work-product-viewer.tsx", "app/components/collaboration-trace-panel.tsx"],
+    riskLevel: "low",
+    notes: "Owner/Admin live workforce preview guidance and visibility rules.",
+  },
+  {
+    path: "docs/LIVE_OS_AGENT_WORKFORCE_RESULTS.md",
+    title: "Live OS Agent Workforce Results",
+    category: "results",
+    topics: ["live os", "agent workforce", "results"],
+    statusMarkers: [],
+    relatedAreas: ["app/components/work-product-viewer.tsx", "lib/agents/"],
+    riskLevel: "low",
+    notes: "Implementation and validation outcomes for live workforce preview slice.",
+  },
+  {
     path: "docs/OS_TEST_DRIVE_PREVIEW.md",
     title: "OS Test Drive Preview",
     category: "verification",
@@ -497,6 +517,7 @@ export const IMPLEMENTED_FEATURES = [
   "self-documentation",
   "client portal",
   "client-safe visibility",
+  "live os workforce preview",
 ] as const;
 
 /** Deferred documentation items that should be detected as missing. */
@@ -512,6 +533,7 @@ export const KNOWN_DEFERRED_DOCS = [
 /** Upcoming roadmap epics not yet implemented. */
 export const UPCOMING_EPICS = [
   "Self-Documentation Review System",
+  "Secure Client Portal Production Foundation",
   "Production Infrastructure",
   "Executive OS UI polish",
   "Owner/Admin workspace split",
