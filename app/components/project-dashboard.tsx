@@ -891,9 +891,19 @@ export function ProjectDashboard() {
                         {client.lastActivityAt ? ` | activity ${new Date(client.lastActivityAt).toLocaleString()}` : ""}
                       </p>
                     </button>
-                    <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
-                      {client.lifecycleStatus || "active"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {client.id.startsWith("DEMO-APEX-BREW") && (
+                        <a
+                          href={`/client-portal/${client.id}`}
+                          className="rounded-lg border border-indigo-700 bg-indigo-950/30 px-2 py-1 text-[10px] text-indigo-200 hover:border-indigo-500"
+                        >
+                          View Client Portal
+                        </a>
+                      )}
+                      <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-300">
+                        {client.lifecycleStatus || "active"}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {(client.lifecycleStatus || "active") === "active" ? (

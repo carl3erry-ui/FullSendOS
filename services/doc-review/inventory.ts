@@ -321,6 +321,36 @@ export const DOC_INVENTORY: DocInventoryItem[] = [
     notes: "Recently created. Current.",
   },
   {
+    path: "docs/CLIENT_PORTAL_ACCESS_LAYER.md",
+    title: "Client Portal Access Layer",
+    category: "epic",
+    topics: ["client portal", "client-safe visibility", "access layer"],
+    statusMarkers: ["v1", "implemented"],
+    relatedAreas: ["lib/client-portal/", "app/client-portal/"],
+    riskLevel: "low",
+    notes: "Client Portal Access Layer v1 — recently implemented. Current.",
+  },
+  {
+    path: "docs/CLIENT_PORTAL_ACCESS_RESULTS.md",
+    title: "Client Portal Access Results",
+    category: "results",
+    topics: ["client portal", "results"],
+    statusMarkers: [],
+    relatedAreas: ["lib/client-portal/"],
+    riskLevel: "low",
+    notes: "Recently created. Current.",
+  },
+  {
+    path: "docs/OS_TEST_DRIVE_PREVIEW.md",
+    title: "OS Test Drive Preview",
+    category: "verification",
+    topics: ["test drive", "preview", "OS readiness"],
+    statusMarkers: ["ready-to-ship"],
+    relatedAreas: ["all"],
+    riskLevel: "low",
+    notes: "OS Test Drive Preview after Agent Collaboration Framework v1 merge.",
+  },
+  {
     path: "docs/OS_FUNCTIONAL_TEST_DRIVE.md",
     title: "OS Functional Test Drive",
     category: "verification",
@@ -465,6 +495,8 @@ export const IMPLEMENTED_FEATURES = [
   "deliverable readiness",
   "consulting deliverable quality",
   "self-documentation",
+  "client portal",
+  "client-safe visibility",
 ] as const;
 
 /** Deferred documentation items that should be detected as missing. */
@@ -480,7 +512,6 @@ export const KNOWN_DEFERRED_DOCS = [
 /** Upcoming roadmap epics not yet implemented. */
 export const UPCOMING_EPICS = [
   "Self-Documentation Review System",
-  "Client Portal / External Access Layer",
   "Production Infrastructure",
   "Executive OS UI polish",
   "Owner/Admin workspace split",
