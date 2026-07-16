@@ -86,11 +86,11 @@ test("IMPLEMENTED_FEATURES includes key shipped features", () => {
   assert.ok(features.some((f) => f.toLowerCase().includes("guided tour")));
 });
 
-test("UPCOMING_EPICS includes client portal (agent collaboration is now implemented)", () => {
+test("UPCOMING_EPICS includes production infrastructure (client portal is now implemented)", () => {
   const epics = [...UPCOMING_EPICS];
-  assert.ok(epics.some((e) => e.toLowerCase().includes("client portal")));
-  // Agent Collaboration Framework v1 is now complete — should NOT be in upcoming epics
-  assert.ok(!epics.some((e) => e.toLowerCase().includes("agent collaboration")));
+  assert.ok(epics.some((e) => e.toLowerCase().includes("production")));
+  // Client Portal v1 is now implemented — should not appear in upcoming
+  assert.ok(!epics.some((e) => e.toLowerCase().includes("client portal")));
 });
 
 // ----- Reviewer behavior -----
