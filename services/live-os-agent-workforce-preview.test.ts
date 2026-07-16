@@ -117,6 +117,12 @@ test("client portal route does not expose internal agent notes/raw provider outp
   assert.doesNotMatch(source, /rawProviderResponse|providerPayload|agentNotes|internalTrace|systemPrompt/i);
 });
 
+test("client portal route does not expose abort controls", () => {
+  const pagePath = path.resolve(process.cwd(), "app/client-portal/[clientId]/page.tsx");
+  const source = fs.readFileSync(pagePath, "utf8");
+  assert.doesNotMatch(source, /Abort stalled workflow/i);
+});
+
 test("live workflow controls are clearly labeled for demo/live contexts", () => {
   const demoHtml = renderViewer("executive", { id: "DEMO-ENG-001", status: "draft" });
   assert.match(demoHtml, /Run demo workflow/i);

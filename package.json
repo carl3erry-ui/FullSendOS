@@ -11,6 +11,7 @@
     "verify:grok": "node --import tsx scripts/verify-grok-provider.ts",
     "verify:agent-live": "node --import tsx scripts/verify-live-agent-task.ts",
     "verify:agent-collaboration": "node --import tsx scripts/verify-agent-collaboration.ts",
+    "preview:live-status": "node scripts/live-preview-status.mjs",
     "docs:review": "node --import tsx scripts/docs-review.ts"
   },
   "dependencies": {

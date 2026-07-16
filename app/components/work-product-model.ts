@@ -135,6 +135,7 @@ export type EngagementDetail = {
       error?: string;
     }>;
     warnings?: string[];
+    updatedAt?: string;
   };
 };
 

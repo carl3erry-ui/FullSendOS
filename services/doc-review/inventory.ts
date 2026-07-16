@@ -361,6 +361,26 @@ export const DOC_INVENTORY: DocInventoryItem[] = [
     notes: "Implementation and validation outcomes for live workforce preview slice.",
   },
   {
+    path: "docs/LIVE_WORKFLOW_PREVIEW_STABILITY.md",
+    title: "Live Workflow Preview Stability",
+    category: "epic",
+    topics: ["workflow stability", "stalled workflows", "redacted logging"],
+    statusMarkers: ["future", "stability"],
+    relatedAreas: ["lib/workflows/", "lib/diagnostics/", "app/components/work-product-viewer.tsx"],
+    riskLevel: "low",
+    notes: "Contains the stability and safety plan for future live previews.",
+  },
+  {
+    path: "docs/SAFE_LIVE_PREVIEW_RUNBOOK.md",
+    title: "Safe Live Preview Runbook",
+    category: "spec",
+    topics: ["live preview", "runbook", "safety"],
+    statusMarkers: [],
+    relatedAreas: ["scripts/live-preview-status.mjs"],
+    riskLevel: "low",
+    notes: "Runbook for safely keeping live previews running for Carl.",
+  },
+  {
     path: "docs/OS_TEST_DRIVE_PREVIEW.md",
     title: "OS Test Drive Preview",
     category: "verification",
@@ -518,6 +538,7 @@ export const IMPLEMENTED_FEATURES = [
   "client portal",
   "client-safe visibility",
   "live os workforce preview",
+  "live workflow preview stability",
 ] as const;
 
 /** Deferred documentation items that should be detected as missing. */

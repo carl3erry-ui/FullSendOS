@@ -30,6 +30,7 @@ import {
   summarizeCollaborationTrace,
   type CollaborationTrace,
 } from "@/lib/agents/collaboration-trace";
+import { getWorkflowStabilityState } from "@/lib/workflows/workflow-stability";
 
 type WorkProductViewerProps = {
   project: WorkspaceProjectSummary;
@@ -1010,6 +1011,25 @@ export function WorkProductViewer({
   const selectedDepartment = getDepartmentSection(activeSection);
   const hasDeliverables = hasExecutiveDeliverables(detail);
   const collaborationTrace = buildCollaborationTracePreview(project, detail);
+  const workflowStability = getWorkflowStabilityState(
+    {
+      status: project.status,
+      updatedAt: project.updatedAt,
+      departments: detail?.audit?.runs
+        ? detail.audit.runs.map((run) => ({
+            department: run.department,
+            status: run.status,
+            startedAt: run.startedAt,
+            completedAt: run.completedAt,
+            error: run.error,
+          }))
+        : undefined,
+    },
+    {
+      timeoutMs: 10 * 60 * 1000,
+      stuckDepartmentTimeoutMs: 8 * 60 * 1000,
+    },
+  );
   const runLabel =
     runningProjectId === project.id
       ? "Running..."
@@ -1059,6 +1079,42 @@ export function WorkProductViewer({
       <p className="mt-2 text-xs text-slate-500">
         Trigger workflow manually only. Live provider execution is never automatic.
       </p>
+
+      <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${workflowStability.state === "stuck" || workflowStability.state === "timed-out" ? "border-amber-700 bg-amber-950/20 text-amber-100" : workflowStability.state === "failed" ? "border-rose-700 bg-rose-950/20 text-rose-100" : "border-slate-700 bg-slate-950/60 text-slate-200"}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold">Workflow stability: {workflowStability.state}</p>
+          {(workflowStability.state === "stuck" || workflowStability.state === "timed-out") && (
+            <span className="rounded-full border border-amber-700 px-2 py-0.5 text-[10px] uppercase tracking-[0.15em] text-amber-200">
+              Human review required if outputs are partial
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">{workflowStability.reason}</p>
+        <p className="mt-1 text-xs text-slate-400">Last updated: {project.updatedAt ? new Date(project.updatedAt).toLocaleString() : "Unknown"}</p>
+        {workflowStability.stuckDepartment?.department && (
+          <p className="mt-1 text-xs text-slate-400">Current department: {workflowStability.stuckDepartment.department}</p>
+        )}
+        {(workflowStability.state === "stuck" || workflowStability.state === "timed-out") && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              className="rounded-lg border border-rose-700 px-3 py-2 text-xs text-rose-200 hover:border-rose-500 disabled:opacity-60"
+              type="button"
+              onClick={() => onSectionChange("collaboration")}
+              disabled={Boolean(runningProjectId)}
+            >
+              Review collaboration trace
+            </button>
+            <button
+              className="rounded-lg border border-amber-700 px-3 py-2 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-60"
+              type="button"
+              onClick={() => fetch(`/api/engagements/${project.id}/abort`, { method: "POST" }).catch(() => undefined)}
+              disabled={Boolean(runningProjectId)}
+            >
+              Abort stalled workflow
+            </button>
+          </div>
+        )}
+      </div>
 
       {!canRun && (
         <div className="mt-4 rounded-xl border border-amber-800 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
