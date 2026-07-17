@@ -28,7 +28,7 @@ function summarizeFromProjectFile(projectPath, engagementId) {
           engagementId,
           status: project.status || "unknown",
           updatedAt: project.updatedAt || null,
-          terminalStateReached: ["completed", "needs-review", "failed"].includes(String(project.status || "").toLowerCase()),
+          terminalStateReached: ["complete", "completed", "needs-review", "failed", "aborted"].includes(String(project.status || "").toLowerCase()),
           deliverables: {
             executiveReport: Boolean(deliverables.executiveReport),
             onePageSummary: Boolean(deliverables.onePageSummary),

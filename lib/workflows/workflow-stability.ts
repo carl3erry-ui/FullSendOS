@@ -5,9 +5,21 @@ export type WorkflowStabilityState =
   | "stuck"
   | "timed-out"
   | "failed"
+  | "aborted"
   | "needs-review"
   | "completed"
   | "unknown";
+
+function normalizeTerminalStatus(status?: string | null): "completed" | "needs-review" | "failed" | "aborted" | null {
+  if (!status) return null;
+
+  if (status === "complete" || status === "completed") return "completed";
+  if (status === "needs-review") return "needs-review";
+  if (status === "aborted") return "aborted";
+  if (status === "failed") return "failed";
+
+  return null;
+}
 
 export type WorkflowDepartmentSnapshot = {
   department?: string;
@@ -30,7 +42,7 @@ function toTime(value?: string): number | null {
 }
 
 export function isWorkflowTerminal(status?: string | null): boolean {
-  return status === "completed" || status === "needs-review" || status === "failed";
+  return normalizeTerminalStatus(status) !== null;
 }
 
 export function isWorkflowStale(updatedAt?: string | null, now: Date = new Date(), timeoutMs = 15 * 60 * 1000): boolean {
@@ -97,9 +109,11 @@ export function getWorkflowStabilityState(
   const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
   const stuckDepartmentTimeoutMs = options.stuckDepartmentTimeoutMs ?? timeoutMs;
 
-  if (isWorkflowTerminal(workflowOrEngagement.status)) {
-    if (workflowOrEngagement.status === "completed") return { state: "completed", reason: "Workflow completed." };
-    if (workflowOrEngagement.status === "needs-review") return { state: "needs-review", reason: "Workflow is awaiting human review." };
+  const terminalStatus = normalizeTerminalStatus(workflowOrEngagement.status);
+  if (terminalStatus) {
+    if (terminalStatus === "completed") return { state: "completed", reason: "Workflow completed." };
+    if (terminalStatus === "needs-review") return { state: "needs-review", reason: "Workflow is awaiting human review." };
+    if (terminalStatus === "aborted") return { state: "aborted", reason: "Workflow was aborted." };
     return { state: "failed", reason: "Workflow failed." };
   }
 

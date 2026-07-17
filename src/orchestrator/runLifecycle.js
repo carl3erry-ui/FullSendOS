@@ -70,17 +70,19 @@ export async function completeWorkflowRun(project, status) {
 export async function failWorkflowRun(project, errorMessage) {
   project.status = "failed";
   project.updatedAt = now();
-  project.audit.warnings.push(errorMessage);
+  if (!project.audit.warnings.includes(errorMessage)) {
+    project.audit.warnings.push(errorMessage);
+  }
 
   if (project.audit.activeRun) {
     project.audit.activeRun = null;
   }
 
-  const activeDepartmentRun = [...(project.audit.runs || [])].reverse().find((run) => run.status === "running");
-  if (activeDepartmentRun) {
-    activeDepartmentRun.status = "failed";
-    activeDepartmentRun.completedAt = now();
-    activeDepartmentRun.error = errorMessage;
+  for (const run of project.audit.runs || []) {
+    if (run.status !== "running") continue;
+    run.status = "failed";
+    run.completedAt = now();
+    run.error = errorMessage;
   }
 
   await saveProject(project);
@@ -89,7 +91,7 @@ export async function failWorkflowRun(project, errorMessage) {
 export async function markRunStaleAsFailed(project, staleMs = RUN_STALE_MS) {
   if (!isRunStale(project, staleMs)) return false;
 
-  const staleWarning = `Workflow run ${project.audit.activeRun?.id || "unknown"} marked failed after stale inactivity.`;
+  const staleWarning = "Workflow run timed out due to stale inactivity and was marked failed.";
   await failWorkflowRun(project, staleWarning);
   return true;
 }

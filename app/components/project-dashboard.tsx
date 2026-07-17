@@ -596,9 +596,9 @@ export function ProjectDashboard() {
     }
   }
 
-  const completeCount = projects.filter((project) => project.status === "complete").length;
+  const completeCount = projects.filter((project) => project.status === "complete" || project.status === "completed").length;
   const readyForReviewProjects = projects.filter(
-    (project) => project.status === "needs-review" || project.status === "complete",
+    (project) => project.status === "needs-review" || project.status === "complete" || project.status === "completed",
   );
   const actionRequiredProjects = projects.filter((project) => project.status === "failed" || project.status === "draft");
   const latestExecutiveBriefs = [...readyForReviewProjects]

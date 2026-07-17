@@ -514,7 +514,7 @@ function buildCollaborationTracePreview(project: WorkspaceProjectSummary, detail
     }
   }
 
-  if (project.status === "needs-review" || project.status === "complete") {
+  if (project.status === "needs-review" || project.status === "complete" || project.status === "completed") {
     trace = addTimelineEvent(trace, {
       type: "executive-review-completed",
       message: "Executive deliverables generated. Human review required before client delivery.",
@@ -1142,7 +1142,7 @@ export function WorkProductViewer({
         </div>
       )}
 
-      {(project.status === "needs-review" || project.status === "complete") && (
+      {(project.status === "needs-review" || project.status === "complete" || project.status === "completed") && (
         <div className="mt-6 rounded-xl border border-emerald-800 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-200">
           Ready for review. Executive brief leads, supporting analysis follows, then department work product and evidence details.
         </div>

@@ -53,7 +53,7 @@ export function ProjectCard({
   isSelected,
 }: ProjectCardProps) {
   const statusStyle =
-    status === "complete"
+    status === "complete" || status === "completed"
       ? "border-emerald-700 bg-emerald-950/30 text-emerald-200"
       : status === "running"
         ? "border-cyan-700 bg-cyan-950/30 text-cyan-200"

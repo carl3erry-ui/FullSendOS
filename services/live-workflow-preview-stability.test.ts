@@ -21,10 +21,22 @@ async function cleanupProject(id: string) {
 }
 
 test("terminal workflow state detection", () => {
+  assert.equal(isWorkflowTerminal("complete"), true);
   assert.equal(isWorkflowTerminal("completed"), true);
   assert.equal(isWorkflowTerminal("needs-review"), true);
   assert.equal(isWorkflowTerminal("failed"), true);
+  assert.equal(isWorkflowTerminal("aborted"), true);
   assert.equal(isWorkflowTerminal("running"), false);
+});
+
+test("workflow stability treats aborted as terminal", () => {
+  const result = getWorkflowStabilityState({
+    status: "aborted",
+    updatedAt: "2026-07-16T12:00:00.000Z",
+  });
+
+  assert.equal(result.state, "aborted");
+  assert.match(result.reason, /aborted/i);
 });
 
 test("stale workflow detection uses timeout safely", () => {
@@ -94,6 +106,28 @@ test("abort endpoint returns safe JSON", async () => {
     assert.equal(response.status, 200);
     assert.equal(body.ok, true);
     assert.equal(body.status, "failed");
+    assert.equal(body.safeToRetry, true);
+    assert.doesNotMatch(JSON.stringify(body), /rawProviderResponse|providerPayload|systemPrompt|hiddenReasoning/i);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("abort endpoint returns safe conflict for workflows that are not running", async () => {
+  const project = createEmptyProject({
+    companyName: "Abort Safe Conflict Co",
+    objective: "Abort non-running workflow safely",
+  });
+  project.status = "complete";
+  project.audit.activeRun = null;
+  await saveProject(project);
+
+  try {
+    const response = await abortWorkflow(buildAbortRequest(), { params: Promise.resolve({ id: project.id }) });
+    const body = await response.json();
+    assert.equal(response.status, 409);
+    assert.equal(body.ok, false);
+    assert.equal(body.error, "Workflow is not currently running.");
     assert.equal(body.safeToRetry, true);
     assert.doesNotMatch(JSON.stringify(body), /rawProviderResponse|providerPayload|systemPrompt|hiddenReasoning/i);
   } finally {
@@ -173,6 +207,44 @@ test("live preview status harness prints safe summaries only", async () => {
     assert.match(stdout, /"status":\s*"running"/);
     assert.match(stdout, /"deliverables"/);
     assert.doesNotMatch(stdout, /rawProviderResponse|providerPayload|systemPrompt|hiddenReasoning|\.env\.local/i);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("live preview status marks complete workflow as terminal", async () => {
+  const project = createEmptyProject({
+    companyName: "Terminal Status Co",
+    objective: "Validate complete terminal state in harness",
+  });
+  project.status = "complete";
+  await saveProject(project);
+
+  try {
+    const { stdout } = await execFileAsync("node", ["scripts/live-preview-status.mjs", project.id], {
+      cwd: process.cwd(),
+    });
+    assert.match(stdout, /"status":\s*"complete"/);
+    assert.match(stdout, /"terminalStateReached":\s*true/);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("live preview status marks aborted workflow as terminal", async () => {
+  const project = createEmptyProject({
+    companyName: "Aborted Terminal Status Co",
+    objective: "Validate aborted terminal state in harness",
+  });
+  project.status = "aborted";
+  await saveProject(project);
+
+  try {
+    const { stdout } = await execFileAsync("node", ["scripts/live-preview-status.mjs", project.id], {
+      cwd: process.cwd(),
+    });
+    assert.match(stdout, /"status":\s*"aborted"/);
+    assert.match(stdout, /"terminalStateReached":\s*true/);
   } finally {
     await cleanupProject(project.id);
   }
