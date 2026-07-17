@@ -41,6 +41,7 @@ type WorkProductViewerProps = {
   onSectionChange: (section: string) => void;
   runningProjectId: string | null;
   onRun: (projectId: string) => void;
+  onAbort?: (projectId: string) => void;
 };
 
 type TopLevelSection =
@@ -1001,6 +1002,7 @@ export function WorkProductViewer({
   onSectionChange,
   runningProjectId,
   onRun,
+  onAbort,
 }: WorkProductViewerProps) {
   const progressText = `${project.completedDepartments}/${project.totalDepartments} departments`;
   const runFailure = getLastPersistedFailure(detail);
@@ -1107,7 +1109,7 @@ export function WorkProductViewer({
             <button
               className="rounded-lg border border-amber-700 px-3 py-2 text-xs text-amber-200 hover:border-amber-500 disabled:opacity-60"
               type="button"
-              onClick={() => fetch(`/api/engagements/${project.id}/abort`, { method: "POST" }).catch(() => undefined)}
+              onClick={() => onAbort?.(project.id)}
               disabled={Boolean(runningProjectId)}
             >
               Abort stalled workflow

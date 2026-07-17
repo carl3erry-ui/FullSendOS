@@ -12,6 +12,7 @@ import { ClientOnboardingWizard } from "./client-onboarding-wizard";
 import { FirstRunDashboard } from "./first-run-dashboard";
 import { GuidedTour } from "./guided-tour";
 import { formatApiError, getApiErrorMessage, getApiFieldErrors } from "./api-error";
+import { getSafeResponseError, parseJsonResponseSafely } from "./safe-json-response";
 import type { ClientBaseline } from "@/schemas/client-baseline";
 import {
   createPollController,
@@ -150,11 +151,14 @@ export function ProjectDashboard() {
     if (shouldClearError) setError(null);
     const query = lifecycleQueryString();
     const response = await fetch(query ? `/api/engagements?${query}` : "/api/engagements", { cache: "no-store" });
-    const data = await response.json();
+    const parsed = await parseJsonResponseSafely<ProjectSummary[]>(response);
+    const parseError = getSafeResponseError(parsed, "Unable to load engagements.");
 
-    if (!response.ok) {
-      throw new Error(data?.error || "Unable to load engagements.");
+    if (parseError) {
+      throw new Error(parseError);
     }
+
+    const data = parsed.data;
 
     const nextProjects = Array.isArray(data) ? data : [];
     setProjects(nextProjects);
@@ -171,11 +175,14 @@ export function ProjectDashboard() {
     if (shouldClearError) setError(null);
     const query = lifecycleQueryString();
     const response = await fetch(query ? `/api/clients?${query}` : "/api/clients", { cache: "no-store" });
-    const data = await response.json();
+    const parsed = await parseJsonResponseSafely<ClientSummary[]>(response);
+    const parseError = getSafeResponseError(parsed, "Unable to load clients.");
 
-    if (!response.ok) {
-      throw new Error(data?.error || "Unable to load clients.");
+    if (parseError) {
+      throw new Error(parseError);
     }
+
+    const data = parsed.data;
 
     const nextClients = Array.isArray(data) ? data : [];
     setClients(nextClients);
@@ -193,11 +200,14 @@ export function ProjectDashboard() {
 
     const query = lifecycleQueryString();
     const response = await fetch(query ? `/api/clients/${clientId}?${query}` : `/api/clients/${clientId}`, { cache: "no-store" });
-    const data = await response.json();
+    const parsed = await parseJsonResponseSafely<ClientDetail>(response);
+    const parseError = getSafeResponseError(parsed, "Unable to load client workspace.");
 
-    if (!response.ok) {
-      throw new Error(data?.error || "Unable to load client workspace.");
+    if (parseError) {
+      throw new Error(parseError);
     }
+
+    const data = parsed.data;
 
     setSelectedClient(data as ClientDetail);
     return data as ClientDetail;
@@ -314,11 +324,14 @@ export function ProjectDashboard() {
         }),
       });
 
-      const data = await response.json();
+      const parsed = await parseJsonResponseSafely<{ id?: string }>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to create engagement.");
 
-      if (!response.ok) {
-        throw new Error(formatApiError(data, "Unable to create engagement.", { includeFieldErrors: true }));
+      if (parseError) {
+        throw new Error(parseError);
       }
+
+      const data = parsed.data;
 
       setForm(initialForm);
       await loadProjects({ clearError: true });
@@ -349,15 +362,22 @@ export function ProjectDashboard() {
         }),
       });
 
-      const data = await response.json();
+      const parsed = await parseJsonResponseSafely<{ id: string; name?: string }>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to create client.");
 
-      if (!response.ok) {
-        throw new Error(formatApiError(data, "Unable to create client.", { includeFieldErrors: true }));
+      if (parseError) {
+        throw new Error(parseError);
       }
 
+      const data = parsed.data;
+
       setClientForm(initialClientForm);
-      setSelectedClientId(data.id);
-      await Promise.all([loadClients({ clearError: false }), loadClientDetail(data.id, { clearError: false })]);
+      setSelectedClientId(data?.id || null);
+      if (data?.id) {
+        await Promise.all([loadClients({ clearError: false }), loadClientDetail(data.id, { clearError: false })]);
+      } else {
+        await loadClients({ clearError: false });
+      }
       setNotice(`Client ${data?.name || "created"} successfully.`);
     } catch (createError) {
       const message = createError instanceof Error ? createError.message : "Unable to create client.";
@@ -398,16 +418,17 @@ export function ProjectDashboard() {
         }),
       });
 
-      const data = await response.json();
+      const parsed = await parseJsonResponseSafely<{ id?: string; fieldErrors?: unknown }>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to create client engagement.");
 
-      if (!response.ok) {
-        const details = getApiFieldErrors(data);
-        const base = getApiErrorMessage(data, "Unable to create client engagement.");
-        throw new Error(details.length ? `${base} ${details.slice(0, 3).join(" | ")}` : base);
+      if (parseError) {
+        throw new Error(parseError);
       }
 
+      const data = parsed.data;
+
       setClientObjective("");
-      setSelectedProjectId(data.id);
+      setSelectedProjectId(data?.id || null);
       await Promise.all([
         loadProjects({ clearError: false }),
         loadClients({ clearError: false }),
@@ -437,13 +458,15 @@ export function ProjectDashboard() {
         clearTimeout(timeout);
       }
 
-      const data = await response.json();
+      const parsed = await parseJsonResponseSafely<{ fieldErrors?: unknown }>(response);
+      const parseError = getSafeResponseError(parsed, "Workflow could not be started.", {
+        invalidMessage: "The server returned an invalid response. No workflow was started.",
+      });
 
-      if (!response.ok) {
-        const details = getApiFieldErrors(data);
-        const base = getApiErrorMessage(data, "Workflow could not be started.");
+      if (parseError) {
+        const details = getApiFieldErrors(parsed.data);
         const detailSuffix = details.length ? ` ${details.slice(0, 3).join(" | ")}` : "";
-        throw new Error(`${base}${detailSuffix}`);
+        throw new Error(`${parseError}${detailSuffix}`);
       }
 
       await loadProjects({ clearError: false });
@@ -474,6 +497,29 @@ export function ProjectDashboard() {
     }
   }
 
+  async function handleAbort(projectId: string) {
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch(`/api/engagements/${projectId}/abort`, { method: "POST" });
+      const parsed = await parseJsonResponseSafely(response);
+      const parseError = getSafeResponseError(parsed, "Unable to abort workflow.", {
+        invalidMessage: "The server returned an invalid response. Workflow abort was not confirmed.",
+      });
+
+      if (parseError) {
+        throw new Error(parseError);
+      }
+
+      await loadProjects({ clearError: false });
+      setNotice(`Workflow abort recorded for ${projectId}.`);
+    } catch (abortError) {
+      const message = abortError instanceof Error ? abortError.message : "Unable to abort workflow.";
+      setError(message);
+    }
+  }
+
   async function handleClientLifecycle(clientId: string, action: "archive" | "restore" | "delete") {
     if (action === "delete") {
       const confirmed = window.confirm(
@@ -492,9 +538,10 @@ export function ProjectDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Unable to update client lifecycle state."));
+      const parsed = await parseJsonResponseSafely(response);
+      const parseError = getSafeResponseError(parsed, "Unable to update client lifecycle state.");
+      if (parseError) {
+        throw new Error(parseError);
       }
 
       await Promise.all([
@@ -529,9 +576,10 @@ export function ProjectDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Unable to update engagement lifecycle state."));
+      const parsed = await parseJsonResponseSafely(response);
+      const parseError = getSafeResponseError(parsed, "Unable to update engagement lifecycle state.");
+      if (parseError) {
+        throw new Error(parseError);
       }
 
       await Promise.all([
@@ -1229,7 +1277,7 @@ export function ProjectDashboard() {
           </div>
         </section>
 
-            <ProjectWorkspace project={selectedProject} runningProjectId={runningProjectId} onRun={handleRun} />
+            <ProjectWorkspace project={selectedProject} runningProjectId={runningProjectId} onRun={handleRun} onAbort={handleAbort} />
 
             <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
           <div className="flex items-center justify-between">

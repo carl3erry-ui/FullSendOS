@@ -138,6 +138,31 @@ test("normal tests do not make live xAI calls", () => {
   assert.doesNotMatch(html, /api\.x\.ai|xai\.api|Authorization:/i);
 });
 
+test("owner/admin dashboard uses safe JSON response messages", () => {
+  const helperPath = path.resolve(process.cwd(), "app/components/safe-json-response.ts");
+  const source = fs.readFileSync(helperPath, "utf8");
+  assert.match(source, /The server returned an empty response\. Please refresh or try the action again\./i);
+
+  const dashboardPath = path.resolve(process.cwd(), "app/components/project-dashboard.tsx");
+  const dashboardSource = fs.readFileSync(dashboardPath, "utf8");
+  assert.match(dashboardSource, /The server returned an invalid response\. No workflow was started\./i);
+});
+
+test("workflow run and abort actions parse API responses safely", () => {
+  const dashboardPath = path.resolve(process.cwd(), "app/components/project-dashboard.tsx");
+  const source = fs.readFileSync(dashboardPath, "utf8");
+  assert.match(source, /parseJsonResponseSafely\(response\)/i);
+  assert.match(source, /handleAbort\(projectId: string\)/i);
+
+  const workspacePath = path.resolve(process.cwd(), "app/components/project-workspace.tsx");
+  const workspaceSource = fs.readFileSync(workspacePath, "utf8");
+  assert.match(workspaceSource, /parseJsonResponseSafely<EngagementDetail>\(response\)/i);
+
+  const viewerPath = path.resolve(process.cwd(), "app/components/work-product-viewer.tsx");
+  const viewerSource = fs.readFileSync(viewerPath, "utf8");
+  assert.match(viewerSource, /onAbort\?\.\(project\.id\)/i);
+});
+
 test("future roadmap includes secure client portal production foundation", () => {
   const roadmapPath = path.resolve(process.cwd(), "docs/ROADMAP.md");
   const source = fs.readFileSync(roadmapPath, "utf8");

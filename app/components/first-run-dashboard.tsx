@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getSafeResponseError, parseJsonResponseSafely } from "./safe-json-response";
 
 type FirstRunDashboardProps = {
   onCreateClient: () => void;
@@ -60,8 +61,9 @@ export function FirstRunDashboard({ onCreateClient, onCreateEngagement, onTakeTo
     setDemoError(null);
     try {
       const response = await fetch("/api/demo/seed", { method: "POST" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error || "Demo seed failed");
+      const parsed = await parseJsonResponseSafely(response);
+      const parseError = getSafeResponseError(parsed, "Demo seed failed");
+      if (parseError) throw new Error(parseError);
       onViewDemo?.();
     } catch (error) {
       setDemoError(error instanceof Error ? error.message : "Unable to load demo workspace.");

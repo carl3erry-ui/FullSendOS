@@ -8,6 +8,7 @@ import {
   type ClientSafeEngagement,
   type ClientSafeDeliverable,
 } from "@/lib/client-portal/client-portal-access";
+import { getSafeResponseError, parseJsonResponseSafely } from "@/app/components/safe-json-response";
 
 type ClientSummary = {
   id: string;
@@ -67,8 +68,11 @@ export default function ClientPortalPage({ params }: { params: Promise<{ clientI
       try {
         setIsLoading(true);
         const response = await fetch(`/api/clients/${clientId}`, { cache: "no-store" });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data?.error || "Client not found.");
+        const parsed = await parseJsonResponseSafely<ClientSummary>(response);
+        const parseError = getSafeResponseError(parsed, "Client not found.");
+        if (parseError) throw new Error(parseError);
+        const data = parsed.data;
+        if (!data) throw new Error("Client not found.");
 
         setClient(data as ClientSummary);
 
@@ -98,20 +102,36 @@ export default function ClientPortalPage({ params }: { params: Promise<{ clientI
           fetch(`/api/engagements/${selectedEngagementId}/exports`, { cache: "no-store" }),
         ]);
 
-        const engData = await engResponse.json();
-        if (!engResponse.ok) return;
+        const parsedEngagement = await parseJsonResponseSafely(engResponse);
+        if (getSafeResponseError(parsedEngagement, "Unable to load engagement detail.")) {
+          return;
+        }
+        const engData = parsedEngagement.data as Record<string, unknown>;
 
-        const exportsData = await exportsResponse.json();
+        const parsedExports = await parseJsonResponseSafely<ExportRecord[]>(exportsResponse);
+        if (getSafeResponseError(parsedExports, "Unable to load export list.")) {
+          return;
+        }
+        const exportsData = parsedExports.data;
         const exportList: ExportRecord[] = Array.isArray(exportsData) ? exportsData : [];
         setExports(exportList);
+
+        const deliverables =
+          engData.deliverables && typeof engData.deliverables === "object"
+            ? (engData.deliverables as {
+                executiveReport?: string;
+                onePageSummary?: string;
+                deckOutline?: unknown[];
+              })
+            : undefined;
 
         const safe = filterClientSafeDeliverable({
           engagementId: selectedEngagementId,
           engagementTitle: client.name,
-          status: engData.status || "draft",
-          deliverables: engData.deliverables,
+          status: typeof engData.status === "string" ? engData.status : "draft",
+          deliverables,
           exportCount: exportList.length,
-          updatedAt: engData.updatedAt,
+          updatedAt: typeof engData.updatedAt === "string" ? engData.updatedAt : undefined,
         });
         setDeliverable(safe);
       } catch {

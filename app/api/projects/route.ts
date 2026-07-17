@@ -14,13 +14,18 @@ function toValidationError(message: string, fieldErrors: FieldValidationError[])
 }
 
 export async function GET(request?: Request) {
-  const url = request ? new URL(request.url) : null;
-  const includeArchived = url?.searchParams.get("includeArchived") === "true";
-  const includeDeleted = url?.searchParams.get("includeDeleted") === "true";
-  const includeAll = url?.searchParams.get("includeAll") === "true";
+  try {
+    const url = request ? new URL(request.url) : null;
+    const includeArchived = url?.searchParams.get("includeArchived") === "true";
+    const includeDeleted = url?.searchParams.get("includeDeleted") === "true";
+    const includeAll = url?.searchParams.get("includeAll") === "true";
 
-  const projects = await listProjects({ includeArchived, includeDeleted, includeAll });
-  return NextResponse.json(projects);
+    const projects = await listProjects({ includeArchived, includeDeleted, includeAll });
+    return NextResponse.json(projects);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
