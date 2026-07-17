@@ -5,15 +5,17 @@ export type WorkflowStabilityState =
   | "stuck"
   | "timed-out"
   | "failed"
+  | "aborted"
   | "needs-review"
   | "completed"
   | "unknown";
 
-function normalizeTerminalStatus(status?: string | null): "completed" | "needs-review" | "failed" | null {
+function normalizeTerminalStatus(status?: string | null): "completed" | "needs-review" | "failed" | "aborted" | null {
   if (!status) return null;
 
   if (status === "complete" || status === "completed") return "completed";
   if (status === "needs-review") return "needs-review";
+  if (status === "aborted") return "aborted";
   if (status === "failed") return "failed";
 
   return null;
@@ -111,6 +113,7 @@ export function getWorkflowStabilityState(
   if (terminalStatus) {
     if (terminalStatus === "completed") return { state: "completed", reason: "Workflow completed." };
     if (terminalStatus === "needs-review") return { state: "needs-review", reason: "Workflow is awaiting human review." };
+    if (terminalStatus === "aborted") return { state: "aborted", reason: "Workflow was aborted." };
     return { state: "failed", reason: "Workflow failed." };
   }
 

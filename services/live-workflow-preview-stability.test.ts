@@ -25,7 +25,18 @@ test("terminal workflow state detection", () => {
   assert.equal(isWorkflowTerminal("completed"), true);
   assert.equal(isWorkflowTerminal("needs-review"), true);
   assert.equal(isWorkflowTerminal("failed"), true);
+  assert.equal(isWorkflowTerminal("aborted"), true);
   assert.equal(isWorkflowTerminal("running"), false);
+});
+
+test("workflow stability treats aborted as terminal", () => {
+  const result = getWorkflowStabilityState({
+    status: "aborted",
+    updatedAt: "2026-07-16T12:00:00.000Z",
+  });
+
+  assert.equal(result.state, "aborted");
+  assert.match(result.reason, /aborted/i);
 });
 
 test("stale workflow detection uses timeout safely", () => {
@@ -214,6 +225,25 @@ test("live preview status marks complete workflow as terminal", async () => {
       cwd: process.cwd(),
     });
     assert.match(stdout, /"status":\s*"complete"/);
+    assert.match(stdout, /"terminalStateReached":\s*true/);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("live preview status marks aborted workflow as terminal", async () => {
+  const project = createEmptyProject({
+    companyName: "Aborted Terminal Status Co",
+    objective: "Validate aborted terminal state in harness",
+  });
+  project.status = "aborted";
+  await saveProject(project);
+
+  try {
+    const { stdout } = await execFileAsync("node", ["scripts/live-preview-status.mjs", project.id], {
+      cwd: process.cwd(),
+    });
+    assert.match(stdout, /"status":\s*"aborted"/);
     assert.match(stdout, /"terminalStateReached":\s*true/);
   } finally {
     await cleanupProject(project.id);
