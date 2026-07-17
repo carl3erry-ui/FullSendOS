@@ -21,6 +21,7 @@ async function cleanupProject(id: string) {
 }
 
 test("terminal workflow state detection", () => {
+  assert.equal(isWorkflowTerminal("complete"), true);
   assert.equal(isWorkflowTerminal("completed"), true);
   assert.equal(isWorkflowTerminal("needs-review"), true);
   assert.equal(isWorkflowTerminal("failed"), true);
@@ -101,6 +102,28 @@ test("abort endpoint returns safe JSON", async () => {
   }
 });
 
+test("abort endpoint returns safe conflict for workflows that are not running", async () => {
+  const project = createEmptyProject({
+    companyName: "Abort Safe Conflict Co",
+    objective: "Abort non-running workflow safely",
+  });
+  project.status = "complete";
+  project.audit.activeRun = null;
+  await saveProject(project);
+
+  try {
+    const response = await abortWorkflow(buildAbortRequest(), { params: Promise.resolve({ id: project.id }) });
+    const body = await response.json();
+    assert.equal(response.status, 409);
+    assert.equal(body.ok, false);
+    assert.equal(body.error, "Workflow is not currently running.");
+    assert.equal(body.safeToRetry, true);
+    assert.doesNotMatch(JSON.stringify(body), /rawProviderResponse|providerPayload|systemPrompt|hiddenReasoning/i);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
 test("redacted logger removes secret-like values", () => {
   const redacted = redactSecretLikeValues({
     apiKey: "secret",
@@ -173,6 +196,25 @@ test("live preview status harness prints safe summaries only", async () => {
     assert.match(stdout, /"status":\s*"running"/);
     assert.match(stdout, /"deliverables"/);
     assert.doesNotMatch(stdout, /rawProviderResponse|providerPayload|systemPrompt|hiddenReasoning|\.env\.local/i);
+  } finally {
+    await cleanupProject(project.id);
+  }
+});
+
+test("live preview status marks complete workflow as terminal", async () => {
+  const project = createEmptyProject({
+    companyName: "Terminal Status Co",
+    objective: "Validate complete terminal state in harness",
+  });
+  project.status = "complete";
+  await saveProject(project);
+
+  try {
+    const { stdout } = await execFileAsync("node", ["scripts/live-preview-status.mjs", project.id], {
+      cwd: process.cwd(),
+    });
+    assert.match(stdout, /"status":\s*"complete"/);
+    assert.match(stdout, /"terminalStateReached":\s*true/);
   } finally {
     await cleanupProject(project.id);
   }

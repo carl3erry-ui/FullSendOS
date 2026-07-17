@@ -49,7 +49,7 @@ export function isClientSafe(readiness: DeliverableReadiness): boolean {
 
 /** Infer readiness from engagement status for display defaults. */
 export function inferReadiness(engagementStatus: string): DeliverableReadiness {
-  if (engagementStatus === "complete") return "needs-human-review";
+  if (engagementStatus === "complete" || engagementStatus === "completed") return "needs-human-review";
   if (engagementStatus === "needs-review") return "needs-human-review";
   return "internal-draft";
 }

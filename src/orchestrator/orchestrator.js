@@ -55,11 +55,15 @@ function parseAndValidateDepartmentOutput({ department, schema, text }) {
   const raw = parseJsonObject(text);
   const normalized = normalizeDepartmentOutput(department, raw);
 
-  if (process.env.NODE_ENV !== "production" && department === "research") {
-    const redactedRaw = redactForLog(raw);
-    const redactedNormalized = redactForLog(normalized);
-    console.log(`workflow-raw-output ${department}`, JSON.stringify(redactedRaw).slice(0, 2000));
-    console.log(`workflow-normalized-output ${department}`, JSON.stringify(redactedNormalized).slice(0, 2000));
+  if (process.env.NODE_ENV !== "production") {
+    const summary = {
+      department,
+      summaryLength: typeof normalized?.summary === "string" ? normalized.summary.length : 0,
+      claims: Array.isArray(normalized?.claims) ? normalized.claims.length : 0,
+      unknowns: Array.isArray(normalized?.unknowns) ? normalized.unknowns.length : 0,
+      sourceIdsUsed: Array.isArray(normalized?.sourceIdsUsed) ? normalized.sourceIdsUsed.length : 0,
+    };
+    console.log("workflow-output-summary", JSON.stringify(redactForLog(summary)));
   }
 
   return schema.parse(normalized);

@@ -6,13 +6,27 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const project = await loadProject(id);
-    await failWorkflowRun(project, "Workflow aborted by operator after stalled preview.");
+
+    if (project.status !== "running" && !project.audit?.activeRun) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Workflow is not currently running.",
+          engagementId: id,
+          status: project.status,
+          safeToRetry: true,
+        },
+        { status: 409 },
+      );
+    }
+
+    await failWorkflowRun(project, "Workflow aborted by operator.");
 
     return NextResponse.json({
       ok: true,
       engagementId: id,
       status: "failed",
-      reason: "Workflow aborted by operator after stalled preview.",
+      reason: "Workflow aborted by operator.",
       safeToRetry: true,
     });
   } catch (error) {

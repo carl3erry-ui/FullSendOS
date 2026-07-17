@@ -19,6 +19,49 @@ function extractOutputText(data) {
   throw new Error("No output_text found in xAI response.");
 }
 
+const DEFAULT_XAI_REQUEST_TIMEOUT_MS = 45_000;
+
+function resolveRequestTimeoutMs() {
+  const raw = Number(process.env.XAI_REQUEST_TIMEOUT_MS ?? DEFAULT_XAI_REQUEST_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw < 1000) {
+    return DEFAULT_XAI_REQUEST_TIMEOUT_MS;
+  }
+  return Math.floor(raw);
+}
+
+function sanitizeErrorText(value) {
+  const text = String(value || "Unknown error")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const redacted = text
+    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [REDACTED]")
+    .replace(/(x-api-key|api[_-]?key|authorization|token|secret)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]");
+
+  return redacted.slice(0, 320);
+}
+
+function isAbortLikeError(error) {
+  return error instanceof Error && (error.name === "AbortError" || /abort/i.test(error.message));
+}
+
+function createRequestTimeoutController(timeoutMs) {
+  const controller = new AbortController();
+  let didTimeout = false;
+
+  const timeoutId = setTimeout(() => {
+    didTimeout = true;
+    controller.abort();
+  }, timeoutMs);
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => didTimeout,
+    cleanup: () => clearTimeout(timeoutId),
+  };
+}
+
 function detectDepartmentFromPrompt(prompt) {
   const direct = prompt.match(/department:\s*([a-z-]+)/i);
   if (direct?.[1]) return direct[1].toLowerCase();
@@ -237,6 +280,7 @@ export async function callXai({ prompt, model = process.env.XAI_MODEL || "grok-4
   const resolvedMaxOutputTokens = Number.isFinite(maxOutputTokens)
     ? maxOutputTokens
     : configuredMaxOutputTokens;
+  const timeoutMs = resolveRequestTimeoutMs();
 
   if (!apiKey) {
     if (allowDevFallback) {
@@ -246,39 +290,56 @@ export async function callXai({ prompt, model = process.env.XAI_MODEL || "grok-4
     throw new Error("XAI_API_KEY is not configured.");
   }
 
-  const response = await fetch("https://api.x.ai/v1/responses", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      input: prompt,
-      store: false,
-      temperature: 0.2,
-      max_output_tokens: Math.max(1000, Math.floor(resolvedMaxOutputTokens))
-    })
-  });
+  const timeoutController = createRequestTimeoutController(timeoutMs);
+  let response;
+
+  try {
+    response = await fetch("https://api.x.ai/v1/responses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      signal: timeoutController.signal,
+      body: JSON.stringify({
+        model,
+        input: prompt,
+        store: false,
+        temperature: 0.2,
+        max_output_tokens: Math.max(1000, Math.floor(resolvedMaxOutputTokens))
+      })
+    });
+  } catch (error) {
+    if (timeoutController.didTimeout() || isAbortLikeError(error)) {
+      throw new Error(`xAI request timed out after ${timeoutMs}ms. Retry the workflow or abort and run again.`);
+    }
+
+    const safeMessage = sanitizeErrorText(error instanceof Error ? error.message : error);
+    throw new Error(`xAI request failed before receiving a response: ${safeMessage}`);
+  } finally {
+    timeoutController.cleanup();
+  }
 
   const raw = await response.text();
   let data;
   try {
     data = JSON.parse(raw);
   } catch {
-    throw new Error(`xAI returned non-JSON HTTP ${response.status}: ${raw.slice(0, 500)}`);
+    throw new Error(`xAI returned invalid response format (HTTP ${response.status}).`);
   }
 
   if (!response.ok) {
     const message = data?.error?.message || data?.error || data?.message || raw;
-    const normalizedMessage = typeof message === "string" ? message : JSON.stringify(message);
+    const normalizedMessage = sanitizeErrorText(
+      typeof message === "string" ? message : JSON.stringify(message),
+    );
     const looksLikeCredentialError = /api key|incorrect api key|unauthorized|invalid api/i.test(normalizedMessage);
 
     if (allowDevFallback && looksLikeCredentialError) {
       return buildDevFallbackResponse({ prompt, model });
     }
 
-    throw new Error(`xAI HTTP ${response.status}: ${normalizedMessage}`);
+    throw new Error(`xAI request failed with HTTP ${response.status}: ${normalizedMessage}`);
   }
 
   return { text: extractOutputText(data), model: data.model || model, raw: data };
