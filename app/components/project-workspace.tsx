@@ -7,14 +7,16 @@ import {
   type EngagementDetail,
   type WorkspaceProjectSummary,
 } from "./work-product-model";
+import { getSafeResponseError, parseJsonResponseSafely } from "./safe-json-response";
 
 type ProjectWorkspaceProps = {
   project: WorkspaceProjectSummary | null;
   runningProjectId: string | null;
   onRun: (projectId: string) => void;
+  onAbort: (projectId: string) => void;
 };
 
-export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWorkspaceProps) {
+export function ProjectWorkspace({ project, runningProjectId, onRun, onAbort }: ProjectWorkspaceProps) {
   const [detail, setDetail] = useState<EngagementDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -40,11 +42,14 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
       setLoadError(null);
       try {
         const response = await fetch(`/api/engagements/${project.id}`, { cache: "no-store" });
-        const data = await response.json();
+        const parsed = await parseJsonResponseSafely<EngagementDetail>(response);
+        const parseError = getSafeResponseError(parsed, "Unable to load engagement detail.");
 
-        if (!response.ok) {
-          throw new Error(data?.error || "Unable to load engagement detail.");
+        if (parseError) {
+          throw new Error(parseError);
         }
+
+        const data = parsed.data;
 
         if (cancelled) return;
         setDetail(data as EngagementDetail);
@@ -84,6 +89,7 @@ export function ProjectWorkspace({ project, runningProjectId, onRun }: ProjectWo
       onSectionChange={setActiveSection}
       runningProjectId={runningProjectId}
       onRun={onRun}
+      onAbort={onAbort}
     />
   );
 }

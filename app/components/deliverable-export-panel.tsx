@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getSafeResponseError, parseJsonResponseSafely } from "./safe-json-response";
 
 type ExportFormat = "markdown" | "html" | "text" | "json" | "pdf";
 
@@ -78,10 +79,12 @@ export function DeliverableExportPanel({
     setIsTemplateLoading(true);
     try {
       const response = await fetch("/api/deliverable-templates", { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to load templates.");
+      const parsed = await parseJsonResponseSafely<DeliverableTemplateSummary[]>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to load templates.");
+      if (parseError) {
+        throw new Error(parseError);
       }
+      const data = parsed.data;
       const list = Array.isArray(data) ? (data as DeliverableTemplateSummary[]) : [];
       setTemplates(list);
       if (list.length > 0 && !list.some((item) => item.id === selectedTemplateId)) {
@@ -100,10 +103,12 @@ export function DeliverableExportPanel({
     setIsLoading(true);
     try {
       const response = await fetch(apiBase, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to load exports.");
+      const parsed = await parseJsonResponseSafely<ExportSummary[]>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to load exports.");
+      if (parseError) {
+        throw new Error(parseError);
       }
+      const data = parsed.data;
       setExports(Array.isArray(data) ? data : []);
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Unable to load exports.";
@@ -123,9 +128,14 @@ export function DeliverableExportPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ format, templateId: selectedTemplateId }),
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to generate export.");
+      const parsed = await parseJsonResponseSafely<ExportDetail>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to generate export.");
+      if (parseError) {
+        throw new Error(parseError);
+      }
+      const data = parsed.data;
+      if (!data) {
+        throw new Error("The server returned an invalid response. Export generation was not confirmed.");
       }
       setNotice(`${format.toUpperCase()} export generated with template ${data.templateName || selectedTemplateId}.`);
       await loadExports({ clearError: false });
@@ -143,11 +153,16 @@ export function DeliverableExportPanel({
     setError(null);
     try {
       const response = await fetch(`${apiBase}/${exportId}`, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || "Unable to load export detail.");
+      const parsed = await parseJsonResponseSafely<ExportDetail>(response);
+      const parseError = getSafeResponseError(parsed, "Unable to load export detail.");
+      if (parseError) {
+        throw new Error(parseError);
       }
-      setActiveExport(data as ExportDetail);
+      const data = parsed.data;
+      if (!data) {
+        throw new Error("The server returned an invalid response. Export detail could not be loaded.");
+      }
+      setActiveExport(data);
     } catch (openError) {
       const message =
         openError instanceof Error ? openError.message : "Unable to load export detail.";
