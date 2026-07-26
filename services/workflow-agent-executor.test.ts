@@ -9,6 +9,7 @@ import {
   executeWorkflowAgentStep,
   type WorkflowAgentStepConfig,
 } from "./workflow-agent-executor";
+import { createTestProject } from "./test-fixtures";
 
 // Register providers for testing
 if (!globalProviderRegistry.isRegistered("mock")) {
@@ -21,42 +22,8 @@ if (!globalProviderRegistry.isRegistered("xai")) {
   }
 }
 
-// Mock project for testing
-const mockProject = {
-  id: "test-project-123",
-  client: {
-    companyName: "Test Company",
-    contactName: "John Doe",
-    website: "https://test.com",
-    industry: "Tech",
-  },
-  objective: {
-    summary: "Test objective",
-    constraints: [],
-    requestedDeliverables: [],
-  },
-  status: "in-progress" as const,
-  createdAt: "2024-01-01T00:00:00Z",
-  updatedAt: "2024-01-01T00:00:00Z",
-  workflow: {
-    initializedAt: "2024-01-01T00:00:00Z",
-    stages: [],
-    stageResults: {},
-  },
-  deliverables: {
-    assets: {},
-  },
-  evidence: {
-    sources: [],
-    items: [],
-  },
-  departments: {
-    intelligence: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    strategy: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    creative: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    publishing: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-  },
-};
+// Shared typed fixture avoids stale ad-hoc object shapes in agent-step tests.
+const mockProject = createTestProject();
 
 test("Workflow agent step creates task with project link", async () => {
   const step: WorkflowAgentStepConfig = {
