@@ -60,7 +60,7 @@ test("client routes support create, list, and detail with associated engagement 
     const persisted = await loadProject(engagementBody.id);
     assert.equal(persisted.clientId, createdClientBody.id);
 
-    const clientListResponse = await getClients();
+    const clientListResponse = await getClients(new Request("http://127.0.0.1:3000/api/clients"));
     const clientListBody = await clientListResponse.json();
 
     assert.equal(clientListResponse.status, 200);
@@ -169,7 +169,7 @@ test("client lifecycle actions archive, restore, and soft-delete without hard de
     );
     assert.equal(archiveResponse.status, 200);
 
-    const defaultList = await (await getClients()).json();
+    const defaultList = await (await getClients(new Request("http://127.0.0.1:3000/api/clients"))).json();
     assert.equal(defaultList.some((client: { id?: string }) => client.id === createdBody.id), false);
 
     const archivedList = await (
@@ -187,7 +187,7 @@ test("client lifecycle actions archive, restore, and soft-delete without hard de
     );
     assert.equal(restoreResponse.status, 200);
 
-    const restoredList = await (await getClients()).json();
+    const restoredList = await (await getClients(new Request("http://127.0.0.1:3000/api/clients"))).json();
     assert.equal(restoredList.some((client: { id?: string }) => client.id === createdBody.id), true);
 
     const deleteResponse = await patchClientLifecycle(

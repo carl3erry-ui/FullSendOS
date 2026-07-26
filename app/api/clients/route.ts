@@ -38,8 +38,8 @@ function toClientSummary(client: {
   };
 }
 
-export async function GET(request?: Request) {
-  const url = request ? new URL(request.url) : null;
+export async function GET(request: Request) {
+  const url = new URL(request.url);
   const includeArchived = url?.searchParams.get("includeArchived") === "true";
   const includeDeleted = url?.searchParams.get("includeDeleted") === "true";
   const includeAll = url?.searchParams.get("includeAll") === "true";
