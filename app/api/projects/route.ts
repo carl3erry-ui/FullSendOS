@@ -13,9 +13,9 @@ function toValidationError(message: string, fieldErrors: FieldValidationError[])
   return NextResponse.json({ error: message, fieldErrors }, { status: 422 });
 }
 
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   try {
-    const url = request ? new URL(request.url) : null;
+    const url = new URL(request.url);
     const includeArchived = url?.searchParams.get("includeArchived") === "true";
     const includeDeleted = url?.searchParams.get("includeDeleted") === "true";
     const includeAll = url?.searchParams.get("includeAll") === "true";

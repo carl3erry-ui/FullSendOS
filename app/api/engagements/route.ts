@@ -1,6 +1,6 @@
 import { GET as getProjects, POST as postProjects } from "../projects/route";
 
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   return getProjects(request);
 }
 

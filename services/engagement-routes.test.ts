@@ -36,6 +36,10 @@ async function waitForTerminalProjectStatus(id: string, timeoutMs = 6000) {
   throw new Error(`Timed out waiting for project ${id} to reach terminal status.`);
 }
 
+function buildListRequest(url: string): Request {
+  return new Request(url, { method: "GET" });
+}
+
 test("engagement routes delegate to project route handlers without duplicated business logic", async () => {
   const routeSource = await fs.readFile(engagementRouteFile, "utf8");
   const runSource = await fs.readFile(engagementRunRouteFile, "utf8");
@@ -117,7 +121,7 @@ test("engagement list route includes records persisted through project model", a
   await saveProject(project);
 
   try {
-    const response = await getEngagements();
+    const response = await getEngagements(buildListRequest("http://127.0.0.1:3000/api/engagements"));
     const list = await response.json();
     assert.equal(response.status, 200);
     assert.equal(Array.isArray(list), true);
@@ -144,8 +148,8 @@ test("engagement and project list routes return equivalent summary shape", async
   assert.equal(typeof created.id, "string");
 
   try {
-    const engagementListResponse = await getEngagements();
-    const projectListResponse = await getProjects();
+    const engagementListResponse = await getEngagements(buildListRequest("http://127.0.0.1:3000/api/engagements"));
+    const projectListResponse = await getProjects(buildListRequest("http://127.0.0.1:3000/api/projects"));
     const engagementList = await engagementListResponse.json();
     const projectList = await projectListResponse.json();
 
@@ -325,7 +329,7 @@ test("engagement lifecycle actions archive, restore, and soft-delete without har
     );
     assert.equal(archiveResponse.status, 200);
 
-    const defaultList = await (await getEngagements()).json();
+    const defaultList = await (await getEngagements(buildListRequest("http://127.0.0.1:3000/api/engagements"))).json();
     assert.equal(defaultList.some((item: { id?: string }) => item.id === createdBody.id), false);
 
     const archivedList = await (
@@ -343,7 +347,7 @@ test("engagement lifecycle actions archive, restore, and soft-delete without har
     );
     assert.equal(restoreResponse.status, 200);
 
-    const restoredList = await (await getEngagements()).json();
+    const restoredList = await (await getEngagements(buildListRequest("http://127.0.0.1:3000/api/engagements"))).json();
     assert.equal(restoredList.some((item: { id?: string }) => item.id === createdBody.id), true);
 
     const deleteResponse = await patchEngagementLifecycle(
