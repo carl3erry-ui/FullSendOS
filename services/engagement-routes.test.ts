@@ -9,6 +9,7 @@ import { POST as runEngagement } from "../app/api/engagements/[id]/run/route";
 import { PATCH as patchEngagementLifecycle } from "../app/api/engagements/[id]/route";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
+import { applyEnvOverrides, restoreEnv } from "./test-env";
 
 const storageDir = path.resolve("data/projects");
 const dashboardFile = path.resolve("app/components/project-dashboard.tsx");
@@ -209,13 +210,11 @@ test("engagement and project run routes return equivalent duplicate-run behavior
 });
 
 test("running through engagement API updates the same persisted record and creates no duplicate record", async () => {
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
-
-  process.env.NODE_ENV = "development";
-  delete process.env.XAI_API_KEY;
-  delete process.env.XAI_DEV_FALLBACK;
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: undefined,
+    XAI_DEV_FALLBACK: undefined,
+  });
 
   const project = createEmptyProject({
     companyName: "Engagement Run Persistence Co",
@@ -249,11 +248,7 @@ test("running through engagement API updates the same persisted record and creat
     assert.equal(afterFiles.length, beforeFiles.length);
   } finally {
     await cleanupEngagement(project.id);
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousFallbackFlag === undefined) delete process.env.XAI_DEV_FALLBACK;
-    else process.env.XAI_DEV_FALLBACK = previousFallbackFlag;
+    restoreEnv(envSnapshot);
   }
 });
 

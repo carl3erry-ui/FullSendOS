@@ -7,6 +7,7 @@ import { POST as postEngagementRun } from "../app/api/engagements/[id]/run/route
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
 import { RUN_STALE_MS } from "../src/orchestrator/runLifecycle.js";
+import { applyEnvOverrides, restoreEnv } from "./test-env";
 
 const storageDir = path.resolve("data/projects");
 
@@ -39,13 +40,11 @@ async function waitForTerminalProjectStatus(id: string, timeoutMs = 6000) {
 }
 
 test("workflow run route persists running state before async execution and eventually completes", async () => {
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
-
-  process.env.NODE_ENV = "development";
-  delete process.env.XAI_API_KEY;
-  delete process.env.XAI_DEV_FALLBACK;
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: undefined,
+    XAI_DEV_FALLBACK: undefined,
+  });
 
   const project = createEmptyProject({
     companyName: "Fallback Test Co",
@@ -75,11 +74,7 @@ test("workflow run route persists running state before async execution and event
     assert.ok(terminal.audit.runs.length >= 7);
   } finally {
     await cleanupProject(project.id);
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousFallbackFlag === undefined) delete process.env.XAI_DEV_FALLBACK;
-    else process.env.XAI_DEV_FALLBACK = previousFallbackFlag;
+    restoreEnv(envSnapshot);
   }
 });
 
@@ -209,13 +204,11 @@ test("workflow run route returns 409 for duplicate active run and does not start
 });
 
 test("stale active run is marked failed before a new run is accepted", async () => {
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
-
-  process.env.NODE_ENV = "development";
-  delete process.env.XAI_API_KEY;
-  delete process.env.XAI_DEV_FALLBACK;
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: undefined,
+    XAI_DEV_FALLBACK: undefined,
+  });
 
   const project = createEmptyProject({
     companyName: "Stale Run Co",
@@ -250,22 +243,16 @@ test("stale active run is marked failed before a new run is accepted", async () 
     assert.match(terminal.status, /needs-review|complete/);
   } finally {
     await cleanupProject(project.id);
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousFallbackFlag === undefined) delete process.env.XAI_DEV_FALLBACK;
-    else process.env.XAI_DEV_FALLBACK = previousFallbackFlag;
+    restoreEnv(envSnapshot);
   }
 });
 
 test("workflow run route persists terminal failure when fallback is disabled and API key is missing", async () => {
-  const previousNodeEnv = process.env.NODE_ENV;
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousFallbackFlag = process.env.XAI_DEV_FALLBACK;
-
-  process.env.NODE_ENV = "development";
-  delete process.env.XAI_API_KEY;
-  process.env.XAI_DEV_FALLBACK = "false";
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: undefined,
+    XAI_DEV_FALLBACK: "false",
+  });
 
   const project = createEmptyProject({
     companyName: "No Key Test Co",
@@ -288,10 +275,6 @@ test("workflow run route persists terminal failure when fallback is disabled and
     );
   } finally {
     await cleanupProject(project.id);
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousFallbackFlag === undefined) delete process.env.XAI_DEV_FALLBACK;
-    else process.env.XAI_DEV_FALLBACK = previousFallbackFlag;
+    restoreEnv(envSnapshot);
   }
 });
