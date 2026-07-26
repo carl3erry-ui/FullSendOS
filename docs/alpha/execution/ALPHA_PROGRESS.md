@@ -154,4 +154,5 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 
 | Date | Updated By | ALPHA IDs Updated | Status Change | Evidence Link | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-26 | Engineering | ALPHA-035 | NOT STARTED -> IN PROGRESS (Batch 1 COMPLETE) | Branch feature/alpha-035-batch-1-env-typing; PR TBD | Validation: tsc 91 -> 67, tests 541 pass, build pass with known warnings, no intended runtime behavior change. |
 | TBD | TBD | TBD | TBD | TBD | TBD |
