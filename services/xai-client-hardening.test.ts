@@ -6,19 +6,18 @@ import { runExistingProject } from "../src/orchestrator/orchestrator.js";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { saveProject } from "../src/storage/projectStore.js";
 import { callXai } from "../src/services/xaiClient.js";
+import { applyEnvOverrides, restoreEnv } from "./test-env";
 
-type MockResponse = {
-  ok: boolean;
+function buildMockResponse({
+  status,
+  body,
+  ok = status >= 200 && status < 300,
+}: {
   status: number;
-  text: () => Promise<string>;
-};
-
-function buildMockResponse({ status, body, ok = status >= 200 && status < 300 }: { status: number; body: string; ok?: boolean }): MockResponse {
-  return {
-    ok,
-    status,
-    text: async () => body,
-  };
+  body: string;
+  ok?: boolean;
+}): Response {
+  return new Response(body, { status: ok ? status : status });
 }
 
 async function cleanupProject(id: string) {
@@ -26,16 +25,14 @@ async function cleanupProject(id: string) {
 }
 
 test("callXai returns safe timeout error message without prompt or secrets", async () => {
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousTimeout = process.env.XAI_REQUEST_TIMEOUT_MS;
-  const previousNodeEnv = process.env.NODE_ENV;
   const previousFetch = globalThis.fetch;
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: "test-key",
+    XAI_REQUEST_TIMEOUT_MS: "5",
+  });
 
-  process.env.NODE_ENV = "development";
-  process.env.XAI_API_KEY = "test-key";
-  process.env.XAI_REQUEST_TIMEOUT_MS = "5";
-
-  globalThis.fetch = ((_: string, init?: RequestInit) => {
+  const timeoutFetch: typeof fetch = (_input, init) => {
     return new Promise((_, reject) => {
       init?.signal?.addEventListener("abort", () => {
         const abortError = new Error("aborted");
@@ -43,11 +40,18 @@ test("callXai returns safe timeout error message without prompt or secrets", asy
         reject(abortError);
       });
     });
-  }) as typeof fetch;
+  };
+
+  globalThis.fetch = timeoutFetch;
 
   try {
     await assert.rejects(
-      () => callXai({ prompt: "department: research\nsecret token=abc", model: "grok-4.5" }),
+      () =>
+        callXai({
+          prompt: "department: research\nsecret token=abc",
+          model: "grok-4.5",
+          maxOutputTokens: 5000,
+        }),
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         assert.match(message, /timed out/i);
@@ -57,33 +61,28 @@ test("callXai returns safe timeout error message without prompt or secrets", asy
     );
   } finally {
     globalThis.fetch = previousFetch;
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousTimeout === undefined) delete process.env.XAI_REQUEST_TIMEOUT_MS;
-    else process.env.XAI_REQUEST_TIMEOUT_MS = previousTimeout;
+    restoreEnv(envSnapshot);
   }
 });
 
 test("callXai does not leak raw body when xAI returns non-json", async () => {
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousTimeout = process.env.XAI_REQUEST_TIMEOUT_MS;
-  const previousNodeEnv = process.env.NODE_ENV;
   const previousFetch = globalThis.fetch;
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: "test-key",
+    XAI_REQUEST_TIMEOUT_MS: "1000",
+  });
 
-  process.env.NODE_ENV = "development";
-  process.env.XAI_API_KEY = "test-key";
-  process.env.XAI_REQUEST_TIMEOUT_MS = "1000";
-
-  globalThis.fetch = (async () => buildMockResponse({
+  globalThis.fetch = async () =>
+    buildMockResponse({
     status: 502,
     body: "<html>apiKey=leaked-value</html>",
     ok: false,
-  })) as typeof fetch;
+  });
 
   try {
     await assert.rejects(
-      () => callXai({ prompt: "department: research", model: "grok-4.5" }),
+      () => callXai({ prompt: "department: research", model: "grok-4.5", maxOutputTokens: 5000 }),
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         assert.match(message, /invalid response format/i);
@@ -93,23 +92,17 @@ test("callXai does not leak raw body when xAI returns non-json", async () => {
     );
   } finally {
     globalThis.fetch = previousFetch;
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousTimeout === undefined) delete process.env.XAI_REQUEST_TIMEOUT_MS;
-    else process.env.XAI_REQUEST_TIMEOUT_MS = previousTimeout;
+    restoreEnv(envSnapshot);
   }
 });
 
 test("callXai sanitizes HTTP error messages", async () => {
-  const previousApiKey = process.env.XAI_API_KEY;
-  const previousTimeout = process.env.XAI_REQUEST_TIMEOUT_MS;
-  const previousNodeEnv = process.env.NODE_ENV;
   const previousFetch = globalThis.fetch;
-
-  process.env.NODE_ENV = "development";
-  process.env.XAI_API_KEY = "test-key";
-  process.env.XAI_REQUEST_TIMEOUT_MS = "1000";
+  const envSnapshot = applyEnvOverrides({
+    NODE_ENV: "development",
+    XAI_API_KEY: "test-key",
+    XAI_REQUEST_TIMEOUT_MS: "1000",
+  });
 
   const errorPayload = JSON.stringify({
     error: {
@@ -117,15 +110,16 @@ test("callXai sanitizes HTTP error messages", async () => {
     },
   });
 
-  globalThis.fetch = (async () => buildMockResponse({
+  globalThis.fetch = async () =>
+    buildMockResponse({
     status: 401,
     body: errorPayload,
     ok: false,
-  })) as typeof fetch;
+  });
 
   try {
     await assert.rejects(
-      () => callXai({ prompt: "department: research", model: "grok-4.5" }),
+      () => callXai({ prompt: "department: research", model: "grok-4.5", maxOutputTokens: 5000 }),
       (error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         assert.match(message, /HTTP 401/i);
@@ -136,16 +130,12 @@ test("callXai sanitizes HTTP error messages", async () => {
     );
   } finally {
     globalThis.fetch = previousFetch;
-    process.env.NODE_ENV = previousNodeEnv;
-    if (previousApiKey === undefined) delete process.env.XAI_API_KEY;
-    else process.env.XAI_API_KEY = previousApiKey;
-    if (previousTimeout === undefined) delete process.env.XAI_REQUEST_TIMEOUT_MS;
-    else process.env.XAI_REQUEST_TIMEOUT_MS = previousTimeout;
+    restoreEnv(envSnapshot);
   }
 });
 
 test("runExistingProject logs only safe workflow output summaries", async () => {
-  const previousNodeEnv = process.env.NODE_ENV;
+  const envSnapshot = applyEnvOverrides({ NODE_ENV: "development" });
   const project = createEmptyProject({
     companyName: "Safe Logging Co",
     objective: "Validate sanitized workflow logs",
@@ -173,7 +163,6 @@ test("runExistingProject logs only safe workflow output summaries", async () => 
 
   const logLines: string[] = [];
   const previousLog = console.log;
-  process.env.NODE_ENV = "development";
   await saveProject(project);
 
   console.log = (...args: unknown[]) => {
@@ -197,7 +186,7 @@ test("runExistingProject logs only safe workflow output summaries", async () => 
     assert.doesNotMatch(output, /authorization|api[_-]?key|token|secret/i);
   } finally {
     console.log = previousLog;
-    process.env.NODE_ENV = previousNodeEnv;
+    restoreEnv(envSnapshot);
     await cleanupProject(project.id);
   }
 });

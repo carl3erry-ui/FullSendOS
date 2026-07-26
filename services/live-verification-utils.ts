@@ -58,7 +58,7 @@ const SECRET_PATTERNS: RegExp[] = [
 ];
 
 export function evaluateLiveVerificationGuard(
-  env: NodeJS.ProcessEnv = process.env,
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): LiveVerificationGuardResult {
   const smokeEnabled = env.LIVE_PROVIDER_SMOKE === "1";
   const apiKeyPresent = Boolean(env.XAI_API_KEY && env.XAI_API_KEY.trim().length > 0);

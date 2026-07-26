@@ -1,0 +1,98 @@
+# FullSendOS Alpha Dependency Map
+
+This map defines sequencing and critical path for Alpha ship readiness.
+
+## Minimum Critical Path To Ship Alpha
+
+1. ALPHA-035: standalone typecheck passes.
+2. ALPHA-052: client-facing authentication and authorization baseline complete.
+3. ALPHA-069: all release-blocking partial and not-started requirements closed.
+4. ALPHA-070: PMO approval package complete.
+5. ALPHA-071: final regression-safe release confirmation complete.
+6. ALPHA-076 through ALPHA-079: all gate bundles complete with evidence.
+7. ALPHA-080: PMO and product leadership signoff complete.
+
+## Item Dependency Graph
+
+| ALPHA ID | Depends On | Blocks | Parallelizable | Critical Path | Risk Level |
+| --- | --- | --- | --- | --- | --- |
+| ALPHA-001 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-002 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-003 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-004 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Low |
+| ALPHA-005 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Low |
+| ALPHA-006 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Medium |
+| ALPHA-007 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Medium |
+| ALPHA-008 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-009 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-010 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-011 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-012 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-013 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-014 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-015 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-016 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-017 | ALPHA-010, ALPHA-016 | TBD | YES | NO | Medium |
+| ALPHA-018 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-019 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-020 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-021 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-022 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-023 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-024 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Low |
+| ALPHA-025 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Low |
+| ALPHA-026 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Low |
+| ALPHA-027 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Medium |
+| ALPHA-028 | ALPHA-031, ALPHA-033, ALPHA-034 | TBD | YES | NO | Medium |
+| ALPHA-029 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-030 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-031 | None | TBD | YES | NO | Medium |
+| ALPHA-032 | ALPHA-031 | TBD | YES | NO | Low |
+| ALPHA-033 | ALPHA-031 | TBD | YES | NO | Low |
+| ALPHA-034 | ALPHA-031 | TBD | YES | NO | Low |
+| ALPHA-035 | ALPHA-033, ALPHA-034 | ALPHA-077 | YES | YES | High |
+| ALPHA-036 | ALPHA-031 | TBD | YES | NO | Medium |
+| ALPHA-037 | ALPHA-031 | TBD | YES | NO | Medium |
+| ALPHA-038 | ALPHA-031 | TBD | YES | NO | Medium |
+| ALPHA-039 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-040 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-041 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-042 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-043 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-044 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-045 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-046 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-047 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Medium |
+| ALPHA-048 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-049 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Medium |
+| ALPHA-050 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Low |
+| ALPHA-051 | ALPHA-008, ALPHA-024 | TBD | YES | NO | Medium |
+| ALPHA-052 | ALPHA-008, ALPHA-024 | ALPHA-079 | YES | YES | High |
+| ALPHA-053 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-054 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-055 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Low |
+| ALPHA-056 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-057 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-058 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-059 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-060 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-061 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-062 | ALPHA-010, ALPHA-017 | TBD | YES | NO | Low |
+| ALPHA-063 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-064 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-065 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-066 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-067 | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | PARTIAL | NO | Medium |
+| ALPHA-068 | ALPHA-035, ALPHA-052 | ALPHA-069, ALPHA-070, ALPHA-071 | PARTIAL | NO | Medium |
+| ALPHA-069 | ALPHA-068 | ALPHA-076, ALPHA-077, ALPHA-078, ALPHA-079, ALPHA-080 | NO | YES | High |
+| ALPHA-070 | ALPHA-068 | ALPHA-080 | NO | YES | High |
+| ALPHA-071 | ALPHA-068 | ALPHA-080 | NO | YES | High |
+| ALPHA-072 | TBD | None (Out of Scope for Alpha) | YES | NO | Low |
+| ALPHA-073 | TBD | None (Out of Scope for Alpha) | YES | NO | Low |
+| ALPHA-074 | TBD | None (Out of Scope for Alpha) | YES | NO | Low |
+| ALPHA-075 | TBD | None (Out of Scope for Alpha) | YES | NO | Low |
+| ALPHA-076 | ALPHA-069, ALPHA-070, ALPHA-071 | ALPHA-080 | NO | YES | High |
+| ALPHA-077 | ALPHA-069, ALPHA-070, ALPHA-071 | ALPHA-080 | NO | YES | High |
+| ALPHA-078 | ALPHA-069, ALPHA-070, ALPHA-071 | ALPHA-080 | NO | YES | High |
+| ALPHA-079 | ALPHA-069, ALPHA-070, ALPHA-071 | ALPHA-080 | NO | YES | High |
+| ALPHA-080 | ALPHA-069, ALPHA-070, ALPHA-071 | TBD | NO | YES | High |
