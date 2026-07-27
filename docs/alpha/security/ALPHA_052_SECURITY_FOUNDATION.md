@@ -153,7 +153,7 @@ Follow-up work must integrate the chosen production identity/session provider in
 
 ## 11) Known Limitations
 
-- Only three representative routes are hardened in ALPHA-052-01.
+- ALPHA-052-01 hardened three representative routes; ALPHA-052-02 B1 later added confirm/reject/skip.
 - No universal route coverage yet.
 - No end-user login UI or account lifecycle is implemented.
 - Existing unprotected routes remain for subsequent hardening batches.
@@ -164,7 +164,7 @@ Follow-up work must integrate the chosen production identity/session provider in
 Recommended next sequence:
 
 1. High-risk mutation controls
-- Human-input confirm/reject/skip
+- Human-input confirm/reject/skip are now protected in ALPHA-052-02 B1
 - Agent-task approve/reject/request-revision/run
 - Workflow run/abort/resume
 
