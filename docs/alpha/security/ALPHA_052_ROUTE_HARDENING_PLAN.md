@@ -15,6 +15,7 @@ Current baseline for planning:
 - Remaining route files to harden: 40
 - ALPHA-052 status: IN PROGRESS
 - ALPHA-052-01 status: COMPLETE
+- ALPHA-052-03 readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_03_AGENT_TASK_READINESS_REVIEW.md`)
 - Security follow-up: Issue #42 satisfied by explicit audit-failure coverage in `services/security-route-guards.test.ts`
 - Build-warning follow-up: Issue #43
 - Current build warnings: 10, pre-existing and non-blocking
