@@ -7,6 +7,8 @@
 
 import { NextResponse } from "next/server";
 import {
+  type AgentExecution,
+  type AgentTask,
   globalTaskStore,
   globalExecutionStore,
   globalAgentRegistry,
@@ -22,6 +24,20 @@ import {
   successResponse,
   mapExecutorErrorToResponse,
 } from "../../../agent-routes-helper";
+import {
+  requireAuthenticatedActor,
+  recordAllow,
+  recordDeny,
+} from "@/lib/security/route-guards";
+import {
+  authorizeAgentTaskAction,
+  resolveAgentTaskRunOwnership,
+} from "@/lib/security/agent-task-authorization";
+import {
+  concealedNotFound,
+  isSecurityRouteError,
+  toSecurityErrorResponse,
+} from "@/lib/security/security-response";
 
 /**
  * Initialize provider registry with configured providers.
@@ -39,12 +55,83 @@ function createProviderRegistry(): AIProviderRegistry {
   return registry;
 }
 
+function sanitizeExecutionForResponse(execution: AgentExecution) {
+  return {
+    id: execution.id,
+    agentTaskId: execution.agentTaskId,
+    agentId: execution.agentId,
+    provider: execution.provider,
+    model: execution.model,
+    status: execution.status,
+    attempt: execution.attempt,
+    validationResult: execution.validationResult,
+    usage: execution.usage,
+    estimatedCost: execution.estimatedCost ?? null,
+    error: execution.error,
+    startedAt: execution.startedAt,
+    completedAt: execution.completedAt,
+  };
+}
+
+function sanitizeTaskForResponse(task: AgentTask) {
+  return {
+    id: task.id,
+    agentId: task.agentId,
+    title: task.title,
+    objective: task.objective,
+    projectId: task.projectId ?? null,
+    engagementId: task.engagementId ?? null,
+    workflowRunId: task.workflowRunId ?? null,
+    departmentId: task.departmentId ?? null,
+    status: task.status,
+    approvalStatus: task.approvalStatus,
+    priority: task.priority,
+    provider: task.provider,
+    model: task.model,
+    requestedBy: task.requestedBy,
+    startedAt: task.startedAt,
+    completedAt: task.completedAt,
+    failedAt: task.failedAt,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  };
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let actor: Awaited<ReturnType<typeof requireAuthenticatedActor>> | null = null;
+  const action = {
+    action: "agent_task_run",
+    resourceType: "agent_task",
+    resourceId: "unknown",
+  };
+
   try {
     const { id } = await params;
+    action.resourceId = id;
+
+    actor = await requireAuthenticatedActor(request, action);
+
+    let task: AgentTask;
+    try {
+      task = await globalTaskStore.loadTask(id);
+    } catch (error) {
+      if (error instanceof AgentExecutorError && error.code === "task_not_found") {
+        concealedNotFound("agent_task_not_found");
+      }
+      throw error;
+    }
+
+    const ownership = await resolveAgentTaskRunOwnership(task);
+    authorizeAgentTaskAction({
+      actor,
+      task,
+      project: ownership.project,
+      action: "run",
+    });
 
     const providerRegistry = createProviderRegistry();
 
@@ -62,12 +149,21 @@ export async function POST(
       return mapExecutorErrorToResponse(result.error);
     }
 
+    await recordAllow(actor, action, "agent_task_run_executed");
+
     return successResponse({
-      task: result.task,
-      execution: result.execution,
+      task: sanitizeTaskForResponse(result.task),
+      execution: sanitizeExecutionForResponse(result.execution),
       output: result.output,
     });
   } catch (error) {
+    if (isSecurityRouteError(error)) {
+      if (error.status !== 401) {
+        await recordDeny(actor, action, error.reasonCode);
+      }
+      return toSecurityErrorResponse(error);
+    }
+
     if (error instanceof AgentExecutorError) {
       return mapExecutorErrorToResponse(error);
     }
