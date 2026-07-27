@@ -154,6 +154,7 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 
 | Date | Updated By | ALPHA IDs Updated | Status Change | Evidence Link | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-26 | Engineering | ALPHA-035 | IN PROGRESS (Batch 3 COMPLETE) | Branch feature/alpha-035-batch-3-shared-fixture-typing; PR TBD | Validation: shared fixture typing + nullable fix, tsc 64 -> 53, tests 541 pass, build pass with known warnings, no intended runtime behavior change. |
 | 2026-07-26 | Engineering | ALPHA-035 | IN PROGRESS (Batch 2 COMPLETE) | Branch feature/alpha-035-batch-2-route-handler-typing; PR TBD | Validation: route typing errors resolved, tsc 67 -> 64, tests 541 pass, build pass with known warnings, no intended API behavior change. |
 | 2026-07-26 | Engineering | ALPHA-035 | NOT STARTED -> IN PROGRESS (Batch 1 COMPLETE) | Branch feature/alpha-035-batch-1-env-typing; PR TBD | Validation: tsc 91 -> 67, tests 541 pass, build pass with known warnings, no intended runtime behavior change. |
 | TBD | TBD | TBD | TBD | TBD | TBD |

@@ -39,6 +39,7 @@ import {
   WORKFORCE_TASK_TEMPLATES,
   hasDangerousPermissions,
 } from "../agents/workforce-catalog";
+import { createTestAgentTask } from "./test-fixtures";
 
 // ---------------------------------------------------------------------------
 // 1. Agent definition validation
@@ -708,16 +709,9 @@ test("OrchestratorAgent.validateTask rejects task with wrong agentId", async () 
   const { OrchestratorAgent } = await import("../agents/definitions/orchestrator");
   const agent = new OrchestratorAgent();
   const result = agent.validateTask({
+    ...createTestAgentTask(),
     id: "t",
     agentId: "researcher", // wrong
-    title: "Plan",
-    objective: "Plan engagement",
-    status: "queued",
-    provider: "mock",
-    model: "mock-1.0",
-    approvalStatus: "not_required",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   });
   assert.equal(result.valid, false);
   assert.ok(result.errors.length > 0);

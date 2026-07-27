@@ -11,6 +11,8 @@ async function cleanupProject(id: string) {
   await fs.rm(path.join(storageDir, `${id}.json`), { force: true });
 }
 
+type ProjectSummary = NonNullable<Awaited<ReturnType<typeof listProjects>>[number]>;
+
 function calculateDashboardAverage(projects: Array<{ completedDepartments: number; totalDepartments: number }>) {
   if (!projects.length) return 0;
   return Math.round(
@@ -77,7 +79,9 @@ test("progress summaries reflect new, partial, successful, and failed runs with 
   await Promise.all([saveProject(newProject), saveProject(partialProject), saveProject(successfulProject), saveProject(failedProject)]);
 
   try {
-    const summaries = await listProjects();
+    const summaries = (await listProjects()).filter(
+      (summary): summary is ProjectSummary => Boolean(summary),
+    );
     const byId = new Map(summaries.map((summary) => [summary.id, summary]));
 
     assert.equal(byId.get(newProject.id)?.completedDepartments, 0);

@@ -20,6 +20,11 @@ async function cleanupProject(id: string) {
   await fs.rm(path.resolve("data/projects", `${id}.json`), { force: true });
 }
 
+function setLegacyTerminalStatusAborted(project: { status: string }): void {
+  // Legacy records can persist "aborted" even though the current schema union omits it.
+  project.status = "aborted";
+}
+
 test("terminal workflow state detection", () => {
   assert.equal(isWorkflowTerminal("complete"), true);
   assert.equal(isWorkflowTerminal("completed"), true);
@@ -236,7 +241,7 @@ test("live preview status marks aborted workflow as terminal", async () => {
     companyName: "Aborted Terminal Status Co",
     objective: "Validate aborted terminal state in harness",
   });
-  project.status = "aborted";
+  setLegacyTerminalStatusAborted(project);
   await saveProject(project);
 
   try {
