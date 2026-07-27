@@ -4,19 +4,19 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 
 ## Overall Alpha
 
-███████████░░░░░░░░░ 56%
+███████████░░░░░░░░░ 57%
 
-- Completed: 45/80
+- Completed: 46/80
 - In progress: 25/80
-- Not started: 10/80
+- Not started: 9/80
 
 ## Progress By Phase
 
 ### Phase 1 - Engineering Stability
-████████░░░░░░░░░░░░ 38%
-- COMPLETE: 3
+██████████░░░░░░░░░░ 50%
+- COMPLETE: 4
 - PARTIAL: 4
-- NOT STARTED: 1
+- NOT STARTED: 0
 
 ### Phase 2 - Core Workflow Completion
 █████████████████░░░ 87%
@@ -75,10 +75,10 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 - NOT STARTED: 0
 
 ### Technical
-████████░░░░░░░░░░░░ 38%
-- COMPLETE: 3
+██████████░░░░░░░░░░ 50%
+- COMPLETE: 4
 - PARTIAL: 4
-- NOT STARTED: 1
+- NOT STARTED: 0
 
 ### AI Orchestration
 ████████████████████ 100%
@@ -136,7 +136,7 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 
 ## Requirements Completed
 
-- ALPHA-004, ALPHA-005, ALPHA-008, ALPHA-009, ALPHA-010, ALPHA-011, ALPHA-013, ALPHA-014, ALPHA-015, ALPHA-016, ALPHA-018, ALPHA-019, ALPHA-020, ALPHA-021, ALPHA-022, ALPHA-023, ALPHA-024, ALPHA-025, ALPHA-026, ALPHA-029, ALPHA-030, ALPHA-032, ALPHA-033, ALPHA-034, ALPHA-039, ALPHA-040, ALPHA-041, ALPHA-042, ALPHA-043, ALPHA-044, ALPHA-045, ALPHA-046, ALPHA-048, ALPHA-050, ALPHA-054, ALPHA-055, ALPHA-058, ALPHA-059, ALPHA-060, ALPHA-061, ALPHA-062, ALPHA-072, ALPHA-073, ALPHA-074, ALPHA-075
+- ALPHA-004, ALPHA-005, ALPHA-008, ALPHA-009, ALPHA-010, ALPHA-011, ALPHA-013, ALPHA-014, ALPHA-015, ALPHA-016, ALPHA-018, ALPHA-019, ALPHA-020, ALPHA-021, ALPHA-022, ALPHA-023, ALPHA-024, ALPHA-025, ALPHA-026, ALPHA-029, ALPHA-030, ALPHA-032, ALPHA-033, ALPHA-034, ALPHA-035, ALPHA-039, ALPHA-040, ALPHA-041, ALPHA-042, ALPHA-043, ALPHA-044, ALPHA-045, ALPHA-046, ALPHA-048, ALPHA-050, ALPHA-054, ALPHA-055, ALPHA-058, ALPHA-059, ALPHA-060, ALPHA-061, ALPHA-062, ALPHA-072, ALPHA-073, ALPHA-074, ALPHA-075
 
 ## Requirements In Progress
 
@@ -144,16 +144,17 @@ Update cadence: weekly PMO review and at every merged Alpha pull request.
 
 ## Requirements Blocked
 
-- ALPHA-035, ALPHA-052, ALPHA-069, ALPHA-070, ALPHA-071, ALPHA-076, ALPHA-077, ALPHA-078, ALPHA-079, ALPHA-080
+- ALPHA-052, ALPHA-069, ALPHA-070, ALPHA-071, ALPHA-076, ALPHA-077, ALPHA-078, ALPHA-079, ALPHA-080
 
 ## Requirements Not Started
 
-- ALPHA-035, ALPHA-052, ALPHA-069, ALPHA-070, ALPHA-071, ALPHA-076, ALPHA-077, ALPHA-078, ALPHA-079, ALPHA-080
+- ALPHA-052, ALPHA-069, ALPHA-070, ALPHA-071, ALPHA-076, ALPHA-077, ALPHA-078, ALPHA-079, ALPHA-080
 
 ## Update Log Template
 
 | Date | Updated By | ALPHA IDs Updated | Status Change | Evidence Link | Notes |
 | --- | --- | --- | --- | --- | --- |
+| 2026-07-27 | Engineering | ALPHA-035 | IN PROGRESS -> COMPLETE (Final Batch COMPLETE) | Branch feature/alpha-035-final-typecheck-cleanup; PR TBD | Validation: merged PR #39 to main at 7b18bd3ded601d31a0ec9b2f0ea1877936b7eef7 and confirmed stable baseline (tsc 3, tests 541 pass, build pass with known warnings), then completed final typing cleanup in services/agent-collaboration.test.ts and services/workflow-recovery.test.ts with tsc 3 -> 0. Follow-up standalone typecheck rerun remained 0. Tests 541 pass, build pass with known warnings unchanged, no strictness weakening, no file exclusions, no suppression comments, no intended runtime behavior change. ALPHA-035 complete with total reduction 91 -> 0. |
 | 2026-07-27 | Engineering | ALPHA-035 | IN PROGRESS (Batch 6 COMPLETE) | Branch feature/alpha-035-batch-6-data-room-request-typing; PR TBD | Validation: merged PR #38 to main at 5527e4ca0a5361c23fc8ee494e183d4e05215e81 and confirmed stable baseline (tsc 13, tests 541 pass, build pass with known warnings), then aligned data-room route request typing with real NextRequest construction in services/engagement-data-room-compat.test.ts and services/client-data-room-api.test.ts plus shared test helper services/test-next-request.ts. Result: tsc 13 -> 3, target files 10 -> 0, tests 541 pass, build pass with known warnings, route signatures unchanged, API/auth behavior unchanged, no intended runtime behavior change. |
 | 2026-07-27 | Engineering | ALPHA-035 | IN PROGRESS (Batch 5 COMPLETE) | Branch feature/alpha-035-batch-5-fetch-mock-typing; PR TBD | Validation: merged PR #37 to main at ce5fe0e900ab82d887c92180915b656f4b8f9e40 and confirmed stable baseline (tsc 23, tests 541 pass, build pass with known warnings), then aligned fetch/mock typing in services/workflow-resume-ui.test.ts with tsc 23 -> 13 and target file 10 -> 0. Tests 541 pass, build pass with known warnings, production fetch behavior unchanged, UI test coverage preserved, no intended runtime behavior change. |
 | 2026-07-27 | Engineering | ALPHA-035 | IN PROGRESS (Batch 4 COMPLETE) | Branch feature/alpha-035-batch-4-audit-orchestration-fixtures; PR TBD | Validation: merged PR #36 to main at 6f22a1173267f132c026b2250d732668922a341b and confirmed stable baseline (tsc 53, tests 541 pass, build pass with known warnings), then completed workflow audit/orchestration fixture typing in services/workflow-audit-and-orchestration.test.ts with tsc 53 -> 23, tests 541 pass, build pass, no intended runtime behavior change. |

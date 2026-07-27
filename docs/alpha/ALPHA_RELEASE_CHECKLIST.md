@@ -8,7 +8,7 @@ Rule:
 
 ## Engineering
 
-- [ ] Standalone typecheck passes with zero errors. (ALPHA-035)
+- [x] Standalone typecheck passes with zero errors. (ALPHA-035)
 - [ ] Build passes on release candidate baseline. (ALPHA-033)
 - [ ] Full test suite passes on release candidate baseline. (ALPHA-034)
 - [ ] Status model consistency is verified across runtime and typed workflow surfaces. (ALPHA-037)

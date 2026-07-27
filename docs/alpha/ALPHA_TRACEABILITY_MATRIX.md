@@ -43,7 +43,7 @@ Unknown planning fields remain TBD by design.
 | ALPHA-032 | Deterministic runtime persistence for Alpha ops | COMPLETE | [src/storage/projectStore.js](../../src/storage/projectStore.js), [services/deliverable-export-store.ts](../../services/deliverable-export-store.ts) | TBD | TBD | TBD | Persistence checks |
 | ALPHA-033 | Build passing | COMPLETE | [package.json](../../package.json) | TBD | TBD | TBD | Build output record |
 | ALPHA-034 | Tests passing | COMPLETE | [package.json](../../package.json) | TBD | TBD | TBD | Test output record |
-| ALPHA-035 | Typecheck passing with zero errors | NOT STARTED | [tsconfig.json](../../tsconfig.json) | TBD | TBD | TBD | Zero-error tsc evidence |
+| ALPHA-035 | Typecheck passing with zero errors | COMPLETE | [tsconfig.json](../../tsconfig.json), [services/agent-collaboration.test.ts](../../services/agent-collaboration.test.ts), [services/workflow-recovery.test.ts](../../services/workflow-recovery.test.ts) | TBD | feature/alpha-035-final-typecheck-cleanup | TBD | Zero-error tsc evidence (91 -> 0), tests pass, build pass |
 | ALPHA-036 | Docs review pass and deferred docs disposition | PARTIAL | [docs/generated/DOCUMENTATION_REVIEW_REPORT.md](../generated/DOCUMENTATION_REVIEW_REPORT.md) | TBD | TBD | TBD | PMO acceptance of findings |
 | ALPHA-037 | Status-model consistency enforced | PARTIAL | [src/schemas/projectSchema.js](../../src/schemas/projectSchema.js), [types/project.ts](../../types/project.ts), [services/workflow-engine.ts](../../services/workflow-engine.ts) | TBD | TBD | TBD | Status model decision record |
 | ALPHA-038 | Stable preview/demo runbook execution | PARTIAL | [docs/SAFE_LIVE_PREVIEW_RUNBOOK.md](../SAFE_LIVE_PREVIEW_RUNBOOK.md) | TBD | TBD | TBD | Successful PMO-observed run |
