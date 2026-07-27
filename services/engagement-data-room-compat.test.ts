@@ -15,6 +15,7 @@ import {
   DELETE as deleteEngagementFile,
 } from "../app/api/engagements/[id]/data-room/[fileId]/route";
 import { GET as getEngagementFolders } from "../app/api/engagements/[id]/data-room/folders/route";
+import { createTestNextRequest } from "./test-next-request";
 
 const projectStorageDir = path.resolve("data/projects");
 const clientStorageDir = path.resolve("data/clients");
@@ -67,7 +68,7 @@ test("engagement data-room list returns only files linked to engagement", async 
     );
 
     const response = await getEngagementDataRoom(
-      new Request("http://127.0.0.1/api/engagements/id/data-room"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room"),
       { params: Promise.resolve({ id: project.id }) }
     );
     const body = await response.json();
@@ -120,13 +121,13 @@ test("engagement file detail is constrained to same engagement linkage", async (
     );
 
     const okResponse = await getEngagementFile(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/file"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/file"),
       { params: Promise.resolve({ id: project.id, fileId: linked.id }) }
     );
     const okBody = await okResponse.json();
 
     const blockedResponse = await getEngagementFile(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/file"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/file"),
       { params: Promise.resolve({ id: project.id, fileId: unlinked.id }) }
     );
 
@@ -164,7 +165,7 @@ test("engagement file patch and delete delegate to client-owned record", async (
     );
 
     const patchResponse = await patchEngagementFile(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/file", {
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/file", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: "Updated from compatibility route", tags: ["compat"] }),
@@ -178,14 +179,14 @@ test("engagement file patch and delete delegate to client-owned record", async (
     assert.deepEqual(patchBody.file.tags, ["compat"]);
 
     const deleteResponse = await deleteEngagementFile(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/file", { method: "DELETE" }),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/file", { method: "DELETE" }),
       { params: Promise.resolve({ id: project.id, fileId: linked.id }) }
     );
 
     assert.equal(deleteResponse.status, 200);
 
     const listResponse = await getEngagementDataRoom(
-      new Request("http://127.0.0.1/api/engagements/id/data-room"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room"),
       { params: Promise.resolve({ id: project.id }) }
     );
     const listBody = await listResponse.json();
@@ -210,7 +211,7 @@ test("engagement folders route returns client default folders", async () => {
 
   try {
     const response = await getEngagementFolders(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/folders"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/folders"),
       { params: Promise.resolve({ id: project.id }) }
     );
     const body = await response.json();
@@ -229,7 +230,7 @@ test("engagement folders route returns client default folders", async () => {
 
 test("engagement data-room routes return 404 for unknown engagement", async () => {
   const response = await getEngagementDataRoom(
-    new Request("http://127.0.0.1/api/engagements/unknown/data-room"),
+    createTestNextRequest("http://127.0.0.1/api/engagements/unknown/data-room"),
     { params: Promise.resolve({ id: "UNKNOWN-ENGAGEMENT-ID" }) }
   );
   const body = await response.json();
@@ -255,10 +256,10 @@ test("engagement upload writes a single client-owned record without duplication"
     form.append("folderId", "misc");
 
     const response = await postEngagementDataRoom(
-      new Request("http://127.0.0.1/api/engagements/id/data-room", {
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room", {
         method: "POST",
         body: form,
-      }) as any,
+      }),
       { params: Promise.resolve({ id: project.id }) }
     );
     const body = await response.json();
@@ -314,9 +315,9 @@ test("engagement processing route returns safe document metadata", async () => {
     );
 
     const processResponse = await postEngagementProcess(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/file/process", {
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/file/process", {
         method: "POST",
-      }) as any,
+      }),
       { params: Promise.resolve({ id: project.id, fileId: file.id }) }
     );
     const processBody = await processResponse.json();
@@ -327,7 +328,7 @@ test("engagement processing route returns safe document metadata", async () => {
     assert.equal("textExtracted" in processBody.document, false);
 
     const listResponse = await getEngagementDocuments(
-      new Request("http://127.0.0.1/api/engagements/id/data-room/documents"),
+      createTestNextRequest("http://127.0.0.1/api/engagements/id/data-room/documents"),
       { params: Promise.resolve({ id: project.id }) }
     );
     const listBody = await listResponse.json();

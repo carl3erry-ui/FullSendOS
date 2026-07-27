@@ -8,6 +8,7 @@ import { GET as getClientDocuments } from "../app/api/clients/[clientId]/data-ro
 import { createClient } from "../src/schemas/clientSchema.js";
 import { saveClient } from "../src/storage/clientStore.js";
 import { addFileReference } from "./client-data-room-store";
+import { createTestNextRequest } from "./test-next-request";
 
 const clientStorageDir = path.resolve("data/clients");
 const uploadStorageDir = path.resolve("data/uploads");
@@ -36,10 +37,10 @@ test("client data-room upload rejects unsupported MIME types", async () => {
     form.append("file", new File(["dummy"], "script.js", { type: "application/javascript" }));
 
     const response = await postClientDataRoomFile(
-      new Request(`http://127.0.0.1/api/clients/${client.id}/data-room/files`, {
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/files`, {
         method: "POST",
         body: form,
-      }) as any,
+      }),
       { params: Promise.resolve({ clientId: client.id }) }
     );
 
@@ -61,10 +62,10 @@ test("client data-room upload rejects dangerous executable MIME type", async () 
     form.append("file", new File(["MZ"], "malware.exe", { type: "application/x-msdownload" }));
 
     const response = await postClientDataRoomFile(
-      new Request(`http://127.0.0.1/api/clients/${client.id}/data-room/files`, {
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/files`, {
         method: "POST",
         body: form,
-      }) as any,
+      }),
       { params: Promise.resolve({ clientId: client.id }) }
     );
 
@@ -100,9 +101,9 @@ test("client data-room processing creates safe document metadata", async () => {
     );
 
     const processResponse = await postClientProcess(
-      new Request(`http://127.0.0.1/api/clients/${client.id}/data-room/files/${file.id}/process`, {
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/files/${file.id}/process`, {
         method: "POST",
-      }) as any,
+      }),
       { params: Promise.resolve({ clientId: client.id, fileId: file.id }) }
     );
 
@@ -113,7 +114,7 @@ test("client data-room processing creates safe document metadata", async () => {
     assert.equal("textExtracted" in processBody.document, false);
 
     const listResponse = await getClientDocuments(
-      new Request(`http://127.0.0.1/api/clients/${client.id}/data-room/documents`),
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/documents`),
       { params: Promise.resolve({ clientId: client.id }) }
     );
     const listBody = await listResponse.json();
@@ -151,9 +152,9 @@ test("client data-room processing skips sensitive or unapproved files", async ()
     );
 
     const response = await postClientProcess(
-      new Request(`http://127.0.0.1/api/clients/${client.id}/data-room/files/${sensitiveFile.id}/process`, {
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/files/${sensitiveFile.id}/process`, {
         method: "POST",
-      }) as any,
+      }),
       { params: Promise.resolve({ clientId: client.id, fileId: sensitiveFile.id }) }
     );
 
