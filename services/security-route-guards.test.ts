@@ -658,6 +658,119 @@ test("human-input routes preserve overwrite behavior on repeated actions", async
   }
 });
 
+test("human-input mutation audit events do not include mutation payload content", async () => {
+  clearSecurityAuditEventsForTests();
+
+  const confirmPayload = "CONFIDENTIAL_CONFIRMATION_PAYLOAD_ABC123";
+  const rejectPayload = "SENSITIVE_REJECTION_REASON_XYZ789";
+
+  const confirmRequest = await createHumanInputRequest({
+    clientId: "client-mutation-audit-payload-confirm",
+    engagementId: "eng-mutation-audit-payload-confirm",
+    type: "clarification",
+    title: "Audit payload confirm",
+    prompt: "Confirm with sensitive payload.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  const rejectRequest = await createHumanInputRequest({
+    clientId: "client-mutation-audit-payload-reject",
+    engagementId: "eng-mutation-audit-payload-reject",
+    type: "clarification",
+    title: "Audit payload reject",
+    prompt: "Reject with sensitive payload.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  try {
+    const confirmResponse = await postHumanInputConfirm(
+      makeMutationRequest(
+        `http://localhost/api/human-input/${confirmRequest.id}/confirm`,
+        { response: confirmPayload },
+        {
+          authorization: createTestAuthHeader({
+            id: "admin-audit-payload",
+            role: "internal_admin",
+          }),
+        },
+      ),
+      { params: Promise.resolve({ id: confirmRequest.id }) },
+    );
+
+    const rejectResponse = await postHumanInputReject(
+      makeMutationRequest(
+        `http://localhost/api/human-input/${rejectRequest.id}/reject`,
+        { response: rejectPayload },
+        {
+          authorization: createTestAuthHeader({
+            id: "admin-audit-payload",
+            role: "internal_admin",
+          }),
+        },
+      ),
+      { params: Promise.resolve({ id: rejectRequest.id }) },
+    );
+
+    assert.equal(confirmResponse.status, 200);
+    assert.equal(rejectResponse.status, 200);
+
+    const events = getSecurityAuditEventsForTests().filter(
+      (event) => event.action === "human_input_confirm" || event.action === "human_input_reject",
+    );
+
+    assert.equal(events.length >= 2, true);
+
+    const serializedEvents = JSON.stringify(events);
+    assert.equal(serializedEvents.includes(confirmPayload), false);
+    assert.equal(serializedEvents.includes(rejectPayload), false);
+    assert.equal(serializedEvents.includes("\"response\":"), false);
+    assert.equal(serializedEvents.includes("\"resolvedBy\":"), false);
+    assert.equal(serializedEvents.includes("Bearer"), false);
+    assert.equal(serializedEvents.includes("authorization"), false);
+
+    const confirmAllow = events.find(
+      (event) => event.action === "human_input_confirm" && event.decision === "allow" && event.reasonCode === "human_input_confirmed",
+    );
+    const rejectAllow = events.find(
+      (event) => event.action === "human_input_reject" && event.decision === "allow" && event.reasonCode === "human_input_rejected",
+    );
+
+    assert.ok(confirmAllow);
+    assert.ok(rejectAllow);
+
+    assert.equal(typeof confirmAllow.actorId, "string");
+    assert.equal(confirmAllow.actorRole, "internal_admin");
+    assert.equal(confirmAllow.action, "human_input_confirm");
+    assert.equal(confirmAllow.resourceType, "human_input_request");
+    assert.equal(confirmAllow.resourceId, confirmRequest.id);
+    assert.equal(confirmAllow.decision, "allow");
+    assert.equal(confirmAllow.reasonCode, "human_input_confirmed");
+
+    assert.equal(typeof rejectAllow.actorId, "string");
+    assert.equal(rejectAllow.actorRole, "internal_admin");
+    assert.equal(rejectAllow.action, "human_input_reject");
+    assert.equal(rejectAllow.resourceType, "human_input_request");
+    assert.equal(rejectAllow.resourceId, rejectRequest.id);
+    assert.equal(rejectAllow.decision, "allow");
+    assert.equal(rejectAllow.reasonCode, "human_input_rejected");
+  } finally {
+    await cleanupRequest(confirmRequest.id);
+    await cleanupRequest(rejectRequest.id);
+  }
+});
+
 test("human-input mutation routes reject malformed payloads before mutation", async () => {
   const requestRecord = await createHumanInputRequest({
     clientId: "client-mutation-invalid",
