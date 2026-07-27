@@ -41,10 +41,24 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-type MockFetch = (url: string, options?: RequestInit) => Promise<Response>;
+function getRequestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.toString();
+  return input.url;
+}
+
+function getJsonBody(init?: RequestInit): unknown {
+  if (!init?.body || typeof init.body !== "string") {
+    return null;
+  }
+
+  return JSON.parse(init.body);
+}
+
+type MockFetch = typeof fetch;
 
 function mockFetch(status: number, body: unknown): MockFetch {
-  return async () =>
+  return async (_input, _init) =>
     new Response(JSON.stringify(body), {
       status,
       headers: { "Content-Type": "application/json" },
@@ -162,8 +176,8 @@ test("resumeWorkflow calls POST /api/engagements/[id]/workflow/resume", async ()
   let capturedUrl = "";
   let capturedMethod = "";
 
-  const mockFetchImpl: MockFetch = async (url, options) => {
-    capturedUrl = url;
+  const mockFetchImpl: MockFetch = async (input, options) => {
+    capturedUrl = getRequestUrl(input);
     capturedMethod = options?.method ?? "GET";
     return new Response(
       JSON.stringify({
@@ -189,8 +203,8 @@ test("resumeWorkflow calls POST /api/engagements/[id]/workflow/resume", async ()
 test("resumeWorkflow sends pauseStateId in request body when present", async () => {
   let capturedBody: unknown = null;
 
-  const mockFetchImpl: MockFetch = async (_url, options) => {
-    capturedBody = options?.body ? JSON.parse(options.body as string) : null;
+  const mockFetchImpl: MockFetch = async (_input, options) => {
+    capturedBody = getJsonBody(options);
     return new Response(
       JSON.stringify({
         engagementId: "eng-1",
@@ -214,8 +228,8 @@ test("resumeWorkflow sends pauseStateId in request body when present", async () 
 test("resumeWorkflow omits pauseStateId from body when null", async () => {
   let capturedBody: unknown = null;
 
-  const mockFetchImpl: MockFetch = async (_url, options) => {
-    capturedBody = options?.body ? JSON.parse(options.body as string) : null;
+  const mockFetchImpl: MockFetch = async (_input, options) => {
+    capturedBody = getJsonBody(options);
     return new Response(
       JSON.stringify({
         engagementId: "eng-1",
@@ -383,8 +397,8 @@ test("fetchTaskDetail maps new workflow pause fields from response", async () =>
 test("submitTaskApproval approve calls correct endpoint", async () => {
   let capturedUrl = "";
 
-  const mockFetchImpl: MockFetch = async (url) => {
-    capturedUrl = url;
+  const mockFetchImpl: MockFetch = async (input) => {
+    capturedUrl = getRequestUrl(input);
     return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
   };
 
@@ -396,8 +410,8 @@ test("submitTaskApproval approve calls correct endpoint", async () => {
 test("submitTaskApproval reject calls correct endpoint", async () => {
   let capturedUrl = "";
 
-  const mockFetchImpl: MockFetch = async (url) => {
-    capturedUrl = url;
+  const mockFetchImpl: MockFetch = async (input) => {
+    capturedUrl = getRequestUrl(input);
     return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
   };
 
