@@ -20,6 +20,10 @@ type AuthFailureReason =
 
 const TOKEN_PREFIX = "fst1";
 const AUTH_SCHEME = "Bearer ";
+const MIN_DEV_TEST_SECRET_LENGTH = 32;
+const MAX_AUTH_HEADER_LENGTH = 8 * 1024;
+const MAX_TOKEN_LENGTH = 4 * 1024;
+const MAX_TOKEN_SEGMENT_LENGTH = 2 * 1024;
 
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
@@ -45,8 +49,16 @@ function isDevTestAuthAdapterEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.FULLSENDOS_AUTH_DEV_TEST_ENABLED === "1";
 }
 
-function getDevTestSecret(env: NodeJS.ProcessEnv): string {
-  return env.FULLSENDOS_AUTH_DEV_TEST_SECRET || "fullsendos-dev-test-secret";
+function getDevTestSecret(env: NodeJS.ProcessEnv): string | null {
+  const configuredSecret = env.FULLSENDOS_AUTH_DEV_TEST_SECRET;
+  if (!configuredSecret) return null;
+
+  const trimmedSecret = configuredSecret.trim();
+  if (trimmedSecret.length < MIN_DEV_TEST_SECRET_LENGTH) {
+    return null;
+  }
+
+  return trimmedSecret;
 }
 
 function toActor(payload: DevTestActorPayload): AuthenticatedActor {
@@ -62,7 +74,12 @@ function toActor(payload: DevTestActorPayload): AuthenticatedActor {
 export function issueDevTestActorToken(payload: DevTestActorPayload, secret?: string): string {
   const validated = DevTestActorPayloadSchema.parse(payload);
   const payloadEncoded = base64UrlEncode(JSON.stringify(validated));
-  const activeSecret = secret || getDevTestSecret(process.env);
+  const activeSecret = secret ?? getDevTestSecret(process.env);
+  if (!activeSecret) {
+    throw new Error(
+      "FULLSENDOS_AUTH_DEV_TEST_SECRET must be set to at least 32 characters to issue dev/test tokens.",
+    );
+  }
   const signature = computeSignature(payloadEncoded, activeSecret);
   return `${TOKEN_PREFIX}.${payloadEncoded}.${signature}`;
 }
@@ -73,8 +90,21 @@ function authenticateFromDevTestToken(
 ):
   | { ok: true; actor: AuthenticatedActor }
   | { ok: false; reason: AuthFailureReason } {
-  const token = parseAuthorizationToken(request.headers.get("authorization"));
+  const activeSecret = getDevTestSecret(env);
+  if (!activeSecret) {
+    return { ok: false, reason: "adapter_disabled" };
+  }
+
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.length > MAX_AUTH_HEADER_LENGTH) {
+    return { ok: false, reason: "malformed_identity" };
+  }
+
+  const token = parseAuthorizationToken(authHeader);
   if (!token) return { ok: false, reason: "missing_identity" };
+  if (token.length > MAX_TOKEN_LENGTH) {
+    return { ok: false, reason: "malformed_identity" };
+  }
 
   const parts = token.split(".");
   if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) {
@@ -85,8 +115,11 @@ function authenticateFromDevTestToken(
   if (!payloadEncoded || !signature) {
     return { ok: false, reason: "malformed_identity" };
   }
+  if (payloadEncoded.length > MAX_TOKEN_SEGMENT_LENGTH || signature.length > MAX_TOKEN_SEGMENT_LENGTH) {
+    return { ok: false, reason: "malformed_identity" };
+  }
 
-  const expectedSignature = computeSignature(payloadEncoded, getDevTestSecret(env));
+  const expectedSignature = computeSignature(payloadEncoded, activeSecret);
   const expectedBuffer = Buffer.from(expectedSignature, "utf8");
   const actualBuffer = Buffer.from(signature, "utf8");
 

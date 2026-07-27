@@ -18,12 +18,14 @@ async function cleanupProject(projectId: string) {
   await fs.rm(path.join(projectStorageDir, `${projectId}.json`), { force: true });
 }
 
+const VALID_TEST_SECRET = "test-secret-0123456789-0123456789";
+
 test("missing identity fails closed", () => {
   const request = new Request("http://localhost/api/secure");
   const result = getAuthenticatedActor(request, {
     NODE_ENV: "development",
     FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
-    FULLSENDOS_AUTH_DEV_TEST_SECRET: "test-secret",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: VALID_TEST_SECRET,
   } as NodeJS.ProcessEnv);
 
   assert.equal(result.ok, false);
@@ -40,7 +42,7 @@ test("malformed identity fails closed", () => {
   const result = getAuthenticatedActor(request, {
     NODE_ENV: "development",
     FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
-    FULLSENDOS_AUTH_DEV_TEST_SECRET: "test-secret",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: VALID_TEST_SECRET,
   } as NodeJS.ProcessEnv);
 
   assert.equal(result.ok, false);
@@ -53,17 +55,17 @@ test("valid internal admin, operator, and client user authenticate", () => {
   const env = {
     NODE_ENV: "development",
     FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
-    FULLSENDOS_AUTH_DEV_TEST_SECRET: "test-secret",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: VALID_TEST_SECRET,
   } as NodeJS.ProcessEnv;
 
-  const adminToken = issueDevTestActorToken({ sub: "admin-1", role: "internal_admin" }, "test-secret");
+  const adminToken = issueDevTestActorToken({ sub: "admin-1", role: "internal_admin" }, VALID_TEST_SECRET);
   const operatorToken = issueDevTestActorToken(
     { sub: "op-1", role: "internal_operator", clientId: "client-1" },
-    "test-secret",
+    VALID_TEST_SECRET,
   );
   const clientToken = issueDevTestActorToken(
     { sub: "client-user-1", role: "client_user", clientId: "client-1" },
-    "test-secret",
+    VALID_TEST_SECRET,
   );
 
   const admin = getAuthenticatedActor(new Request("http://localhost", { headers: { authorization: `Bearer ${adminToken}` } }), env);
@@ -76,7 +78,10 @@ test("valid internal admin, operator, and client user authenticate", () => {
 });
 
 test("development/test adapter is disabled in production", () => {
-  const token = issueDevTestActorToken({ sub: "admin-1", role: "internal_admin" }, "prod-secret");
+  const token = issueDevTestActorToken(
+    { sub: "admin-1", role: "internal_admin" },
+    "prod-secret-0123456789-0123456789",
+  );
   const request = new Request("http://localhost", {
     headers: { authorization: `Bearer ${token}` },
   });
@@ -84,12 +89,121 @@ test("development/test adapter is disabled in production", () => {
   const result = getAuthenticatedActor(request, {
     NODE_ENV: "production",
     FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
-    FULLSENDOS_AUTH_DEV_TEST_SECRET: "prod-secret",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: "prod-secret-0123456789-0123456789",
   } as NodeJS.ProcessEnv);
 
   assert.equal(result.ok, false);
   if (!result.ok) {
     assert.equal(result.reason, "provider_not_configured");
+  }
+});
+
+test("adapter fails closed when secret is missing, empty, or too short", () => {
+  const request = new Request("http://localhost/api/secure", {
+    headers: { authorization: "Bearer fst1.payload.signature" },
+  });
+
+  const missingSecretResult = getAuthenticatedActor(request, {
+    NODE_ENV: "development",
+    FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
+  } as NodeJS.ProcessEnv);
+  assert.equal(missingSecretResult.ok, false);
+  if (!missingSecretResult.ok) {
+    assert.equal(missingSecretResult.reason, "adapter_disabled");
+  }
+
+  const emptySecretResult = getAuthenticatedActor(request, {
+    NODE_ENV: "development",
+    FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: "   ",
+  } as NodeJS.ProcessEnv);
+  assert.equal(emptySecretResult.ok, false);
+  if (!emptySecretResult.ok) {
+    assert.equal(emptySecretResult.reason, "adapter_disabled");
+  }
+
+  const shortSecretResult = getAuthenticatedActor(request, {
+    NODE_ENV: "development",
+    FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: "too-short",
+  } as NodeJS.ProcessEnv);
+  assert.equal(shortSecretResult.ok, false);
+  if (!shortSecretResult.ok) {
+    assert.equal(shortSecretResult.reason, "adapter_disabled");
+  }
+});
+
+test("invalid signature is rejected explicitly", () => {
+  const validToken = issueDevTestActorToken({ sub: "admin-1", role: "internal_admin" }, VALID_TEST_SECRET);
+  const [prefix, payload] = validToken.split(".");
+  const tamperedToken = `${prefix}.${payload}.invalid-signature`;
+
+  const result = getAuthenticatedActor(
+    new Request("http://localhost/api/secure", {
+      headers: { authorization: `Bearer ${tamperedToken}` },
+    }),
+    {
+      NODE_ENV: "development",
+      FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
+      FULLSENDOS_AUTH_DEV_TEST_SECRET: VALID_TEST_SECRET,
+    } as NodeJS.ProcessEnv,
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.reason, "invalid_signature");
+  }
+});
+
+test("oversized authorization header and token segments are rejected", () => {
+  const env = {
+    NODE_ENV: "development",
+    FULLSENDOS_AUTH_DEV_TEST_ENABLED: "1",
+    FULLSENDOS_AUTH_DEV_TEST_SECRET: VALID_TEST_SECRET,
+  } as NodeJS.ProcessEnv;
+
+  const oversizedHeader = getAuthenticatedActor(
+    new Request("http://localhost/api/secure", {
+      headers: { authorization: `Bearer ${"x".repeat(9000)}` },
+    }),
+    env,
+  );
+  assert.equal(oversizedHeader.ok, false);
+  if (!oversizedHeader.ok) {
+    assert.equal(oversizedHeader.reason, "malformed_identity");
+  }
+
+  const oversizedToken = getAuthenticatedActor(
+    new Request("http://localhost/api/secure", {
+      headers: { authorization: `Bearer fst1.${"a".repeat(3000)}.${"b".repeat(3000)}` },
+    }),
+    env,
+  );
+  assert.equal(oversizedToken.ok, false);
+  if (!oversizedToken.ok) {
+    assert.equal(oversizedToken.reason, "malformed_identity");
+  }
+
+  const oversizedPayloadSegment = getAuthenticatedActor(
+    new Request("http://localhost/api/secure", {
+      headers: { authorization: `Bearer fst1.${"a".repeat(2100)}.sig` },
+    }),
+    env,
+  );
+  assert.equal(oversizedPayloadSegment.ok, false);
+  if (!oversizedPayloadSegment.ok) {
+    assert.equal(oversizedPayloadSegment.reason, "malformed_identity");
+  }
+
+  const oversizedSignatureSegment = getAuthenticatedActor(
+    new Request("http://localhost/api/secure", {
+      headers: { authorization: `Bearer fst1.payload.${"s".repeat(2100)}` },
+    }),
+    env,
+  );
+  assert.equal(oversizedSignatureSegment.ok, false);
+  if (!oversizedSignatureSegment.ok) {
+    assert.equal(oversizedSignatureSegment.reason, "malformed_identity");
   }
 });
 

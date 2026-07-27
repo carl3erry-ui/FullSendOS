@@ -29,12 +29,20 @@ function buildEvent(input: {
   };
 }
 
+async function recordBestEffort(event: SecurityDecisionAuditEvent): Promise<void> {
+  try {
+    await recordSecurityDecision(event);
+  } catch (error) {
+    console.error("[SecurityAudit] Failed to record security decision", error);
+  }
+}
+
 export async function recordAllow(
   actor: AuthenticatedActor,
   input: SecurityActionInput,
   reasonCode: string,
 ): Promise<void> {
-  await recordSecurityDecision(
+  await recordBestEffort(
     buildEvent({
       actor,
       action: input.action,
@@ -51,7 +59,7 @@ export async function recordDeny(
   input: SecurityActionInput,
   reasonCode: string,
 ): Promise<void> {
-  await recordSecurityDecision(
+  await recordBestEffort(
     buildEvent({
       actor,
       action: input.action,

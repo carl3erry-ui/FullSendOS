@@ -53,6 +53,8 @@ Rules:
 - Malformed identity fails closed.
 - Arbitrary unverified identity headers are not trusted.
 - Development/test adapter is hard-disabled in production mode.
+- Development/test adapter requires an explicit `FULLSENDOS_AUTH_DEV_TEST_SECRET` with minimum length 32; no default fallback secret is used.
+- Oversized authorization header/token/segment inputs are rejected before signature verification.
 - If no production identity provider is configured, protected routes return unauthorized.
 
 Deterministic development/test adapter:
@@ -102,6 +104,8 @@ Security decision events capture:
 - non-sensitive reason code
 
 Events explicitly do not include tokens, cookies, credentials, or request-body payloads.
+Audit writes are best-effort: sink failures are isolated and cannot change authn/authz route outcomes.
+Current default sink storage is process-local in-memory and non-durable.
 
 ## 8) Test Authentication Design
 
@@ -109,6 +113,8 @@ Deterministic test support:
 
 - `services/test-auth.ts` issues signed test tokens via the shared auth module.
 - Primitive tests verify missing/malformed identity denial, valid role authentication, and production adapter disablement.
+- Tests verify invalid-signature rejection, oversized header/token denial, and explicit secret requirement behavior.
+- Route guard tests verify internal-operator denial for internal-only routes and audit-sink-failure isolation.
 
 Security tests added:
 

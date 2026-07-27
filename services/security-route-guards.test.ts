@@ -11,12 +11,21 @@ import { addFileReference } from "./client-data-room-store";
 import { createHumanInputRequest } from "./human-input-service";
 import { createTestNextRequest } from "./test-next-request";
 import { createTestAuthHeader } from "./test-auth";
+import {
+  resetSecurityAuditSinkForTests,
+  setSecurityAuditSinkForTests,
+} from "../lib/security/security-audit";
 
 const clientStorageDir = path.resolve("data/clients");
 const uploadStorageDir = path.resolve("data/uploads");
 const requestStorageDir = path.resolve("data/human-input-requests");
 
 process.env.FULLSENDOS_AUTH_DEV_TEST_ENABLED = "1";
+process.env.FULLSENDOS_AUTH_DEV_TEST_SECRET = "route-guard-test-secret-0123456789";
+
+test.afterEach(() => {
+  resetSecurityAuditSinkForTests();
+});
 
 async function cleanupClient(id: string) {
   await fs.rm(path.join(clientStorageDir, `${id}.json`), { force: true });
@@ -215,6 +224,21 @@ test("internal-only route enforces internal role and allows internal admin", asy
 
   assert.equal(unauthorized.status, 403);
 
+  const operatorDenied = await postDemoSeed(
+    new Request("http://localhost/api/demo/seed", {
+      method: "POST",
+      headers: {
+        authorization: createTestAuthHeader({
+          id: "operator-1",
+          role: "internal_operator",
+          clientId: "client-a",
+        }),
+      },
+    }),
+  );
+
+  assert.equal(operatorDenied.status, 403);
+
   const allowed = await postDemoSeed(
     new Request("http://localhost/api/demo/seed", {
       method: "POST",
@@ -227,4 +251,46 @@ test("internal-only route enforces internal role and allows internal admin", asy
   assert.equal(allowed.status, 200);
   const body = await allowed.json();
   assert.equal(body.success, true);
+});
+
+test("audit sink failure does not change deny outcome", async () => {
+  setSecurityAuditSinkForTests(() => {
+    throw new Error("intentional audit sink failure");
+  });
+
+  const response = await getClientDataRoomFiles(
+    createTestNextRequest("http://127.0.0.1/api/clients/client-a/data-room/files"),
+    { params: Promise.resolve({ clientId: "client-a" }) },
+  );
+
+  assert.equal(response.status, 401);
+});
+
+test("audit sink failure does not change allow outcome", async () => {
+  setSecurityAuditSinkForTests(() => {
+    throw new Error("intentional audit sink failure");
+  });
+
+  const client = createClient({ name: "Security Audit Failure Client" });
+  await saveClient(client);
+
+  try {
+    const response = await getClientDataRoomFiles(
+      createTestNextRequest(`http://127.0.0.1/api/clients/${client.id}/data-room/files`, {
+        headers: {
+          authorization: createTestAuthHeader({
+            id: "client-user-audit",
+            role: "client_user",
+            clientId: client.id,
+          }),
+        },
+      }),
+      { params: Promise.resolve({ clientId: client.id }) },
+    );
+
+    assert.equal(response.status, 200);
+  } finally {
+    await cleanupClient(client.id);
+    await removeUploadArtifacts(client.id);
+  }
 });
