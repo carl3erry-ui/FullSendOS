@@ -20,6 +20,7 @@ import {
   hasApprovalGates,
   shouldPauseWorkflow,
 } from "./orchestrator-agent-integration-example";
+import { createTestProject } from "./test-fixtures";
 
 // Register providers for testing
 if (!globalProviderRegistry.isRegistered("mock")) {
@@ -33,46 +34,18 @@ if (!globalProviderRegistry.isRegistered("xai")) {
 }
 
 // Mock project for testing
-const mockProject = {
-  id: "test-project-123",
-  client: {
-    companyName: "Test Company",
-    contactName: "John Doe",
-    website: "https://test.com",
-    industry: "Tech",
-  },
-  objective: {
-    summary: "Test objective",
-    constraints: [],
-    requestedDeliverables: [],
-  },
-  status: "in-progress" as const,
-  createdAt: "2024-01-01T00:00:00Z",
-  updatedAt: "2024-01-01T00:00:00Z",
-  workflow: {
-    initializedAt: "2024-01-01T00:00:00Z",
-    stages: [],
-    stageResults: {},
-  },
-  deliverables: {
-    assets: {},
-  },
-  evidence: {
-    sources: [],
-    items: [],
-  },
-  departments: {
-    intelligence: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    strategy: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    creative: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-    publishing: { status: "pending", outputs: {}, unknowns: [], warnings: [] },
-  },
+const mockProject = createTestProject({
   audit: {
-    activeRun: { id: "run-001", startedAt: "2024-01-01T00:00:00Z", updatedAt: "2024-01-01T00:00:00Z", model: "mock" },
+    activeRun: {
+      id: "run-001",
+      startedAt: "2024-01-01T00:00:00Z",
+      updatedAt: "2024-01-01T00:00:00Z",
+      model: "mock",
+    },
     runs: [],
     warnings: [],
   },
-};
+});
 
 // ============================================================================
 // Audit Recording Tests
@@ -117,7 +90,8 @@ test("getAgentStepsFromAudit filters audit entries", async () => {
   project = {
     ...project,
     audit: {
-      ...project.audit,
+      activeRun: project.audit?.activeRun ?? null,
+      warnings: project.audit?.warnings ?? [],
       runs: [
         ...(project.audit?.runs || []),
         { department: "research", status: "completed", startedAt: "2024-01-01T00:00:00Z" },
