@@ -140,7 +140,7 @@ test("approveHelpRequest moves status to approved", () => {
     riskLevel: "low",
     confidence: 0.7,
   });
-  const approved = approveHelpRequest(req, "Approved by Orchestrator");
+  const approved = approveHelpRequest(req);
   assert.equal(approved.status, "approved");
 });
 
@@ -175,7 +175,7 @@ test("redirectHelpRequest moves status to redirected", () => {
     confidence: 0.5,
   });
   // redirectHelpRequest works from pending status
-  const redirected = redirectHelpRequest(req, "strategy", "Strategy is better suited for this question");
+  const redirected = redirectHelpRequest(req, "strategy");
   assert.equal(redirected.status, "redirected");
   // The redirect target is stored in redirectedToAgentId (original requestedAgentId unchanged)
   assert.ok(redirected.status === "redirected");

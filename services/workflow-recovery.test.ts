@@ -36,12 +36,14 @@ test("resolveRunTimeoutMessage supports timeout recovery behavior", () => {
 
 test("poll controller avoids overlap and stops updates after unmount cleanup", async () => {
   let calls = 0;
-  let release: (() => void) | null = null;
+  const releaseRef: {
+    current: ((value?: void | PromiseLike<void>) => void) | null;
+  } = { current: null };
 
   const refresh = async () => {
     calls += 1;
     await new Promise<void>((resolve) => {
-      release = resolve;
+      releaseRef.current = resolve;
     });
   };
 
@@ -51,7 +53,11 @@ test("poll controller avoids overlap and stops updates after unmount cleanup", a
   const second = controller.tick();
   assert.equal(await second, false);
 
-  release?.();
+  const resolveRefresh = releaseRef.current;
+  if (!resolveRefresh) {
+    throw new Error("Expected refresh resolver to be initialized");
+  }
+  resolveRefresh();
   assert.equal(await first, true);
   assert.equal(calls, 1);
 
