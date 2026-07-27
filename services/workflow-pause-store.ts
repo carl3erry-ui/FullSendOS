@@ -26,7 +26,7 @@ function pauseFilePath(id: string): string {
   if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
     throw new Error(`Invalid pause state id: "${id}"`);
   }
-  return path.join(PAUSE_DIR, `${id}.json`);
+  return `${PAUSE_DIR}/${id}.json`;
 }
 
 /**

@@ -8,6 +8,10 @@ import {
 } from "@/services/client-data-room-store";
 import { loadClient } from "@/src/storage/clientStore.js";
 import { FileReferenceSafeSchema } from "@/schemas/client-data-room";
+import { requireAuthenticatedActor, recordAllow, recordDeny } from "@/lib/security/route-guards";
+import { requireClientAccess } from "@/lib/security/authorization";
+import { isSecurityRouteError, toSecurityErrorResponse } from "@/lib/security/security-response";
+import type { AuthenticatedActor } from "@/lib/security/types";
 
 const UPLOAD_DIR = path.join(process.cwd(), "data", "uploads");
 
@@ -20,8 +24,18 @@ export async function GET(
   context: { params: Promise<{ clientId: string }> }
 ): Promise<NextResponse> {
   const { clientId } = await context.params;
+  const action = {
+    action: "client_data_room_files_read",
+    resourceType: "client",
+    resourceId: clientId,
+  };
+  let actor: AuthenticatedActor | null = null;
 
   try {
+    actor = await requireAuthenticatedActor(request, action);
+    requireClientAccess(actor, clientId);
+    await recordAllow(actor, action, "client_access_granted");
+
     await loadClient(clientId);
 
     const query = new URL(request.url).searchParams;
@@ -52,6 +66,13 @@ export async function GET(
       files: safeFiles
     });
   } catch (error) {
+    if (isSecurityRouteError(error)) {
+      if (error.status !== 401) {
+        await recordDeny(actor, action, error.reasonCode);
+      }
+      return toSecurityErrorResponse(error);
+    }
+
     console.error("[DataRoom Files GET]", error);
     if (
       typeof error === "object" &&
