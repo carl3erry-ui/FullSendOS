@@ -4,14 +4,19 @@ import path from "node:path";
 import test from "node:test";
 import { GET as getClientDataRoomFiles } from "../app/api/clients/[clientId]/data-room/files/route";
 import { POST as postHumanInputAnswer } from "../app/api/human-input/[id]/answer/route";
+import { POST as postHumanInputConfirm } from "../app/api/human-input/[id]/confirm/route";
+import { POST as postHumanInputReject } from "../app/api/human-input/[id]/reject/route";
+import { POST as postHumanInputSkip } from "../app/api/human-input/[id]/skip/route";
 import { POST as postDemoSeed } from "../app/api/demo/seed/route";
 import { createClient } from "../src/schemas/clientSchema.js";
 import { saveClient } from "../src/storage/clientStore.js";
 import { addFileReference } from "./client-data-room-store";
-import { createHumanInputRequest } from "./human-input-service";
+import { createHumanInputRequest, getHumanInputRequest } from "./human-input-service";
 import { createTestNextRequest } from "./test-next-request";
 import { createTestAuthHeader } from "./test-auth";
 import {
+  clearSecurityAuditEventsForTests,
+  getSecurityAuditEventsForTests,
   resetSecurityAuditSinkForTests,
   setSecurityAuditSinkForTests,
 } from "../lib/security/security-audit";
@@ -25,7 +30,40 @@ process.env.FULLSENDOS_AUTH_DEV_TEST_SECRET = "route-guard-test-secret-012345678
 
 test.afterEach(() => {
   resetSecurityAuditSinkForTests();
+  clearSecurityAuditEventsForTests();
 });
+
+type HumanInputMutationRoute = {
+  name: string;
+  route: typeof postHumanInputConfirm;
+  status: "confirmed" | "rejected" | "skipped";
+  action: string;
+  serviceResponse: string;
+};
+
+const humanInputMutationRoutes: HumanInputMutationRoute[] = [
+  {
+    name: "confirm",
+    route: postHumanInputConfirm,
+    status: "confirmed",
+    action: "human_input_confirm",
+    serviceResponse: "Confirmed by test",
+  },
+  {
+    name: "reject",
+    route: postHumanInputReject,
+    status: "rejected",
+    action: "human_input_reject",
+    serviceResponse: "Rejected by test",
+  },
+  {
+    name: "skip",
+    route: postHumanInputSkip,
+    status: "skipped",
+    action: "human_input_skip",
+    serviceResponse: "Skipped by test",
+  },
+];
 
 async function cleanupClient(id: string) {
   await fs.rm(path.join(clientStorageDir, `${id}.json`), { force: true });
@@ -44,6 +82,21 @@ async function removeUploadArtifacts(clientId: string) {
 
 async function cleanupRequest(id: string) {
   await fs.rm(path.join(requestStorageDir, `${id}.json`), { force: true });
+}
+
+function makeMutationRequest(url: string, body: Record<string, unknown>, headers: Record<string, string>) {
+  return createTestNextRequest(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function readAuditEventsForRoute(action: string) {
+  return getSecurityAuditEventsForTests().filter((event) => event.action === action);
 }
 
 test("client-owned read route denies unauthenticated requests", async () => {
@@ -203,6 +256,543 @@ test("client-owned mutation route allows authorized client and denies cross-clie
     );
 
     assert.equal(denied.status, 404);
+  } finally {
+    await cleanupRequest(requestRecord.id);
+  }
+});
+
+for (const mutationRoute of humanInputMutationRoutes) {
+  test(`human-input ${mutationRoute.name} route enforces authz, audit, and state transitions`, async () => {
+    clearSecurityAuditEventsForTests();
+
+    const requestRecord = await createHumanInputRequest({
+      clientId: "client-mutation-a",
+      engagementId: "eng-mutation-a",
+      type: "clarification",
+      title: `Mutation ${mutationRoute.name}`,
+      prompt: `Please exercise the ${mutationRoute.name} route.`,
+      priority: "medium",
+      requestedBy: "system",
+      requiredToContinue: false,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+
+    try {
+      const allowed = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: mutationRoute.serviceResponse },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-a",
+              role: "client_user",
+              clientId: "client-mutation-a",
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(allowed.status, 200);
+      const allowedBody = await allowed.json();
+      assert.equal(allowedBody.data.status, mutationRoute.status);
+
+      const updated = await getHumanInputRequest(requestRecord.id);
+      assert.equal(updated.status, mutationRoute.status);
+
+      const events = await readAuditEventsForRoute(mutationRoute.action);
+      assert.equal(events.some((event) => event.decision === "allow"), true);
+      assert.equal(events.some((event) => event.reasonCode === "authenticated"), true);
+
+      const denied = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: `Cross-client ${mutationRoute.name}`, clientId: "caller-overrides-client", engagementId: "caller-overrides-engagement" },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-b",
+              role: "client_user",
+              clientId: "client-mutation-b",
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(denied.status, 404);
+
+      const afterDenied = await getHumanInputRequest(requestRecord.id);
+      assert.equal(afterDenied.status, mutationRoute.status);
+
+      const deniedEvents = await readAuditEventsForRoute(mutationRoute.action);
+      assert.equal(deniedEvents.some((event) => event.decision === "deny"), true);
+    } finally {
+      await cleanupRequest(requestRecord.id);
+    }
+  });
+}
+
+for (const mutationRoute of humanInputMutationRoutes) {
+  test(`human-input ${mutationRoute.name} route keeps invalid bodies and auth failures safe`, async () => {
+    clearSecurityAuditEventsForTests();
+
+    const requestRecord = await createHumanInputRequest({
+      clientId: "client-mutation-b",
+      engagementId: "eng-mutation-b",
+      type: "clarification",
+      title: `Mutation ${mutationRoute.name} invalid body`,
+      prompt: `Please exercise invalid body handling on ${mutationRoute.name}.`,
+      priority: "medium",
+      requestedBy: "system",
+      requiredToContinue: false,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+
+    try {
+      const invalidResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: "" },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-b",
+              role: "client_user",
+              clientId: "client-mutation-b",
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(invalidResponse.status, 400);
+      const afterInvalid = await getHumanInputRequest(requestRecord.id);
+      assert.equal(afterInvalid.status, "open");
+
+      const unauthorizedResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: "Missing auth" },
+          {},
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(unauthorizedResponse.status, 401);
+      const unauthorizedBody = await unauthorizedResponse.json();
+      assert.equal(JSON.stringify(unauthorizedBody).includes("Bearer"), false);
+      assert.equal(JSON.stringify(unauthorizedBody).includes("authorization"), false);
+      assert.equal(JSON.stringify(unauthorizedBody).includes("intentional audit sink failure"), false);
+    } finally {
+      await cleanupRequest(requestRecord.id);
+    }
+  });
+}
+
+for (const mutationRoute of humanInputMutationRoutes) {
+  test(`human-input ${mutationRoute.name} route enforces role policy and concealed ownership`, async () => {
+    clearSecurityAuditEventsForTests();
+
+    const ownedRequest = await createHumanInputRequest({
+      clientId: `client-${mutationRoute.name}-owned`,
+      engagementId: `eng-${mutationRoute.name}-owned`,
+      type: "clarification",
+      title: `Owned ${mutationRoute.name}`,
+      prompt: `Exercise role policy for ${mutationRoute.name}.`,
+      priority: "medium",
+      requestedBy: "system",
+      requiredToContinue: false,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+
+    const internalOnlyRequest = await createHumanInputRequest({
+      engagementId: `eng-${mutationRoute.name}-internal`,
+      type: "clarification",
+      title: `Internal-only ${mutationRoute.name}`,
+      prompt: `Exercise unscoped access for ${mutationRoute.name}.`,
+      priority: "medium",
+      requestedBy: "system",
+      requiredToContinue: false,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+
+    try {
+      const adminResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${ownedRequest.id}/${mutationRoute.name}`,
+          { response: `Admin ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({ id: "admin-1", role: "internal_admin" }),
+          },
+        ),
+        { params: Promise.resolve({ id: ownedRequest.id }) },
+      );
+
+      assert.equal(adminResponse.status, 200);
+
+      const operatorResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${ownedRequest.id}/${mutationRoute.name}`,
+          { response: `Operator ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({
+              id: "operator-1",
+              role: "internal_operator",
+              clientId: `client-${mutationRoute.name}-owned`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: ownedRequest.id }) },
+      );
+
+      assert.equal(operatorResponse.status, 403);
+
+      const crossClientResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${ownedRequest.id}/${mutationRoute.name}`,
+          {
+            response: `Cross-client ${mutationRoute.name}`,
+            clientId: "caller-overrides-client",
+            engagementId: "caller-overrides-engagement",
+          },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-cross",
+              role: "client_user",
+              clientId: `client-${mutationRoute.name}-other`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: ownedRequest.id }) },
+      );
+
+      assert.equal(crossClientResponse.status, 404);
+
+      const internalOnlyDenied = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${internalOnlyRequest.id}/${mutationRoute.name}`,
+          { response: `Client user ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-unscoped",
+              role: "client_user",
+              clientId: `client-${mutationRoute.name}-owned`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: internalOnlyRequest.id }) },
+      );
+
+      assert.equal(internalOnlyDenied.status, 403);
+
+      const missingRequest = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/missing-${mutationRoute.name}/${mutationRoute.name}`,
+          { response: `Missing ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-missing",
+              role: "client_user",
+              clientId: `client-${mutationRoute.name}-owned`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: `missing-${mutationRoute.name}` }) },
+      );
+
+      assert.equal(missingRequest.status, 404);
+      const missingBody = await missingRequest.json();
+      assert.equal(JSON.stringify(missingBody).includes("missing-"), false);
+
+      const allowedBody = await adminResponse.json();
+      assert.equal(allowedBody.data.status, mutationRoute.status);
+
+      const owned = await getHumanInputRequest(ownedRequest.id);
+      assert.equal(owned.status, mutationRoute.status);
+
+      const events = await readAuditEventsForRoute(mutationRoute.action);
+      assert.equal(events.some((event) => event.decision === "allow"), true);
+      assert.equal(events.some((event) => event.decision === "deny"), true);
+    } finally {
+      await cleanupRequest(ownedRequest.id);
+      await cleanupRequest(internalOnlyRequest.id);
+    }
+  });
+}
+
+for (const mutationRoute of humanInputMutationRoutes) {
+  test(`human-input ${mutationRoute.name} route preserves forbidden and concealed responses when audit fails`, async () => {
+    setSecurityAuditSinkForTests(() => {
+      throw new Error("intentional audit sink failure");
+    });
+
+    const requestRecord = await createHumanInputRequest({
+      clientId: `client-${mutationRoute.name}-audit`,
+      engagementId: `eng-${mutationRoute.name}-audit`,
+      type: "clarification",
+      title: `Audit failure ${mutationRoute.name}`,
+      prompt: `Exercise audit failure handling for ${mutationRoute.name}.`,
+      priority: "medium",
+      requestedBy: "system",
+      requiredToContinue: false,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+
+    try {
+      const forbiddenResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: `Operator ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({
+              id: "operator-audit",
+              role: "internal_operator",
+              clientId: `client-${mutationRoute.name}-audit`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(forbiddenResponse.status, 403);
+      const forbiddenBody = await forbiddenResponse.json();
+      const forbiddenSerialized = JSON.stringify(forbiddenBody);
+      assert.equal(forbiddenSerialized.includes("intentional audit sink failure"), false);
+      assert.equal(forbiddenSerialized.includes("Bearer"), false);
+      assert.equal(forbiddenSerialized.includes("authorization"), false);
+
+      const concealedResponse = await mutationRoute.route(
+        makeMutationRequest(
+          `http://localhost/api/human-input/${requestRecord.id}/${mutationRoute.name}`,
+          { response: `Cross-client ${mutationRoute.name}` },
+          {
+            authorization: createTestAuthHeader({
+              id: "client-user-audit-cross",
+              role: "client_user",
+              clientId: `client-${mutationRoute.name}-other`,
+            }),
+          },
+        ),
+        { params: Promise.resolve({ id: requestRecord.id }) },
+      );
+
+      assert.equal(concealedResponse.status, 404);
+      const concealedBody = await concealedResponse.json();
+      const concealedSerialized = JSON.stringify(concealedBody);
+      assert.equal(concealedSerialized.includes(requestRecord.id), false);
+      assert.equal(concealedSerialized.includes(requestRecord.clientId || ""), false);
+      assert.equal(concealedSerialized.includes("intentional audit sink failure"), false);
+    } finally {
+      await cleanupRequest(requestRecord.id);
+    }
+  });
+}
+
+test("human-input routes preserve overwrite behavior on repeated actions", async () => {
+  const requestRecord = await createHumanInputRequest({
+    clientId: "client-mutation-overwrite",
+    engagementId: "eng-mutation-overwrite",
+    type: "clarification",
+    title: "Mutation overwrite",
+    prompt: "Exercise overwrite behavior.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  try {
+    const first = await postHumanInputReject(
+      makeMutationRequest(
+        `http://localhost/api/human-input/${requestRecord.id}/reject`,
+        { response: "Rejected once" },
+        {
+          authorization: createTestAuthHeader({
+            id: "admin-1",
+            role: "internal_admin",
+          }),
+        },
+      ),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(first.status, 200);
+
+    const second = await postHumanInputReject(
+      makeMutationRequest(
+        `http://localhost/api/human-input/${requestRecord.id}/reject`,
+        { response: "Rejected twice" },
+        {
+          authorization: createTestAuthHeader({
+            id: "admin-1",
+            role: "internal_admin",
+          }),
+        },
+      ),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(second.status, 200);
+    const body = await second.json();
+    assert.equal(body.data.status, "rejected");
+    assert.equal(body.data.response, "Rejected twice");
+  } finally {
+    await cleanupRequest(requestRecord.id);
+  }
+});
+
+test("human-input mutation routes reject malformed payloads before mutation", async () => {
+  const requestRecord = await createHumanInputRequest({
+    clientId: "client-mutation-invalid",
+    engagementId: "eng-mutation-invalid",
+    type: "clarification",
+    title: "Mutation invalid payload",
+    prompt: "Exercise invalid payload handling.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  try {
+    const response = await postHumanInputConfirm(
+      createTestNextRequest(`http://localhost/api/human-input/${requestRecord.id}/confirm`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: createTestAuthHeader({
+            id: "client-user-invalid",
+            role: "client_user",
+            clientId: "client-mutation-invalid",
+          }),
+        },
+        body: JSON.stringify({ response: "" }),
+      }),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(response.status, 400);
+    const after = await getHumanInputRequest(requestRecord.id);
+    assert.equal(after.status, "open");
+  } finally {
+    await cleanupRequest(requestRecord.id);
+  }
+});
+
+test("human-input mutation routes preserve overwrite behavior on repeated transitions", async () => {
+  const requestRecord = await createHumanInputRequest({
+    clientId: "client-mutation-conflict",
+    engagementId: "eng-mutation-conflict",
+    type: "clarification",
+    title: "Mutation conflict",
+    prompt: "Exercise duplicate transition handling.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  try {
+    const firstResponse = await postHumanInputReject(
+      createTestNextRequest(`http://localhost/api/human-input/${requestRecord.id}/reject`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: createTestAuthHeader({
+            id: "internal-admin-1",
+            role: "internal_admin",
+          }),
+        },
+        body: JSON.stringify({ response: "Rejected once" }),
+      }),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(firstResponse.status, 200);
+
+    const duplicateResponse = await postHumanInputReject(
+      createTestNextRequest(`http://localhost/api/human-input/${requestRecord.id}/reject`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: createTestAuthHeader({
+            id: "internal-admin-1",
+            role: "internal_admin",
+          }),
+        },
+        body: JSON.stringify({ response: "Rejected twice" }),
+      }),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(duplicateResponse.status, 200);
+    const duplicateBody = await duplicateResponse.json();
+    assert.equal(duplicateBody.data.status, "rejected");
+    assert.equal(duplicateBody.data.response, "Rejected twice");
+  } finally {
+    await cleanupRequest(requestRecord.id);
+  }
+});
+
+test("human-input mutation routes deny internal operators and leave state unchanged", async () => {
+  const requestRecord = await createHumanInputRequest({
+    clientId: "client-mutation-operator",
+    engagementId: "eng-mutation-operator",
+    type: "clarification",
+    title: "Mutation operator denial",
+    prompt: "Exercise internal operator denial.",
+    priority: "medium",
+    requestedBy: "system",
+    requiredToContinue: false,
+    options: [],
+    evidence: [],
+    sourceReferences: [],
+    metadata: {},
+  });
+
+  try {
+    const response = await postHumanInputSkip(
+      createTestNextRequest(`http://localhost/api/human-input/${requestRecord.id}/skip`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: createTestAuthHeader({
+            id: "operator-1",
+            role: "internal_operator",
+            clientId: "client-mutation-operator",
+          }),
+        },
+        body: JSON.stringify({ response: "Skip attempt" }),
+      }),
+      { params: Promise.resolve({ id: requestRecord.id }) },
+    );
+
+    assert.equal(response.status, 403);
+    const after = await getHumanInputRequest(requestRecord.id);
+    assert.equal(after.status, "open");
   } finally {
     await cleanupRequest(requestRecord.id);
   }
