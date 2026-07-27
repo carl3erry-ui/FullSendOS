@@ -1,8 +1,12 @@
 # ALPHA-052-03 Agent-Task Mutation and Execution Controls Readiness Review
 
 Date: 2026-07-27
-Status: READINESS REVIEW COMPLETE (IMPLEMENTATION NOT STARTED)
+Status: READINESS REVIEW COMPLETE (03A IMPLEMENTED; 03B PENDING)
 Scope: Planning and readiness analysis only for ALPHA-052-03
+
+Update note:
+- ALPHA-052-03A implementation is complete for POST /api/agent-tasks/[id]/run.
+- ALPHA-052-03B (approve/reject/request-revision) remains pending and was not implemented in 03A.
 
 ## 1) Executive Summary
 
