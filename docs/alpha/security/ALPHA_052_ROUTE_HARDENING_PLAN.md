@@ -57,7 +57,7 @@ Current handler inventory remains 46 total. The six already protected handlers a
 | `/api/clients/**` | `internal_admin`; `internal_operator` within scoped client; `client_user` only on client-safe reads | Any cross-tenant actor; `client_user` on internal/admin actions | Path `clientId`, stored client record, data-room file metadata, and any project-linked client ownership | Same-client required except internal admin cross-client cases | Cross-tenant client-user reads should conceal as `404` where the resource should remain hidden; other denials use `403` | `401` missing auth, `403` forbidden, `404` concealed existence | File/document routes must filter storage paths and raw file internals; no provider output here | Required for protected reads and all mutations |
 | `/api/engagements/**` | `internal_admin`; `internal_operator` within authorized client/engagement; `client_user` only where a route is explicitly client-safe | Unauthorized internal operators; all client users on internal-only control routes | `engagementId` path parameter, stored project ownership, engagement-linked data room/export metadata | Same engagement/client scope required for scoped access | Conceal guessed or cross-tenant engagements with `404` when the route is meant to hide existence | `401` missing auth, `403` forbidden, `404` concealed existence | Export/detail routes must filter internal notes, raw outputs, and storage paths | Required for workflow control, exports, and scoped reads |
 | `/api/projects/**` | `internal_admin`; `internal_operator` within scope | `client_user` and any out-of-scope internal operator | Stored project `clientId` plus project ID | Same client required for non-admin access | Missing project IDs should remain `404`; unauthorized access should not leak internal details | `401` / `403` / `404` as appropriate | Project detail/export routes must redact internal diagnostics and evidence internals | Required for lifecycle and export routes |
-| `/api/human-input/**` | `internal_admin`; `internal_operator` within scope; `client_user` for own client on client-facing actions | Cross-client clients and unscoped internal operators | Stored human-input request `clientId` and `engagementId` | Same client/engagement required | Cross-tenant access should hide existence on client-facing actions | `401` / `403` / `404` according to the caller and route type | Responses must stay generic; no raw request payloads or audit data in responses | Required for all protected human-input actions |
+| `/api/human-input/**` | `internal_admin`; `client_user` for own client on client-facing actions | `internal_operator` until a stored assignment model exists; cross-client clients; unscoped clients | Stored human-input request `clientId` and `engagementId` | Same client/engagement required | Cross-tenant access should hide existence on client-facing actions | `401` / `403` / `404` according to the caller and route type | Responses must stay generic; no raw request payloads or audit data in responses | Required for all protected human-input actions |
 | `/api/agent-tasks/**` | `internal_admin`; `internal_operator` within authorized scope | `client_user` and out-of-scope internal operators | Task `projectId`, `engagementId`, `workflowRunId`, and agent/task store metadata | Same project/client/engagement scope required | Guessable task IDs should not reveal task internals | `401` / `403` / `404` according to hidden task policy | Read routes must redact raw provider outputs and execution internals | Required for run/approve/reject/revision routes |
 | `/api/agents` | Public-safe metadata only; no auth required in Alpha | None, provided implementation stays public-safe | None | None | None | No auth gate required; failures should still be generic `500` only | System prompts and internal implementation details must remain filtered | Not required for public metadata |
 | `/api/deliverable-templates` | Public-safe metadata only; no auth required in Alpha | None, provided template catalog stays safe | None | None | None | No auth gate required; failures should still be generic `500` only | Raw provider output is not present, but template metadata must remain sanitized | Not required for public reference data |
@@ -91,7 +91,7 @@ Batch size target: 3 to 7 related handlers.
 
 | Batch ID | ALPHA subtask | Route handlers | Risk addressed | Role policy | Ownership source | Helper required | New tests required | Complexity | Expected PR size | Dependencies | Exit criteria |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| B1 | ALPHA-052-02 | `/api/human-input/[id]/confirm`, `/api/human-input/[id]/reject`, `/api/human-input/[id]/skip` | Critical workflow-steering mutations | `internal_admin`, `internal_operator`, and `client_user` only within request ownership scope | Human-input request `clientId` + `engagementId` | `requireAuthenticatedActor`, `requireClientAccess`, possibly `requireInternalAdmin` for internal-only subpaths | 401, 403, 404, ownership, audit, invalid-body tests | Low-medium | Small | ALPHA-052-01 helpers | All three routes enforce tenant-safe auth and generic error policy |
+| B1 | ALPHA-052-02 | `/api/human-input/[id]/confirm`, `/api/human-input/[id]/reject`, `/api/human-input/[id]/skip` | Critical workflow-steering mutations | `internal_admin` allowed; `internal_operator` denied until assignment model; `client_user` only for stored matching client | Human-input request `clientId` + `engagementId` | `requireAuthenticatedActor`, `requireClientAccess`, deny `internal_operator` until assignment model exists | 401, 403, 404, ownership, audit, invalid-body tests | Low-medium | Small | ALPHA-052-01 helpers | All three routes enforce tenant-safe auth and generic error policy |
 | B2 | ALPHA-052-03 | `/api/agent-tasks/[id]/run`, `/api/agent-tasks/[id]/approve`, `/api/agent-tasks/[id]/reject`, `/api/agent-tasks/[id]/request-revision` | Critical execution and approval controls | `internal_admin`; `internal_operator` only where the task is scoped and execution is allowed | Task `projectId` / `engagementId` / `workflowRunId` | `requireAuthenticatedActor`, `requireInternalAdmin` and/or scoped helper | 401, 403, 404, execution-state, redaction, audit tests | Medium | Medium | ALPHA-052-01 helpers; task ownership model | Task execution and approval decisions cannot cross tenant boundaries |
 | B3 | ALPHA-052-04 | `/api/engagements/[id]/run`, `/api/engagements/[id]/abort`, `/api/engagements/[id]/workflow/resume`, `/api/projects/[id]/run` | Workflow execution controls | `internal_admin`; `internal_operator` within scope | Project ownership and workflow pause state | `requireAuthenticatedActor`, `requireEngagementAccess` | 401, 403, 404, workflow-state, pause/resume, audit tests | Medium | Medium | Batch B2 or shared workflow helper patterns | Workflow control routes require tenant-safe authorization and do not expose pause details |
 | B4 | ALPHA-052-05 | `/api/clients/[clientId]/data-room/files`, `/api/clients/[clientId]/data-room/files/[fileId]`, `/api/clients/[clientId]/data-room/files/[fileId]/process` | File upload, metadata mutation, and file processing | `internal_admin`, `internal_operator` within client scope, `client_user` only for client-safe surfaces where allowed | Client ID + file metadata ownership | `requireAuthenticatedActor`, `requireClientAccess` | 401, 403, 404, upload, metadata, archive, process, audit tests | Medium-high | Medium | Client file ownership rules | File handlers are tenant-bound and do not leak storage internals |
@@ -182,7 +182,7 @@ Recommended test layering:
 ## 11) Acceptance Criteria
 
 ALPHA-052 can move toward completion only when all are true:
-1. All 43 remaining route files are assigned to batches and implemented.
+1. All 40 remaining route files are assigned to batches and implemented.
 2. Each protected route has explicit authn/authz and safe error handling.
 3. Cross-client and cross-engagement concealment works as intended.
 4. Audit events continue to be best-effort and non-failing.
@@ -192,7 +192,7 @@ ALPHA-052 can move toward completion only when all are true:
 
 ## 12) Remaining Limitations
 
-- ALPHA-052-01 covers only three representative handlers.
+- ALPHA-052-01 and ALPHA-052-02 B1 now cover six hardened handlers.
 - Public/reference routes remain intentionally open until a later batch decides otherwise.
 - No production identity provider is configured.
 - Some current routes still rely on resource existence checks without caller identity checks.
@@ -203,8 +203,8 @@ ALPHA-052 can move toward completion only when all are true:
 | Metric | Value |
 | --- | ---: |
 | Total route files | 46 |
-| Already hardened handlers | 3 |
-| Remaining route files | 43 |
+| Already hardened handlers | 6 |
+| Remaining route files | 40 |
 | Critical-risk families | Human-input mutations, agent-task controls, workflow controls, demo seed, project run |
 | High-risk families | File upload/download, export download, lifecycle mutation routes |
 | Medium-risk families | Tenant-bound reads and detail surfaces |
