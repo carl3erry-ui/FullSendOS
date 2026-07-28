@@ -12,6 +12,8 @@ export type AgentTaskOwnership = {
   clientId: string;
 };
 
+export type AgentTaskAction = "run" | "approve" | "reject" | "request_revision";
+
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return typeof error === "object" && error !== null && "code" in error;
 }
@@ -50,9 +52,14 @@ export function authorizeAgentTaskAction(input: {
   actor: AuthenticatedActor;
   task: AgentTask;
   project: AgentTaskProjectRecord;
-  action: "run";
+  action: AgentTaskAction;
 }): void {
-  if (input.action !== "run") {
+  if (
+    input.action !== "run"
+    && input.action !== "approve"
+    && input.action !== "reject"
+    && input.action !== "request_revision"
+  ) {
     forbidden("agent_task_action_unsupported");
   }
 

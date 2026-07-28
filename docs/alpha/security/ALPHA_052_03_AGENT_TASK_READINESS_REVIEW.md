@@ -1,12 +1,12 @@
 # ALPHA-052-03 Agent-Task Mutation and Execution Controls Readiness Review
 
-Date: 2026-07-27
-Status: READINESS REVIEW COMPLETE (03A IMPLEMENTED; 03B PENDING)
+Date: 2026-07-28
+Status: READINESS REVIEW COMPLETE (03A AND 03B IMPLEMENTED)
 Scope: Planning and readiness analysis only for ALPHA-052-03
 
 Update note:
 - ALPHA-052-03A implementation is complete for POST /api/agent-tasks/[id]/run.
-- ALPHA-052-03B (approve/reject/request-revision) remains pending and was not implemented in 03A.
+- ALPHA-052-03B implementation is complete for POST /api/agent-tasks/[id]/approve, /reject, and /request-revision.
 
 ## 1) Executive Summary
 
@@ -23,7 +23,7 @@ Historical baseline at readiness-review time (before ALPHA-052-03A implementatio
 
 Current state (after ALPHA-052-03A / PR #45):
 - `POST /api/agent-tasks/[id]/run` is implemented and protected.
-- `POST /api/agent-tasks/[id]/approve`, `/reject`, and `/request-revision` remain pending ALPHA-052-03B.
+- `POST /api/agent-tasks/[id]/approve`, `/reject`, and `/request-revision` are implemented and protected.
 
 Primary readiness conclusion:
 - ALPHA-052-03 is ready to implement as a governed hardening batch.
