@@ -1286,7 +1286,88 @@ test("agent-task run route allows internal admin and redacts unsafe execution di
 
     const events = getSecurityAuditEventsForTests().filter((event) => event.action === "agent_task_run");
     assert.equal(events.some((event) => event.decision === "allow"), true);
+    const eventSerialized = JSON.stringify(events);
+    assert.equal(eventSerialized.includes("systemPromptSnapshot"), false);
+    assert.equal(eventSerialized.includes("toolPermissionsSnapshot"), false);
+    assert.equal(eventSerialized.includes("rawResponse"), false);
+    assert.equal(eventSerialized.includes("output"), false);
+    assert.equal(eventSerialized.includes("diagnostic"), false);
   } finally {
+    await cleanupTaskArtifacts(task.id);
+    await cleanupProject(project.id);
+  }
+});
+
+test("agent-task run route preserves completed-task behavior and does not re-execute", async () => {
+  const project = await createProjectRecord({
+    clientId: "client-agent-run-completed",
+    companyName: "Agent Run Completed",
+    objective: "Preserve completed behavior",
+  });
+
+  const completedTask = buildAgentTask({
+    id: `task-completed-${Date.now()}`,
+    projectId: project.id,
+    engagementId: project.id,
+    status: "completed",
+    completedAt: new Date().toISOString(),
+  });
+
+  await globalTaskStore.saveTask(completedTask);
+
+  try {
+    const response = await postAgentTaskRun(
+      makeAgentTaskRunRequest(completedTask.id, {}, {
+        authorization: createTestAuthHeader({ id: "admin-completed", role: "internal_admin" }),
+      }),
+      { params: Promise.resolve({ id: completedTask.id }) },
+    );
+
+    assert.equal(response.status, 409);
+    const body = await response.json();
+    assert.equal(body.success, false);
+    assert.equal(body.error?.code, "TASK_ALREADY_COMPLETED");
+
+    const executions = await globalExecutionStore.listByTaskId(completedTask.id);
+    assert.equal(executions.length, 0);
+  } finally {
+    await cleanupTaskArtifacts(completedTask.id);
+    await cleanupProject(project.id);
+  }
+});
+
+test("agent-task run route returns sanitized generic 500 for unexpected non-executor failures", async () => {
+  const project = await createProjectRecord({
+    clientId: "client-agent-run-unexpected",
+    companyName: "Agent Run Unexpected",
+    objective: "Unexpected failure sanitization",
+  });
+  const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+  await globalTaskStore.saveTask(task);
+
+  const originalLoadTask = globalTaskStore.loadTask.bind(globalTaskStore);
+  const leakageMarker = "intentional-run-leak-message-ALPHA05203A";
+  globalTaskStore.loadTask = async () => {
+    throw new Error(leakageMarker);
+  };
+
+  try {
+    const response = await postAgentTaskRun(
+      makeAgentTaskRunRequest(task.id, {}, {
+        authorization: createTestAuthHeader({ id: "admin-unexpected", role: "internal_admin" }),
+      }),
+      { params: Promise.resolve({ id: task.id }) },
+    );
+
+    assert.equal(response.status, 500);
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    assert.equal(body.error?.code, "INTERNAL_ERROR");
+    assert.equal(serialized.includes(leakageMarker), false);
+    assert.equal(serialized.includes("stack"), false);
+    assert.equal(serialized.includes("/workspaces/"), false);
+  } finally {
+    globalTaskStore.loadTask = originalLoadTask;
     await cleanupTaskArtifacts(task.id);
     await cleanupProject(project.id);
   }
@@ -1423,6 +1504,49 @@ test("agent-task run route preserves outcomes when audit sink fails", async () =
       { params: Promise.resolve({ id: "missing-agent-task-audit" }) },
     );
     assert.equal(notFoundResponse.status, 404);
+  } finally {
+    await cleanupTaskArtifacts(task.id);
+    await cleanupProject(project.id);
+  }
+});
+
+test("agent-task run route preserves executor failure mapping when audit sink fails", async () => {
+  setSecurityAuditSinkForTests(() => {
+    throw new Error("intentional audit sink failure");
+  });
+
+  const project = await createProjectRecord({
+    clientId: "client-agent-run-audit-executor-fail",
+    companyName: "Agent Run Audit Executor Failure",
+    objective: "Audit failure invariance for executor failures",
+  });
+  const task = buildAgentTask({
+    projectId: project.id,
+    engagementId: project.id,
+    provider: "xai",
+  });
+  await globalTaskStore.saveTask(task);
+
+  try {
+    const response = await postAgentTaskRun(
+      makeAgentTaskRunRequest(task.id, {}, {
+        authorization: createTestAuthHeader({ id: "admin-audit-executor", role: "internal_admin" }),
+      }),
+      { params: Promise.resolve({ id: task.id }) },
+    );
+
+    assert.equal(response.status, 404);
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+    assert.equal(body.error?.code, "PROVIDER_NOT_FOUND");
+    assert.equal(serialized.includes("intentional audit sink failure"), false);
+    assert.equal(serialized.includes("Bearer"), false);
+    assert.equal(serialized.includes("authorization"), false);
+    assert.equal(serialized.includes("rawResponse"), false);
+    assert.equal(serialized.includes("systemPromptSnapshot"), false);
+    assert.equal(serialized.includes("toolPermissionsSnapshot"), false);
+    assert.equal(serialized.includes("Error:"), false);
+    assert.equal(serialized.includes("stack"), false);
   } finally {
     await cleanupTaskArtifacts(task.id);
     await cleanupProject(project.id);
