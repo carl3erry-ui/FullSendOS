@@ -16,10 +16,14 @@ This readiness review covers exactly four candidate routes:
 - POST /api/agent-tasks/[id]/reject
 - POST /api/agent-tasks/[id]/request-revision
 
-Current posture:
-- All four mutation and execution routes are unprotected in ALPHA-052 terms.
-- None of the four routes currently enforce authenticated actor boundaries.
-- Route behavior today allows direct or indirect workflow-impacting control without tenant authorization checks.
+Historical baseline at readiness-review time (before ALPHA-052-03A implementation):
+- All four mutation and execution routes were unprotected in ALPHA-052 terms.
+- None of the four routes enforced authenticated actor boundaries.
+- Route behavior allowed direct or indirect workflow-impacting control without tenant authorization checks.
+
+Current state (after ALPHA-052-03A / PR #45):
+- `POST /api/agent-tasks/[id]/run` is implemented and protected.
+- `POST /api/agent-tasks/[id]/approve`, `/reject`, and `/request-revision` remain pending ALPHA-052-03B.
 
 Primary readiness conclusion:
 - ALPHA-052-03 is ready to implement as a governed hardening batch.
@@ -33,23 +37,23 @@ Primary readiness conclusion:
 
 - Full repository path:
   - app/api/agent-tasks/[id]/run/route.ts
-- Current protection status:
+- Historical protection status at readiness-review time:
   - NONE
-- Current handler flow:
+- Historical handler flow before ALPHA-052-03A:
   1. Read task id from route params.
   2. Build provider registry (mock plus xai if configured).
   3. Construct AgentExecutor with global stores and registries.
   4. Execute task by id.
   5. Return mapped executor error or success payload.
-- Current request-body contract:
+- Historical request-body contract:
   - No route-level body schema. Request body is ignored.
 - Resource lookup source:
   - AgentTaskStore via AgentExecutor.loadTask(id).
 - Mutation or execution call:
   - executor.execute(id).
-- Current success responses:
+- Historical success responses:
   - HTTP 200 with success true and data containing task, execution, and output.
-- Current failure responses:
+- Historical failure responses:
   - Executor-mapped statuses:
     - 404: agent_not_found, task_not_found, provider_not_found
     - 403: agent_disabled, approval_required, permission_denied
@@ -58,25 +62,25 @@ Primary readiness conclusion:
     - 503: provider_not_configured, missing_api_key
     - 502: provider_request_failed
     - 504: provider_timeout
-  - Catch-all 500 includes raw error.message via errorResponse.
-- Current tests:
+  - Catch-all 500 included raw error.message via errorResponse.
+- Historical tests:
   - services/agent-task-execution.test.ts validates executor-level duplicate-run, approval gating, and status behavior.
   - services/agent-api-routes.test.ts includes broad route-family coverage notes but mostly store and shape checks.
   - services/ai-workforce-ui.test.tsx verifies client endpoint invocation.
 - Whether mutation or execution can occur more than once:
   - Yes, rerun is blocked only for status running and completed.
   - Failed and cancelled tasks can be executed again.
-- Whether task state transitions are currently enforced:
+- Whether task state transitions were enforced at readiness-review time:
   - Partially in AgentExecutor only.
   - No route-level actor/state authorization.
 - Whether workflow execution can be triggered indirectly:
   - Yes. This route directly executes tasks.
-- Whether raw AI/provider output can be returned:
+- Whether raw AI/provider output could be returned at readiness-review time:
   - Raw provider response field is not returned directly.
   - Route returns output object and execution internals.
-- Whether diagnostic data is exposed:
-  - Yes. execution payload includes systemPromptSnapshot and toolPermissionsSnapshot from executor record.
-  - 500 path returns raw message text.
+- Whether diagnostic data was exposed at readiness-review time:
+  - Yes. execution payload included systemPromptSnapshot and toolPermissionsSnapshot from executor record.
+  - 500 path returned raw message text.
 
 ### POST /api/agent-tasks/[id]/approve
 
