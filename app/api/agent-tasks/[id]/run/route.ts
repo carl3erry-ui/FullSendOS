@@ -168,7 +168,10 @@ export async function POST(
       return mapExecutorErrorToResponse(error);
     }
 
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return errorResponse("INTERNAL_ERROR", message, 500);
+    return errorResponse(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while executing this task.",
+      500,
+    );
   }
 }
