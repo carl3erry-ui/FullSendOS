@@ -7,15 +7,16 @@ Prerequisite merge: PR #41 at `e704e9e2f5cb988ac1e5470a9d08581b3f3f00ed`
 
 ## 1) Executive Summary
 
-ALPHA-052-01 is merged and the security foundation is stable. ALPHA-052-02 B1 is now complete, and the remaining work is the governed hardening of the 40 route files that are not fully protected yet.
+ALPHA-052-01 is merged and the security foundation is stable. ALPHA-052-02 B1 is complete, ALPHA-052-03A is complete for agent-task run control hardening, and the remaining work is the governed hardening of the 39 route files that are not fully protected yet.
 
 Current baseline for planning:
 - Route files in scope: 46
-- Fully protected handlers already merged: 6
-- Remaining route files to harden: 40
+- Fully protected handlers already merged: 7
+- Remaining route files to harden: 39
 - ALPHA-052 status: IN PROGRESS
 - ALPHA-052-01 status: COMPLETE
 - ALPHA-052-03 readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_03_AGENT_TASK_READINESS_REVIEW.md`)
+- ALPHA-052-03A run hardening status: COMPLETE (run route only)
 - Security follow-up: Issue #42 satisfied by explicit audit-failure coverage in `services/security-route-guards.test.ts`
 - Build-warning follow-up: Issue #43
 - Current build warnings: 10, pre-existing and non-blocking
@@ -37,18 +38,19 @@ Route families discovered in the current repository:
 | `/api/clients/**` | 11 | Mixed: 1 hardened, rest partial or none | Tenant-bound read/write access, file upload/download, lifecycle changes | Strong resource checks exist; identity checks are still missing on most surfaces. |
 | `/api/engagements/**` | 14 | Mixed: mostly partial/none | Workflow control, export/download, engagement-scoped data room access | Several routes already resolve project ownership or conceal missing IDs, but caller auth is still missing. |
 | `/api/human-input/**` | 6 | Mixed: 4 hardened, rest partial/none | Approval and workflow-steering mutations | Best candidate family for the first remaining mutation batch. |
-| `/api/agent-tasks/**` | 6 | Mostly none/partial | Task execution, approval, and revision control | High risk because the routes can affect execution state and raw outputs. |
+| `/api/agent-tasks/**` | 6 | Mixed: run hardened, review mutations pending | Task execution, approval, and revision control | High risk because the routes can affect execution state and raw outputs. |
 | `/api/projects/**` | 6 | Mostly partial/none | Lifecycle changes, run control, export management | Strong tenant scoping will be needed before any broad exposure. |
 | `/api/agents` | 1 | None | Public metadata exposure | Safe to keep public if internal details stay filtered. |
 | `/api/deliverable-templates` | 1 | None | Public template metadata exposure | Safe reference endpoint, but should remain low-risk and read-only. |
 | `/api/demo/**` | 1 | Hardened | Internal-only operational control | Already protected in the foundation merge. |
 
-Current handler inventory remains 46 total. The six already protected handlers are:
+Current handler inventory remains 46 total. The seven already protected handlers are:
 - `GET /api/clients/[clientId]/data-room/files`
 - `POST /api/human-input/[id]/answer`
 - `POST /api/human-input/[id]/confirm`
 - `POST /api/human-input/[id]/reject`
 - `POST /api/human-input/[id]/skip`
+- `POST /api/agent-tasks/[id]/run`
 - `POST /api/demo/seed`
 
 ## 3) Route Security Policy Matrix
@@ -93,7 +95,8 @@ Batch size target: 3 to 7 related handlers.
 | Batch ID | ALPHA subtask | Route handlers | Risk addressed | Role policy | Ownership source | Helper required | New tests required | Complexity | Expected PR size | Dependencies | Exit criteria |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | B1 | ALPHA-052-02 | `/api/human-input/[id]/confirm`, `/api/human-input/[id]/reject`, `/api/human-input/[id]/skip` | Critical workflow-steering mutations | `internal_admin` allowed; `internal_operator` denied until assignment model; `client_user` only for stored matching client | Human-input request `clientId` + `engagementId` | `requireAuthenticatedActor`, `requireClientAccess`, deny `internal_operator` until assignment model exists | 401, 403, 404, ownership, audit, invalid-body tests | Low-medium | Small | ALPHA-052-01 helpers | All three routes enforce tenant-safe auth and generic error policy |
-| B2 | ALPHA-052-03 | `/api/agent-tasks/[id]/run`, `/api/agent-tasks/[id]/approve`, `/api/agent-tasks/[id]/reject`, `/api/agent-tasks/[id]/request-revision` | Critical execution and approval controls | `internal_admin`; `internal_operator` only where the task is scoped and execution is allowed | Task `projectId` / `engagementId` / `workflowRunId` | `requireAuthenticatedActor`, `requireInternalAdmin` and/or scoped helper | 401, 403, 404, execution-state, redaction, audit tests | Medium | Medium | ALPHA-052-01 helpers; task ownership model | Task execution and approval decisions cannot cross tenant boundaries |
+| B2A | ALPHA-052-03A | `/api/agent-tasks/[id]/run` | Critical execution control | `internal_admin` only; `internal_operator` denied until assignment model exists; `client_user` denied | Stored task `projectId` + stored project `clientId` with linkage integrity checks | `requireAuthenticatedActor`, `resolveAgentTaskRunOwnership`, `authorizeAgentTaskAction` | 401, 403, 404, linkage integrity, execution precondition, audit, redaction tests | Medium | Small-medium | ALPHA-052-01 helpers; task ownership model | COMPLETE: run executes only after authn/authz + ownership resolution with safe responses |
+| B2B | ALPHA-052-03B | `/api/agent-tasks/[id]/approve`, `/api/agent-tasks/[id]/reject`, `/api/agent-tasks/[id]/request-revision` | Critical approval/revision controls | Planned: `internal_admin` only or approved reviewer role | Task `projectId` / `engagementId` / `workflowRunId` plus stored ownership resolution | Planned: `requireAuthenticatedActor` + scoped helper from B2A | Planned: 401, 403, 404, linkage integrity, audit, state-contract preservation tests | Medium | Small-medium | B2A helper patterns; approval contract decisions | Pending: approval decisions cannot cross tenant boundaries and must keep safe responses |
 | B3 | ALPHA-052-04 | `/api/engagements/[id]/run`, `/api/engagements/[id]/abort`, `/api/engagements/[id]/workflow/resume`, `/api/projects/[id]/run` | Workflow execution controls | `internal_admin`; `internal_operator` within scope | Project ownership and workflow pause state | `requireAuthenticatedActor`, `requireEngagementAccess` | 401, 403, 404, workflow-state, pause/resume, audit tests | Medium | Medium | Batch B2 or shared workflow helper patterns | Workflow control routes require tenant-safe authorization and do not expose pause details |
 | B4 | ALPHA-052-05 | `/api/clients/[clientId]/data-room/files`, `/api/clients/[clientId]/data-room/files/[fileId]`, `/api/clients/[clientId]/data-room/files/[fileId]/process` | File upload, metadata mutation, and file processing | `internal_admin`, `internal_operator` within client scope, `client_user` only for client-safe surfaces where allowed | Client ID + file metadata ownership | `requireAuthenticatedActor`, `requireClientAccess` | 401, 403, 404, upload, metadata, archive, process, audit tests | Medium-high | Medium | Client file ownership rules | File handlers are tenant-bound and do not leak storage internals |
 | B5 | ALPHA-052-06 | `/api/engagements/[id]/data-room`, `/api/engagements/[id]/data-room/[fileId]`, `/api/engagements/[id]/data-room/[fileId]/process`, `/api/engagements/[id]/exports/[exportId]/download` | Engagement-scoped file/download exposure | `internal_admin`, `internal_operator` within scope | Stored project ownership + engagement-linked file/export ownership | `requireAuthenticatedActor`, `requireEngagementAccess` | 401, 403, 404, concealment, safe download filename, audit tests | High | Medium | Batch B3 or shared engagement helper | Engagement data room and download routes respect tenant boundaries and redaction rules |
@@ -193,7 +196,7 @@ ALPHA-052 can move toward completion only when all are true:
 
 ## 12) Remaining Limitations
 
-- ALPHA-052-01 and ALPHA-052-02 B1 now cover six hardened handlers.
+- ALPHA-052-01, ALPHA-052-02 B1, and ALPHA-052-03A now cover seven hardened handlers.
 - Public/reference routes remain intentionally open until a later batch decides otherwise.
 - No production identity provider is configured.
 - Some current routes still rely on resource existence checks without caller identity checks.
@@ -204,8 +207,8 @@ ALPHA-052 can move toward completion only when all are true:
 | Metric | Value |
 | --- | ---: |
 | Total route files | 46 |
-| Already hardened handlers | 6 |
-| Remaining route files | 40 |
+| Already hardened handlers | 7 |
+| Remaining route files | 39 |
 | Critical-risk families | Human-input mutations, agent-task controls, workflow controls, demo seed, project run |
 | High-risk families | File upload/download, export download, lifecycle mutation routes |
 | Medium-risk families | Tenant-bound reads and detail surfaces |
