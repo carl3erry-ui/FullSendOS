@@ -8,12 +8,15 @@ import { POST as postHumanInputConfirm } from "../app/api/human-input/[id]/confi
 import { POST as postHumanInputReject } from "../app/api/human-input/[id]/reject/route";
 import { POST as postHumanInputSkip } from "../app/api/human-input/[id]/skip/route";
 import { POST as postAgentTaskRun } from "../app/api/agent-tasks/[id]/run/route";
+import { POST as postAgentTaskApprove } from "../app/api/agent-tasks/[id]/approve/route";
+import { POST as postAgentTaskReject } from "../app/api/agent-tasks/[id]/reject/route";
+import { POST as postAgentTaskRequestRevision } from "../app/api/agent-tasks/[id]/request-revision/route";
 import { POST as postDemoSeed } from "../app/api/demo/seed/route";
 import { AgentTaskSchema, globalExecutionStore, globalTaskStore } from "../agents";
 import { createClient } from "../src/schemas/clientSchema.js";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { saveClient } from "../src/storage/clientStore.js";
-import { saveProject } from "../src/storage/projectStore.js";
+import { loadProject, saveProject } from "../src/storage/projectStore.js";
 import { addFileReference } from "./client-data-room-store";
 import { createHumanInputRequest, getHumanInputRequest } from "./human-input-service";
 import { createTestNextRequest } from "./test-next-request";
@@ -105,6 +108,50 @@ async function cleanupTaskArtifacts(taskId: string) {
 
 function makeAgentTaskRunRequest(taskId: string, body: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
   return createTestNextRequest(`http://localhost/api/agent-tasks/${taskId}/run`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...headers,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+type AgentTaskApprovalRouteCase = {
+  name: "approve" | "reject" | "request-revision";
+  action: "agent_task_approve" | "agent_task_reject" | "agent_task_request_revision";
+  approvedState: "approved" | "rejected" | "revision_requested";
+  route: typeof postAgentTaskApprove;
+};
+
+const agentTaskApprovalRoutes: AgentTaskApprovalRouteCase[] = [
+  {
+    name: "approve",
+    action: "agent_task_approve",
+    approvedState: "approved",
+    route: postAgentTaskApprove,
+  },
+  {
+    name: "reject",
+    action: "agent_task_reject",
+    approvedState: "rejected",
+    route: postAgentTaskReject,
+  },
+  {
+    name: "request-revision",
+    action: "agent_task_request_revision",
+    approvedState: "revision_requested",
+    route: postAgentTaskRequestRevision,
+  },
+];
+
+function makeAgentTaskApprovalRequest(
+  taskId: string,
+  endpoint: AgentTaskApprovalRouteCase["name"],
+  body: Record<string, unknown> = {},
+  headers: Record<string, string> = {},
+) {
+  return createTestNextRequest(`http://localhost/api/agent-tasks/${taskId}/${endpoint}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -1552,3 +1599,536 @@ test("agent-task run route preserves executor failure mapping when audit sink fa
     await cleanupProject(project.id);
   }
 });
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route denies missing and malformed identity`, async () => {
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-identity`,
+      companyName: `Agent Task ${approvalRoute.name} Identity`,
+      objective: "Identity checks",
+    });
+    const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+    await globalTaskStore.saveTask(task);
+
+    try {
+      const missingIdentityResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, { reviewerNotes: "Approve request" }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      const malformedIdentityResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: "Bearer malformed-token",
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      assert.equal(missingIdentityResponse.status, 401);
+      assert.equal(malformedIdentityResponse.status, 401);
+
+      const events = getSecurityAuditEventsForTests().filter((event) => event.action === approvalRoute.action);
+      assert.equal(events.some((event) => event.decision === "deny"), true);
+      const serialized = JSON.stringify(events);
+      assert.equal(serialized.includes("Bearer"), false);
+      assert.equal(serialized.includes("authorization"), false);
+      assert.equal(serialized.includes("reviewerNotes"), false);
+    } finally {
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route enforces role policy and blocks mutation on denied access`, async () => {
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-roles`,
+      companyName: `Agent Task ${approvalRoute.name} Roles`,
+      objective: "Role policy checks",
+    });
+    const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+    await globalTaskStore.saveTask(task);
+
+    try {
+      const operatorResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({
+            id: `operator-${approvalRoute.name}`,
+            role: "internal_operator",
+            clientId: project.clientId || undefined,
+          }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      const clientUserResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({
+            id: `client-user-${approvalRoute.name}`,
+            role: "client_user",
+            clientId: project.clientId || undefined,
+          }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      assert.equal(operatorResponse.status, 403);
+      assert.equal(clientUserResponse.status, 403);
+
+      const updatedTask = await globalTaskStore.loadTask(task.id);
+      assert.equal(updatedTask.approvalStatus, "not_required");
+      assert.equal(updatedTask.updatedAt, task.updatedAt);
+    } finally {
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route fails closed for missing and mismatched ownership linkage`, async () => {
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-linkage`,
+      companyName: `Agent Task ${approvalRoute.name} Linkage`,
+      objective: "Linkage checks",
+    });
+
+    const missingProjectLinkTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-missing-link-${Date.now()}`,
+      engagementId: project.id,
+    });
+    const missingProjectTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-missing-project-${Date.now()}`,
+      projectId: `missing-project-${Date.now()}`,
+      engagementId: `missing-project-${Date.now()}`,
+    });
+    const mismatchedLinkTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-mismatch-link-${Date.now()}`,
+      projectId: project.id,
+      engagementId: `eng-mismatch-${Date.now()}`,
+    });
+
+    await globalTaskStore.saveTask(missingProjectLinkTask);
+    await globalTaskStore.saveTask(missingProjectTask);
+    await globalTaskStore.saveTask(mismatchedLinkTask);
+
+    try {
+      const adminHeader = {
+        authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-linkage`, role: "internal_admin" }),
+      };
+
+      const missingProjectLinkResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(missingProjectLinkTask.id, approvalRoute.name, {}, adminHeader),
+        { params: Promise.resolve({ id: missingProjectLinkTask.id }) },
+      );
+      const missingProjectResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(missingProjectTask.id, approvalRoute.name, {}, adminHeader),
+        { params: Promise.resolve({ id: missingProjectTask.id }) },
+      );
+      const mismatchedLinkResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(mismatchedLinkTask.id, approvalRoute.name, {}, adminHeader),
+        { params: Promise.resolve({ id: mismatchedLinkTask.id }) },
+      );
+
+      assert.equal(missingProjectLinkResponse.status, 403);
+      assert.equal(missingProjectResponse.status, 404);
+      assert.equal(mismatchedLinkResponse.status, 403);
+    } finally {
+      await cleanupTaskArtifacts(missingProjectLinkTask.id);
+      await cleanupTaskArtifacts(missingProjectTask.id);
+      await cleanupTaskArtifacts(mismatchedLinkTask.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route fails closed when linked project has no client ownership and does not mutate other resources`, async () => {
+    const projectWithoutClient = await createProjectRecord({
+      companyName: `Agent Task ${approvalRoute.name} No Client`,
+      objective: "Missing client scope checks",
+    });
+    const controlProject = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-control`,
+      companyName: `Agent Task ${approvalRoute.name} Control`,
+      objective: "Control project state",
+    });
+
+    const blockedTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-no-client-${Date.now()}`,
+      projectId: projectWithoutClient.id,
+      engagementId: projectWithoutClient.id,
+      approvalStatus: "pending",
+    });
+    const controlTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-control-${Date.now()}`,
+      projectId: controlProject.id,
+      engagementId: controlProject.id,
+      approvalStatus: "pending",
+    });
+
+    await globalTaskStore.saveTask(blockedTask);
+    await globalTaskStore.saveTask(controlTask);
+
+    try {
+      const response = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(blockedTask.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-no-client`, role: "internal_admin" }),
+        }),
+        { params: Promise.resolve({ id: blockedTask.id }) },
+      );
+
+      assert.equal(response.status, 403);
+
+      const body = await response.json();
+      const serialized = JSON.stringify(body);
+      assert.equal(serialized.includes(blockedTask.id), false);
+      assert.equal(serialized.includes(projectWithoutClient.id), false);
+      assert.equal(serialized.includes("projectId"), false);
+      assert.equal(serialized.includes("stack"), false);
+      assert.equal(serialized.includes("/workspaces/"), false);
+
+      const blockedAfter = await globalTaskStore.loadTask(blockedTask.id);
+      assert.equal(blockedAfter.approvalStatus, blockedTask.approvalStatus);
+      assert.equal(blockedAfter.updatedAt, blockedTask.updatedAt);
+      assert.equal(blockedAfter.status, blockedTask.status);
+
+      const controlAfter = await globalTaskStore.loadTask(controlTask.id);
+      assert.equal(controlAfter.approvalStatus, controlTask.approvalStatus);
+      assert.equal(controlAfter.updatedAt, controlTask.updatedAt);
+      assert.equal(controlAfter.status, controlTask.status);
+
+      const controlProjectAfter = await loadProject(controlProject.id);
+      assert.equal(controlProjectAfter.id, controlProject.id);
+      assert.equal(controlProjectAfter.clientId, controlProject.clientId);
+    } finally {
+      await cleanupTaskArtifacts(blockedTask.id);
+      await cleanupTaskArtifacts(controlTask.id);
+      await cleanupProject(projectWithoutClient.id);
+      await cleanupProject(controlProject.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route ignores caller-supplied ownership overrides and mutates only stored target`, async () => {
+    const legitimateProject = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-legit`,
+      companyName: `Agent Task ${approvalRoute.name} Legitimate`,
+      objective: "Legitimate ownership",
+    });
+    const falseProject = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-false`,
+      companyName: `Agent Task ${approvalRoute.name} False`,
+      objective: "False ownership target",
+    });
+
+    const legitimateTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-legit-${Date.now()}`,
+      projectId: legitimateProject.id,
+      engagementId: legitimateProject.id,
+      workflowRunId: `workflow-legit-${Date.now()}`,
+      approvalStatus: "pending",
+    });
+    const falseTask = buildAgentTask({
+      id: `task-${approvalRoute.name}-false-${Date.now()}`,
+      projectId: falseProject.id,
+      engagementId: falseProject.id,
+      workflowRunId: `workflow-false-${Date.now()}`,
+      approvalStatus: "pending",
+    });
+
+    await globalTaskStore.saveTask(legitimateTask);
+    await globalTaskStore.saveTask(falseTask);
+
+    const falseProjectOverride = `override-project-${Date.now()}`;
+    const falseEngagementOverride = `override-engagement-${Date.now()}`;
+    const falseWorkflowOverride = `override-workflow-${Date.now()}`;
+    const falseClientOverride = `override-client-${Date.now()}`;
+
+    try {
+      const response = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(
+          legitimateTask.id,
+          approvalRoute.name,
+          {
+            reviewerNotes: "ownership override attempt",
+            reviewedBy: "body-reviewer-override",
+            projectId: falseProjectOverride,
+            engagementId: falseEngagementOverride,
+            workflowRunId: falseWorkflowOverride,
+            clientId: falseClientOverride,
+          },
+          {
+            authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-override`, role: "internal_admin" }),
+          },
+        ),
+        { params: Promise.resolve({ id: legitimateTask.id }) },
+      );
+
+      assert.equal(response.status, 200);
+
+      const body = await response.json();
+      const serialized = JSON.stringify(body);
+      assert.equal(serialized.includes(falseProjectOverride), false);
+      assert.equal(serialized.includes(falseEngagementOverride), false);
+      assert.equal(serialized.includes(falseWorkflowOverride), false);
+      assert.equal(serialized.includes(falseClientOverride), false);
+      assert.equal(serialized.includes(falseProject.id), false);
+      assert.equal(serialized.includes(falseTask.id), false);
+      assert.equal(serialized.includes("stack"), false);
+
+      const legitimateAfter = await globalTaskStore.loadTask(legitimateTask.id);
+      assert.equal(legitimateAfter.approvalStatus, approvalRoute.approvedState);
+      assert.equal(legitimateAfter.projectId, legitimateTask.projectId);
+      assert.equal(legitimateAfter.engagementId, legitimateTask.engagementId);
+      assert.equal(legitimateAfter.workflowRunId, legitimateTask.workflowRunId);
+      assert.equal(legitimateAfter.updatedAt !== legitimateTask.updatedAt, true);
+
+      const falseAfter = await globalTaskStore.loadTask(falseTask.id);
+      assert.equal(falseAfter.approvalStatus, falseTask.approvalStatus);
+      assert.equal(falseAfter.projectId, falseTask.projectId);
+      assert.equal(falseAfter.engagementId, falseTask.engagementId);
+      assert.equal(falseAfter.workflowRunId, falseTask.workflowRunId);
+      assert.equal(falseAfter.updatedAt, falseTask.updatedAt);
+    } finally {
+      await cleanupTaskArtifacts(legitimateTask.id);
+      await cleanupTaskArtifacts(falseTask.id);
+      await cleanupProject(legitimateProject.id);
+      await cleanupProject(falseProject.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route allows internal admin, applies overwrite semantics, and redacts response`, async () => {
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-allow`,
+      companyName: `Agent Task ${approvalRoute.name} Allow`,
+      objective: "Allow checks",
+    });
+    const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+    await globalTaskStore.saveTask(task);
+
+    try {
+      const adminHeader = {
+        authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-allow`, role: "internal_admin" }),
+      };
+
+      const firstResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, { reviewerNotes: "first" }, adminHeader),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+      assert.equal(firstResponse.status, 200);
+
+      const secondResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, { reviewerNotes: "second" }, adminHeader),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+      assert.equal(secondResponse.status, 200);
+
+      const secondBody = await secondResponse.json();
+      assert.equal(secondBody.data.approvalStatus, approvalRoute.approvedState);
+
+      const serialized = JSON.stringify(secondBody);
+      assert.equal(serialized.includes("reviewerNotes"), false);
+      assert.equal(serialized.includes("rawResponse"), false);
+      assert.equal(serialized.includes("systemPromptSnapshot"), false);
+      assert.equal(serialized.includes("toolPermissionsSnapshot"), false);
+      assert.equal(serialized.includes("inputSnapshot"), false);
+      assert.equal(serialized.includes("authorization"), false);
+
+      const updatedTask = await globalTaskStore.loadTask(task.id);
+      assert.equal(updatedTask.approvalStatus, approvalRoute.approvedState);
+      assert.equal(updatedTask.updatedAt !== task.updatedAt, true);
+
+      const events = getSecurityAuditEventsForTests().filter((event) => event.action === approvalRoute.action);
+      assert.equal(events.some((event) => event.decision === "allow"), true);
+    } finally {
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route keeps validation and generic failure responses safe`, async () => {
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-safe-errors`,
+      companyName: `Agent Task ${approvalRoute.name} Safe Errors`,
+      objective: "Error sanitization checks",
+    });
+    const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+    await globalTaskStore.saveTask(task);
+
+    const originalLoadTask = globalTaskStore.loadTask.bind(globalTaskStore);
+    const leakageMarker = `intentional-approval-leak-${approvalRoute.name}-${Date.now()}`;
+
+    try {
+      const invalidBodyResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, { reviewerNotes: 123 }, {
+          authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-invalid`, role: "internal_admin" }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      assert.equal(invalidBodyResponse.status, 422);
+      const taskAfterInvalid = await globalTaskStore.loadTask(task.id);
+      assert.equal(taskAfterInvalid.approvalStatus, "not_required");
+
+      globalTaskStore.loadTask = async () => {
+        throw new Error(leakageMarker);
+      };
+
+      const unexpectedFailureResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-unexpected`, role: "internal_admin" }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      assert.equal(unexpectedFailureResponse.status, 500);
+      const unexpectedBody = await unexpectedFailureResponse.json();
+      const unexpectedSerialized = JSON.stringify(unexpectedBody);
+      assert.equal(unexpectedBody.error?.code, "INTERNAL_ERROR");
+      assert.equal(unexpectedSerialized.includes(leakageMarker), false);
+      assert.equal(unexpectedSerialized.includes("stack"), false);
+      assert.equal(unexpectedSerialized.includes("/workspaces/"), false);
+    } finally {
+      globalTaskStore.loadTask = originalLoadTask;
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route preserves outcomes when audit sink fails`, async () => {
+    setSecurityAuditSinkForTests(() => {
+      throw new Error("intentional audit sink failure");
+    });
+
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-audit-fail`,
+      companyName: `Agent Task ${approvalRoute.name} Audit Failure`,
+      objective: "Audit failure invariance",
+    });
+    const task = buildAgentTask({ projectId: project.id, engagementId: project.id });
+    await globalTaskStore.saveTask(task);
+
+    try {
+      const allowResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-audit`, role: "internal_admin" }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+      assert.equal(allowResponse.status, 200);
+
+      const unauthorizedResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+      assert.equal(unauthorizedResponse.status, 401);
+
+      const forbiddenResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(task.id, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({
+            id: `operator-${approvalRoute.name}-audit`,
+            role: "internal_operator",
+            clientId: project.clientId || undefined,
+          }),
+        }),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+      assert.equal(forbiddenResponse.status, 403);
+
+      const notFoundResponse = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(`missing-${approvalRoute.name}-audit`, approvalRoute.name, {}, {
+          authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-missing`, role: "internal_admin" }),
+        }),
+        { params: Promise.resolve({ id: `missing-${approvalRoute.name}-audit` }) },
+      );
+      assert.equal(notFoundResponse.status, 404);
+
+      const notFoundBody = await notFoundResponse.json();
+      const notFoundSerialized = JSON.stringify(notFoundBody);
+      assert.equal(notFoundSerialized.includes(`missing-${approvalRoute.name}-audit`), false);
+      assert.equal(notFoundSerialized.includes("intentional audit sink failure"), false);
+    } finally {
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}
+
+for (const approvalRoute of agentTaskApprovalRoutes) {
+  test(`agent-task ${approvalRoute.name} route preserves 422 validation behavior when audit sink fails`, async () => {
+    setSecurityAuditSinkForTests(() => {
+      throw new Error("intentional audit sink failure");
+    });
+
+    const project = await createProjectRecord({
+      clientId: `client-agent-task-${approvalRoute.name}-audit-422`,
+      companyName: `Agent Task ${approvalRoute.name} Audit 422`,
+      objective: "Validation + audit failure invariance",
+    });
+    const task = buildAgentTask({
+      id: `task-${approvalRoute.name}-audit-422-${Date.now()}`,
+      projectId: project.id,
+      engagementId: project.id,
+      approvalStatus: "pending",
+    });
+    await globalTaskStore.saveTask(task);
+
+    const invalidNotes = `INVALID_NOTES_${approvalRoute.name}_${Date.now()}`;
+
+    try {
+      const response = await approvalRoute.route(
+        makeAgentTaskApprovalRequest(
+          task.id,
+          approvalRoute.name,
+          {
+            reviewerNotes: { invalid: invalidNotes },
+            projectId: `override-project-${Date.now()}`,
+            engagementId: `override-engagement-${Date.now()}`,
+            workflowRunId: `override-workflow-${Date.now()}`,
+            clientId: `override-client-${Date.now()}`,
+          },
+          {
+            authorization: createTestAuthHeader({ id: `admin-${approvalRoute.name}-audit-422`, role: "internal_admin" }),
+          },
+        ),
+        { params: Promise.resolve({ id: task.id }) },
+      );
+
+      assert.equal(response.status, 422);
+
+      const body = await response.json();
+      const serialized = JSON.stringify(body);
+      assert.equal(body.success, false);
+      assert.equal(body.error?.code, "VALIDATION_FAILED");
+      assert.equal(serialized.includes("intentional audit sink failure"), false);
+      assert.equal(serialized.includes(invalidNotes), false);
+      assert.equal(serialized.includes("stack"), false);
+      assert.equal(serialized.includes("/workspaces/"), false);
+
+      const after = await globalTaskStore.loadTask(task.id);
+      assert.equal(after.approvalStatus, task.approvalStatus);
+      assert.equal(after.updatedAt, task.updatedAt);
+
+      const events = getSecurityAuditEventsForTests().filter((event) => event.action === approvalRoute.action);
+      const eventSerialized = JSON.stringify(events);
+      assert.equal(eventSerialized.includes(invalidNotes), false);
+      assert.equal(eventSerialized.includes("reviewerNotes"), false);
+      assert.equal(eventSerialized.includes("reviewedBy"), false);
+      assert.equal(eventSerialized.includes("projectId"), false);
+      assert.equal(eventSerialized.includes("engagementId"), false);
+      assert.equal(eventSerialized.includes("workflowRunId"), false);
+      assert.equal(eventSerialized.includes("clientId"), false);
+    } finally {
+      await cleanupTaskArtifacts(task.id);
+      await cleanupProject(project.id);
+    }
+  });
+}

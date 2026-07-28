@@ -8,21 +8,67 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { globalTaskStore, AgentExecutorError } from "@/agents";
 import { errorResponse, successResponse, validationErrorResponse, toFieldErrors } from "../../../agent-routes-helper";
+import {
+  requireAuthenticatedActor,
+  recordAllow,
+  recordDeny,
+} from "@/lib/security/route-guards";
+import {
+  authorizeAgentTaskAction,
+  resolveAgentTaskRunOwnership,
+} from "@/lib/security/agent-task-authorization";
+import {
+  concealedNotFound,
+  isSecurityRouteError,
+  toSecurityErrorResponse,
+} from "@/lib/security/security-response";
 
 const RequestRevisionBodySchema = z.object({
   reviewerNotes: z.string().optional(),
   reviewedBy: z.string().optional(),
 });
 
+function sanitizeTaskForResponse(task: Record<string, unknown>) {
+  return {
+    id: task.id,
+    agentId: task.agentId,
+    title: task.title,
+    objective: task.objective,
+    projectId: task.projectId ?? null,
+    engagementId: task.engagementId ?? null,
+    workflowRunId: task.workflowRunId ?? null,
+    departmentId: task.departmentId ?? null,
+    status: task.status,
+    approvalStatus: task.approvalStatus,
+    priority: task.priority,
+    provider: task.provider,
+    model: task.model,
+    requestedBy: task.requestedBy,
+    startedAt: task.startedAt,
+    completedAt: task.completedAt,
+    failedAt: task.failedAt,
+    error: task.error,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  };
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  let actor: Awaited<ReturnType<typeof requireAuthenticatedActor>> | null = null;
+  const action = {
+    action: "agent_task_request_revision",
+    resourceType: "agent_task",
+    resourceId: "unknown",
+  };
+
   try {
     const { id } = await params;
-    const body = await request.json().catch(() => ({}));
+    action.resourceId = id;
 
-    const validated = RequestRevisionBodySchema.parse(body);
+    actor = await requireAuthenticatedActor(request, action);
 
     // Load task
     let task;
@@ -30,10 +76,21 @@ export async function POST(
       task = await globalTaskStore.loadTask(id);
     } catch (error) {
       if (error instanceof AgentExecutorError && error.code === "task_not_found") {
-        return errorResponse("TASK_NOT_FOUND", "Agent task not found.", 404);
+        concealedNotFound("agent_task_not_found");
       }
       throw error;
     }
+
+    const ownership = await resolveAgentTaskRunOwnership(task);
+    authorizeAgentTaskAction({
+      actor,
+      task,
+      project: ownership.project,
+      action: "request_revision",
+    });
+
+    const body = await request.json().catch(() => ({}));
+    RequestRevisionBodySchema.parse(body);
 
     // Update approval status
     const now = new Date().toISOString();
@@ -45,13 +102,25 @@ export async function POST(
 
     await globalTaskStore.saveTask(updated);
 
-    return successResponse(updated);
+    await recordAllow(actor, action, "agent_task_revision_requested");
+
+    return successResponse(sanitizeTaskForResponse(updated));
   } catch (error) {
+    if (isSecurityRouteError(error)) {
+      if (error.status !== 401) {
+        await recordDeny(actor, action, error.reasonCode);
+      }
+      return toSecurityErrorResponse(error);
+    }
+
     if (error instanceof z.ZodError) {
       return validationErrorResponse("Invalid request body.", toFieldErrors(error.issues));
     }
 
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return errorResponse("INTERNAL_ERROR", message, 500);
+    return errorResponse(
+      "INTERNAL_ERROR",
+      "An unexpected error occurred while applying this approval action.",
+      500,
+    );
   }
 }
