@@ -10,11 +10,23 @@ import { PATCH as patchEngagementLifecycle } from "../app/api/engagements/[id]/r
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
 import { applyEnvOverrides, restoreEnv } from "./test-env";
+import { createTestAuthHeader } from "./test-auth";
 
 const storageDir = path.resolve("data/projects");
 const dashboardFile = path.resolve("app/components/project-dashboard.tsx");
 const engagementRouteFile = path.resolve("app/api/engagements/route.ts");
 const engagementRunRouteFile = path.resolve("app/api/engagements/[id]/run/route.ts");
+
+process.env.FULLSENDOS_AUTH_DEV_TEST_ENABLED = "1";
+process.env.FULLSENDOS_AUTH_DEV_TEST_SECRET = "engagement-routes-test-secret-0123456789";
+
+const workflowAdminHeaders = {
+  authorization: createTestAuthHeader({ id: "engagement-workflow-admin", role: "internal_admin" }),
+};
+
+function buildRunRequest(url: string): Request {
+  return new Request(url, { method: "POST", headers: workflowAdminHeaders });
+}
 
 async function cleanupEngagement(id: string) {
   const file = path.join(storageDir, `${id}.json`);
@@ -170,7 +182,7 @@ test("engagement and project list routes return equivalent summary shape", async
 });
 
 test("unknown engagement and project run ids return equivalent structured errors", async () => {
-  const request = new Request("http://127.0.0.1:3000/api/engagements/UNKNOWN/run", { method: "POST" });
+  const request = buildRunRequest("http://127.0.0.1:3000/api/engagements/UNKNOWN/run");
   const engagementResponse = await runEngagement(request, { params: Promise.resolve({ id: "UNKNOWN-ENGAGEMENT-ID" }) });
   const projectResponse = await runProject(request, { params: Promise.resolve({ id: "UNKNOWN-ENGAGEMENT-ID" }) });
   const engagementBody = await engagementResponse.json();
@@ -183,6 +195,7 @@ test("unknown engagement and project run ids return equivalent structured errors
 
 test("engagement and project run routes return equivalent duplicate-run behavior", async () => {
   const project = createEmptyProject({
+    clientId: "client-duplicate-run-equivalence",
     companyName: "Duplicate Run Equivalence Co",
     objective: "Ensure both run routes reject duplicate active run",
   });
@@ -199,7 +212,7 @@ test("engagement and project run routes return equivalent duplicate-run behavior
   await saveProject(project);
 
   try {
-    const request = new Request(`http://127.0.0.1:3000/api/engagements/${project.id}/run`, { method: "POST" });
+    const request = buildRunRequest(`http://127.0.0.1:3000/api/engagements/${project.id}/run`);
     const engagementResponse = await runEngagement(request, { params: Promise.resolve({ id: project.id }) });
     const projectResponse = await runProject(request, { params: Promise.resolve({ id: project.id }) });
     const engagementBody = await engagementResponse.json();
@@ -221,6 +234,7 @@ test("running through engagement API updates the same persisted record and creat
   });
 
   const project = createEmptyProject({
+    clientId: "client-engagement-run-persistence",
     companyName: "Engagement Run Persistence Co",
     objective: "Validate engagement run updates same record",
   });
@@ -229,7 +243,7 @@ test("running through engagement API updates the same persisted record and creat
   const beforeFiles = (await fs.readdir(storageDir)).filter((name) => name.endsWith(".json"));
 
   try {
-    const request = new Request(`http://127.0.0.1:3000/api/engagements/${project.id}/run`, { method: "POST" });
+    const request = buildRunRequest(`http://127.0.0.1:3000/api/engagements/${project.id}/run`);
     const response = await runEngagement(request, { params: Promise.resolve({ id: project.id }) });
     const body = await response.json();
 
@@ -298,12 +312,12 @@ test("dashboard API consumers use engagement endpoints", async () => {
 });
 
 test("unknown engagement id behavior remains explicit and backward compatible", async () => {
-  const request = new Request("http://127.0.0.1:3000/api/engagements/UNKNOWN/run", { method: "POST" });
+  const request = buildRunRequest("http://127.0.0.1:3000/api/engagements/UNKNOWN/run");
   const response = await runEngagement(request, { params: Promise.resolve({ id: "UNKNOWN-ENGAGEMENT-ID" }) });
   const body = await response.json();
 
   assert.equal(response.status, 404);
-  assert.equal(body.error, "Project not found.");
+  assert.equal(body.error, "Not found.");
 });
 
 test("engagement lifecycle actions archive, restore, and soft-delete without hard deletion", async () => {

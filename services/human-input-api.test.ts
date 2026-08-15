@@ -7,11 +7,20 @@ import { GET as getClientHumanInputRoute } from "../app/api/clients/[clientId]/h
 import { GET as getEngagementHumanInputRoute } from "../app/api/engagements/[id]/human-input/route";
 import { POST as createProjectRunRoute } from "../app/api/projects/[id]/run/route";
 import { POST as createProjectRoute } from "../app/api/projects/route";
+import { loadProject, saveProject } from "../src/storage/projectStore.js";
 import { listHumanInputRequests } from "./human-input-service";
+import { createTestAuthHeader } from "./test-auth";
 
 const projectStorageDir = join(process.cwd(), "data", "projects");
 const requestStorageDir = join(process.cwd(), "data", "human-input-requests");
 const taskStorageDir = join(process.cwd(), "data", "agent-tasks");
+
+process.env.FULLSENDOS_AUTH_DEV_TEST_ENABLED = "1";
+process.env.FULLSENDOS_AUTH_DEV_TEST_SECRET = "human-input-api-test-secret-0123456789";
+
+const workflowAdminHeaders = {
+  authorization: createTestAuthHeader({ id: "human-input-workflow-admin", role: "internal_admin" }),
+};
 
 async function cleanupProject(projectId: string) {
   await rm(join(projectStorageDir, `${projectId}.json`), { force: true });
@@ -36,6 +45,9 @@ async function createProject(payload: Record<string, unknown>) {
 
   assert.equal(response.status, 201);
   const body = (await response.json()) as { id: string; audit?: { warnings?: string[] } };
+  const storedProject = await loadProject(body.id);
+  storedProject.clientId = `client-${body.id}`;
+  await saveProject(storedProject);
   return body;
 }
 
@@ -93,7 +105,10 @@ test("Smart intake creates an enrichment request for Hardware Brewery and keeps 
   assert.equal((created.audit?.warnings || []).some((warning) => /confirm the business address/i.test(warning)), true);
 
   const run = await createProjectRunRoute(
-    new Request(`http://localhost/api/projects/${created.id}/run`, { method: "POST" }),
+    new Request(`http://localhost/api/projects/${created.id}/run`, {
+      method: "POST",
+      headers: workflowAdminHeaders,
+    }),
     { params: Promise.resolve({ id: created.id }) },
   );
 
@@ -118,14 +133,16 @@ test("Missing strong anchors create a blocking human input request and pause wor
   assert.equal(requests[0].relatedField, "website");
 
   const run = await createProjectRunRoute(
-    new Request(`http://localhost/api/projects/${created.id}/run`, { method: "POST" }),
+    new Request(`http://localhost/api/projects/${created.id}/run`, {
+      method: "POST",
+      headers: workflowAdminHeaders,
+    }),
     { params: Promise.resolve({ id: created.id }) },
   );
 
   assert.equal(run.status, 409);
-  const body = (await run.json()) as { blockingRequests?: Array<{ id: string }> };
-  assert.equal(Array.isArray(body.blockingRequests), true);
-  assert.equal(body.blockingRequests?.length, 1);
+  const body = (await run.json()) as { blockingRequestCount?: number };
+  assert.equal(body.blockingRequestCount, 1);
 
   await cleanupRequest(requests[0].id);
   await cleanupProject(created.id);
