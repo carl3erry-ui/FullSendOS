@@ -137,7 +137,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (process.env.NODE_ENV === "production" && !process.env.XAI_API_KEY) {
-      return NextResponse.json({ error: "XAI_API_KEY is not configured in .env." }, { status: 503 });
+      return NextResponse.json({ error: "Workflow provider is unavailable." }, { status: 503 });
     }
 
     const model = process.env.XAI_MODEL || "grok-4.5";
