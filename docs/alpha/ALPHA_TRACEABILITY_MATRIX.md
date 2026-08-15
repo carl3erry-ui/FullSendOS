@@ -8,6 +8,8 @@ Status legend:
 
 Unknown planning fields remain TBD by design.
 
+Current ALPHA-052 security note (2026-08-15): ALPHA-052 remains IN PROGRESS. B3 readiness is COMPLETE and B3A workflow run/start security is COMPLETE on `feature/alpha-052-b3a-workflow-run-security`; B3B resume and B3C abort are NOT STARTED. Protected handlers: 12. Remaining handlers: 34. Evidence: `app/api/projects/[id]/run/route.ts`, `lib/security/workflow-authorization.ts`, `services/workflow-run-security.test.ts`, and `services/workflow-run-route.test.ts`.
+
 | DoD ID | Definition of Done Item | Current Status | Supporting Files | Future GitHub Issue | Future Branch | Future PR | Acceptance Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | ALPHA-001 | Stable Alpha for one end-to-end engagement with safe controls | PARTIAL | [docs/alpha/ALPHA_DEFINITION_OF_DONE.md](ALPHA_DEFINITION_OF_DONE.md), [app/api/projects/[id]/run/route.ts](../../app/api/projects/[id]/run/route.ts) | TBD | TBD | TBD | Audit baseline plus end-to-end demo evidence |

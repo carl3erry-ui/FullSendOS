@@ -8,6 +8,8 @@ Execution policy:
 - Every future pull request must reference one or more ALPHA IDs.
 - Every completed pull request must include DoD items satisfied, acceptance evidence, files modified, tests updated, and remaining dependencies.
 
+Current ALPHA-052 implementation note (2026-08-15): B3 readiness is COMPLETE. B3A workflow run/start security is COMPLETE on `feature/alpha-052-b3a-workflow-run-security`; B3B resume and B3C abort are NOT STARTED. ALPHA-052 remains IN PROGRESS with 12 protected handlers and 34 remaining handlers. B3A validation: TypeScript 0 errors, targeted tests 26/26, security tests 73/73, full tests 632/632, and production build pass with 10 warnings.
+
 | ALPHA ID | Requirement Title | Description | Current Status | Priority | Estimated Complexity | Dependencies | Future GitHub Issue | Future Branch Name | Acceptance Criteria | Acceptance Evidence | PMO Approval Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | ALPHA-001 | Stable Alpha for one end-to-end engagement with safe controls | Deliver a stable FullSendOS Alpha that can run one end-to-end engagement workflow with safe operational controls. | PARTIAL | High | S | ALPHA-035, ALPHA-052, ALPHA-068 | TBD | feature/alpha-001-stable-alpha-for-one-end-to-end-engagement-with-safe | Requirement implemented or validated and ALPHA-001 status set to COMPLETE in the traceability matrix. | Audit baseline plus end-to-end demo evidence | TBD |

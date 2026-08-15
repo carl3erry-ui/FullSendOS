@@ -1,9 +1,16 @@
 # ALPHA-052 B3 Workflow Control Readiness Review
 
 Date: 2026-08-15
-Status: READINESS REVIEW COMPLETE; IMPLEMENTATION NOT STARTED
+Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B AND B3C NOT STARTED
 Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
+
+Implementation update (2026-08-15):
+- B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias on `feature/alpha-052-b3a-workflow-run-security`.
+- Authentication, stored project `clientId` ownership, admin-only policy, concealed missing-resource handling, metadata-only audit, zero-side-effect denial, blocking-input redaction, and sanitized generic errors are implemented.
+- Existing lifecycle, blocking-input, duplicate-run, stale recovery, asynchronous 202, and terminal/failed rerun semantics are preserved.
+- Validation: TypeScript 0 errors; targeted workflow run tests 26/26; security tests 73/73; full tests 632/632; build pass with 10 warnings.
+- Protected handlers: 12. Remaining handlers: 34. B3B resume and B3C abort remain untouched and NOT STARTED.
 
 ## 1. Executive Summary
 
@@ -16,7 +23,7 @@ B3 contains four public `POST` handlers backed by three materially different con
 
 No public pause, retry, restart, cancel, or generic continue route exists. Restart and retry behavior currently occurs by calling a run route again. Agent-task approval and human-input mutations are not B3 routes: they were hardened in earlier batches and do not themselves invoke workflow continuation.
 
-All four B3 handlers currently lack caller authentication and authorization. The run and abort handlers load a stored project by the path ID. Resume parses caller input first, loads a project by the path engagement ID, and accepts a caller-supplied `pauseStateId`. Its current linkage check uses an unsafe OR condition: it rejects only when both the pause `projectId` and `engagementId` disagree. B3 must authenticate before body parsing or resource work and require every stored linkage to agree before side effects begin.
+B3A now protects both run aliases. Abort still loads a stored project without authn/authz. Resume still parses caller input first, loads a project by the path engagement ID, and accepts a caller-supplied `pauseStateId`; its current linkage check uses an unsafe OR condition. B3B and B3C must address those separate paths without changing B3A behavior.
 
 The authoritative tenant source is the stored project's non-empty `clientId`. There is no independent workflow-run store: the active run is embedded at `project.audit.activeRun`, while pause records, tasks, and human-input requests are separate stored resources. A `workflowRunId` is correlation data, not proof of ownership.
 
@@ -28,8 +35,8 @@ Recommended delivery is three PRs: B3A for both run aliases, B3B for resume, and
 
 | Method | Public API path | Repository file | Current protection | Risk | Mutates workflow state | Triggers execution | Agents/tools/providers | Resumes paused work |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `POST` | `/api/projects/[id]/run` | `app/api/projects/[id]/run/route.ts` | PARTIAL: lifecycle, blocking-input, duplicate-run, and stale-run checks; no authn/authz | CRITICAL | Yes: stale failure, active run, department results, deliverables, terminal status | Yes, background | Provider calls directly; downstream department execution and persistence; no formal agent-step invocation in this route | No |
-| `POST` | `/api/engagements/[id]/run` | `app/api/engagements/[id]/run/route.ts` | PARTIAL: delegates exactly to project run; no authn/authz | CRITICAL | Same as project run | Yes, background | Same as project run | No |
+| `POST` | `/api/projects/[id]/run` | `app/api/projects/[id]/run/route.ts` | FULL in B3A: authn, stored ownership, admin-only authz, audit, redaction, safe errors | CRITICAL | Yes: stale failure, active run, department results, deliverables, terminal status | Yes, background | Provider calls directly; downstream department execution and persistence; no formal agent-step invocation in this route | No |
+| `POST` | `/api/engagements/[id]/run` | `app/api/engagements/[id]/run/route.ts` | FULL in B3A: delegates exactly to protected project run | CRITICAL | Same as project run | Yes, background | Same as project run | No |
 | `POST` | `/api/engagements/[id]/workflow/resume` | `app/api/engagements/[id]/workflow/resume/route.ts` | PARTIAL: stored project/pause checks and approval-state checks; no authn/authz | CRITICAL | Yes: task, execution, pause, project run, departments, deliverables | Yes, agent execution followed by optional background continuation | Agent executor, provider, task/execution stores, and continuation provider calls | Yes |
 | `POST` | `/api/engagements/[id]/abort` | `app/api/engagements/[id]/abort/route.ts` | PARTIAL: stored project and active-state check; no authn/authz | CRITICAL | Yes: project status, active run, running audit entries, warnings | No; it does not stop already-running work | No new calls, but existing background work may continue | No |
 
@@ -42,11 +49,11 @@ Recommended delivery is three PRs: B3A for both run aliases, B3B for resume, and
 
 ### Exact proposed B3 scope
 
-- B3A: both public run aliases, implemented through their one shared handler.
+- B3A: COMPLETE for both public run aliases through their one shared handler.
 - B3B: workflow resume only.
 - B3C: abort only, retaining its status-recording contract and explicit limitations.
 
-Protected handlers remain 10 and remaining handlers remain 36 until implementation merges.
+Protected handlers are 12 and remaining handlers are 34 on the B3A branch. Counts become merged governance state only after the B3A PR is accepted and merged.
 
 ## 3. Current Protection State and Handler Flow
 
@@ -452,4 +459,4 @@ B3 implementation is acceptable only when:
 6. Focused security re-review and merge B3C.
 7. Update handler counts and ALPHA-052 progress only after each implementation merge.
 
-B3 readiness result: **READY**, subject to the B3B atomic resume design gate and the explicit B3C status-only boundary. No workflow hardening is implemented by this review.
+B3 readiness result: **READY**. B3A is COMPLETE on its governed feature branch; B3 overall remains IN PROGRESS, subject to the B3B atomic resume design gate and the explicit B3C status-only boundary.
