@@ -8,15 +8,33 @@ import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
 import { RUN_STALE_MS } from "../src/orchestrator/runLifecycle.js";
 import { applyEnvOverrides, restoreEnv } from "./test-env";
+import { createTestAuthHeader } from "./test-auth";
 
 const storageDir = path.resolve("data/projects");
 
+process.env.FULLSENDOS_AUTH_DEV_TEST_ENABLED = "1";
+process.env.FULLSENDOS_AUTH_DEV_TEST_SECRET = "workflow-run-route-test-secret-0123456789";
+
+const adminHeaders = {
+  authorization: createTestAuthHeader({ id: "workflow-admin", role: "internal_admin" }),
+};
+
 function buildRequest() {
-  return new Request("http://127.0.0.1:3000/api/projects/test/run", { method: "POST" });
+  return new Request("http://127.0.0.1:3000/api/projects/test/run", {
+    method: "POST",
+    headers: adminHeaders,
+  });
 }
 
 function buildEngagementRequest() {
-  return new Request("http://127.0.0.1:3000/api/engagements/test/run", { method: "POST" });
+  return new Request("http://127.0.0.1:3000/api/engagements/test/run", {
+    method: "POST",
+    headers: adminHeaders,
+  });
+}
+
+function buildUnauthenticatedRequest(pathname: string) {
+  return new Request(`http://127.0.0.1:3000${pathname}`, { method: "POST" });
 }
 
 async function cleanupProject(id: string) {
@@ -47,6 +65,7 @@ test("workflow run route persists running state before async execution and event
   });
 
   const project = createEmptyProject({
+    clientId: "client-workflow-fallback",
     companyName: "Fallback Test Co",
     objective: "Validate workflow run endpoint",
   });
@@ -84,11 +103,28 @@ test("workflow run route returns 404 with structured error for unknown project i
 
   assert.equal(response.status, 404);
   assert.equal(typeof body.error, "string");
-  assert.equal(body.error, "Project not found.");
+  assert.equal(body.error, "Not found.");
+});
+
+test("workflow project run route denies unauthenticated requests before project lookup", async () => {
+  const response = await POST(buildUnauthenticatedRequest("/api/projects/UNKNOWN-PROJECT-ID/run"), {
+    params: Promise.resolve({ id: "UNKNOWN-PROJECT-ID" }),
+  });
+
+  assert.equal(response.status, 401);
+});
+
+test("workflow engagement run alias denies unauthenticated requests before project lookup", async () => {
+  const response = await postEngagementRun(buildUnauthenticatedRequest("/api/engagements/UNKNOWN-PROJECT-ID/run"), {
+    params: Promise.resolve({ id: "UNKNOWN-PROJECT-ID" }),
+  });
+
+  assert.equal(response.status, 401);
 });
 
 test("workflow run route blocks archived lifecycle projects with safe structured error", async () => {
   const project = createEmptyProject({
+    clientId: "client-workflow-archived",
     companyName: "Archived Guardrail Co",
     objective: "Ensure archived engagement cannot run workflow",
   });
@@ -125,6 +161,7 @@ test("workflow run route blocks archived lifecycle projects with safe structured
 
 test("engagement workflow run alias blocks deleted lifecycle projects with safe structured error", async () => {
   const project = createEmptyProject({
+    clientId: "client-workflow-deleted",
     companyName: "Deleted Guardrail Co",
     objective: "Ensure deleted engagement cannot run workflow",
   });
@@ -165,11 +202,12 @@ test("engagement workflow run alias returns 404 for unknown project id", async (
 
   assert.equal(response.status, 404);
   assert.equal(typeof body.error, "string");
-  assert.equal(body.error, "Project not found.");
+  assert.equal(body.error, "Not found.");
 });
 
 test("workflow run route returns 409 for duplicate active run and does not start another run", async () => {
   const project = createEmptyProject({
+    clientId: "client-workflow-duplicate",
     companyName: "Duplicate Lock Co",
     objective: "Ensure duplicate requests are rejected",
   });
@@ -211,6 +249,7 @@ test("stale active run is marked failed before a new run is accepted", async () 
   });
 
   const project = createEmptyProject({
+    clientId: "client-workflow-stale",
     companyName: "Stale Run Co",
     objective: "Recover stale run and restart safely",
   });
@@ -255,6 +294,7 @@ test("workflow run route persists terminal failure when fallback is disabled and
   });
 
   const project = createEmptyProject({
+    clientId: "client-workflow-no-key",
     companyName: "No Key Test Co",
     objective: "Ensure structured error for missing key",
   });
