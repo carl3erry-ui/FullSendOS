@@ -6,7 +6,7 @@ Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
 
 Implementation update (2026-08-15):
-- B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias on `feature/alpha-052-b3a-workflow-run-security`.
+- B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`.
 - Authentication, stored project `clientId` ownership, admin-only policy, concealed missing-resource handling, metadata-only audit, zero-side-effect denial, blocking-input redaction, and sanitized generic errors are implemented.
 - Existing lifecycle, blocking-input, duplicate-run, stale recovery, asynchronous 202, and terminal/failed rerun semantics are preserved.
 - Validation after focused-review remediation: TypeScript 0 errors; targeted workflow run tests 32/32; security tests 73/73; full tests 638/638; build pass with 10 warnings.
@@ -53,7 +53,7 @@ Recommended delivery is three PRs: B3A for both run aliases, B3B for resume, and
 - B3B: workflow resume only.
 - B3C: abort only, retaining its status-recording contract and explicit limitations.
 
-Protected handlers are 12 and remaining handlers are 34 on the B3A branch. Counts become merged governance state only after the B3A PR is accepted and merged.
+Protected handlers are 12 and remaining handlers are 34 on `main` after PR #47.
 
 ## 3. Current Protection State and Handler Flow
 

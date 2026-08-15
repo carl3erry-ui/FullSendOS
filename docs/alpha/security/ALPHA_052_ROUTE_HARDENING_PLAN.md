@@ -11,15 +11,15 @@ ALPHA-052-01 is merged and the security foundation is stable. ALPHA-052-02 B1, A
 
 Current baseline for planning:
 - Route files in scope: 46
-- Fully protected handlers on the B3A branch: 12
-- Remaining route files to harden after B3A: 34
+- Fully protected handlers on `main`: 12
+- Remaining route files to harden: 34
 - ALPHA-052 status: IN PROGRESS
 - ALPHA-052-01 status: COMPLETE
 - ALPHA-052-03 readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_03_AGENT_TASK_READINESS_REVIEW.md`)
 - ALPHA-052-03A run hardening status: COMPLETE (run route only)
 - ALPHA-052-03B approval control hardening status: COMPLETE (approve/reject/request-revision)
 - ALPHA-052 B3 workflow-control readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_B3_WORKFLOW_CONTROL_READINESS_REVIEW.md`)
-- ALPHA-052 B3A workflow run/start status: COMPLETE on `feature/alpha-052-b3a-workflow-run-security`
+- ALPHA-052 B3A workflow run/start status: COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`
 - ALPHA-052 B3B workflow resume status: NOT STARTED
 - ALPHA-052 B3C workflow abort status: NOT STARTED
 - Security follow-up: Issue #42 satisfied by explicit audit-failure coverage in `services/security-route-guards.test.ts`
