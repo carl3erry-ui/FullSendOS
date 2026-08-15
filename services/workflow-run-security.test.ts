@@ -6,7 +6,9 @@ import { POST as postProjectRun } from "../app/api/projects/[id]/run/route";
 import { POST as postEngagementRun } from "../app/api/engagements/[id]/run/route";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { loadProject, saveProject } from "../src/storage/projectStore.js";
+import { RUN_STALE_MS } from "../src/orchestrator/runLifecycle.js";
 import { createHumanInputRequest } from "./human-input-service";
+import { applyEnvOverrides, restoreEnv } from "./test-env";
 import { createTestAuthHeader } from "./test-auth";
 import {
   clearSecurityAuditEventsForTests,
@@ -99,6 +101,66 @@ for (const routeCase of workflowRunRoutes) {
 
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "Unauthorized." });
+  });
+
+  test(`workflow ${routeCase.name} run denies stale-run recovery before authorization`, async () => {
+    const project = await createProject({
+      clientId: `client-${routeCase.name}-stale-denial`,
+      label: `${routeCase.name} Stale Denial`,
+    });
+    const staleTimestamp = new Date(Date.now() - RUN_STALE_MS - 60_000).toISOString();
+    project.status = "running";
+    project.audit.activeRun = {
+      id: `run-${routeCase.name}-stale-denial`,
+      startedAt: staleTimestamp,
+      updatedAt: staleTimestamp,
+      model: "grok-4.5",
+    };
+    await saveProject(project);
+    const before = await loadProject(project.id);
+
+    const deniedRequests: Array<{ headers: Record<string, string>; expectedStatus: number }> = [
+      { headers: {}, expectedStatus: 401 },
+      { headers: { authorization: "Bearer malformed-token" }, expectedStatus: 401 },
+      {
+        headers: {
+          authorization: createTestAuthHeader({
+            id: `operator-${routeCase.name}-stale`,
+            role: "internal_operator",
+            clientId: project.clientId,
+          }),
+        },
+        expectedStatus: 403,
+      },
+      {
+        headers: {
+          authorization: createTestAuthHeader({
+            id: `client-${routeCase.name}-stale`,
+            role: "client_user",
+            clientId: project.clientId,
+          }),
+        },
+        expectedStatus: 403,
+      },
+    ];
+
+    try {
+      for (const deniedRequest of deniedRequests) {
+        const response = await routeCase.route(
+          makeRequest(routeCase.path(project.id), {}, deniedRequest.headers),
+          { params: Promise.resolve({ id: project.id }) },
+        );
+
+        assert.equal(response.status, deniedRequest.expectedStatus);
+        const after = await loadProject(project.id);
+        assertProjectUnchanged(before, after);
+        assert.equal(after.audit.activeRun?.id, before.audit.activeRun?.id);
+        assert.deepEqual(after.audit.warnings, before.audit.warnings);
+        assert.deepEqual(after.audit.runs, before.audit.runs);
+      }
+    } finally {
+      await cleanupProject(project.id);
+    }
   });
 
   test(`workflow ${routeCase.name} run denies operator and client user without side effects`, async () => {
@@ -224,6 +286,98 @@ for (const routeCase of workflowRunRoutes) {
     } finally {
       await cleanupRequest(request.id);
       await cleanupProject(project.id);
+    }
+  });
+
+  test(`workflow ${routeCase.name} run preserves redacted blocking conflict when audit sink fails`, async () => {
+    const project = await createProject({
+      clientId: `client-${routeCase.name}-blocking-audit`,
+      label: `${routeCase.name} Blocking Audit`,
+    });
+    const promptMarker = `sensitive-audit-blocking-prompt-${routeCase.name}`;
+    const titleMarker = `Sensitive audit title ${routeCase.name}`;
+    const request = await createHumanInputRequest({
+      clientId: project.clientId,
+      engagementId: project.id,
+      type: "missing_information",
+      title: titleMarker,
+      prompt: promptMarker,
+      priority: "high",
+      requestedBy: "security-test",
+      requiredToContinue: true,
+      options: [],
+      evidence: [],
+      sourceReferences: [],
+      metadata: {},
+    });
+    const before = await loadProject(project.id);
+
+    setSecurityAuditSinkForTests(() => {
+      throw new Error("intentional blocking audit sink failure");
+    });
+
+    try {
+      const response = await routeCase.route(
+        makeRequest(routeCase.path(project.id), {}, adminHeader),
+        { params: Promise.resolve({ id: project.id }) },
+      );
+      const body = await response.json();
+      const serialized = JSON.stringify(body);
+
+      assert.equal(response.status, 409);
+      assert.deepEqual(body, {
+        error: "Human input is required before this workflow can continue.",
+        blockingRequestCount: 1,
+      });
+      assert.equal(serialized.includes(promptMarker), false);
+      assert.equal(serialized.includes(titleMarker), false);
+      assert.equal(serialized.includes(request.id), false);
+      assert.equal(serialized.includes("intentional blocking audit sink failure"), false);
+      const after = await loadProject(project.id);
+      assertProjectUnchanged(before, after);
+      assert.equal(after.audit.activeRun, null);
+      assert.deepEqual(after.audit.warnings, before.audit.warnings);
+      assert.deepEqual(after.audit.runs, before.audit.runs);
+    } finally {
+      await cleanupRequest(request.id);
+      await cleanupProject(project.id);
+    }
+  });
+
+  test(`workflow ${routeCase.name} run returns client-safe production provider unavailable response`, async () => {
+    const envSnapshot = applyEnvOverrides({
+      NODE_ENV: "development",
+      XAI_API_KEY: undefined,
+    });
+    const project = await createProject({
+      clientId: `client-${routeCase.name}-provider-unavailable`,
+      label: `${routeCase.name} Provider Unavailable`,
+    });
+    const before = await loadProject(project.id);
+
+    setSecurityAuditSinkForTests((event) => {
+      if (event.reasonCode === "authenticated") {
+        Object.assign(process.env, { NODE_ENV: "production" });
+      }
+    });
+
+    try {
+      const response = await routeCase.route(
+        makeRequest(routeCase.path(project.id), {}, adminHeader),
+        { params: Promise.resolve({ id: project.id }) },
+      );
+      const body = await response.json();
+      const serialized = JSON.stringify(body);
+
+      assert.equal(response.status, 503);
+      assert.deepEqual(body, { error: "Workflow provider is unavailable." });
+      assert.equal(serialized.includes("XAI_API_KEY"), false);
+      assert.equal(serialized.includes(".env"), false);
+      assert.equal(serialized.includes("not configured"), false);
+      assertProjectUnchanged(before, await loadProject(project.id));
+    } finally {
+      await cleanupProject(project.id);
+      restoreEnv(envSnapshot);
     }
   });
 
