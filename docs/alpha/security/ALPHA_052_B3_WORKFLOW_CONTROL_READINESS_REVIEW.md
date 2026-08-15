@@ -9,7 +9,7 @@ Implementation update (2026-08-15):
 - B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias on `feature/alpha-052-b3a-workflow-run-security`.
 - Authentication, stored project `clientId` ownership, admin-only policy, concealed missing-resource handling, metadata-only audit, zero-side-effect denial, blocking-input redaction, and sanitized generic errors are implemented.
 - Existing lifecycle, blocking-input, duplicate-run, stale recovery, asynchronous 202, and terminal/failed rerun semantics are preserved.
-- Validation: TypeScript 0 errors; targeted workflow run tests 26/26; security tests 73/73; full tests 632/632; build pass with 10 warnings.
+- Validation after focused-review remediation: TypeScript 0 errors; targeted workflow run tests 32/32; security tests 73/73; full tests 638/638; build pass with 10 warnings.
 - Protected handlers: 12. Remaining handlers: 34. B3B resume and B3C abort remain untouched and NOT STARTED.
 
 ## 1. Executive Summary
