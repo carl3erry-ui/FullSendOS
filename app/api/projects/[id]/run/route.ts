@@ -3,6 +3,13 @@ import { beginWorkflowRun, getActiveRunSnapshot, isActiveRun, markRunStaleAsFail
 import { runExistingProject } from "../../../../../src/orchestrator/orchestrator.js";
 import { loadProject } from "../../../../../src/storage/projectStore.js";
 import { listHumanInputRequests } from "@/services/human-input-service";
+import { requireAuthenticatedActor, recordAllow, recordDeny } from "@/lib/security/route-guards";
+import { authorizeWorkflowAction } from "@/lib/security/workflow-authorization";
+import {
+  concealedNotFound,
+  isSecurityRouteError,
+  toSecurityErrorResponse,
+} from "@/lib/security/security-response";
 
 type FieldValidationError = {
   path: string;
@@ -16,8 +23,6 @@ type RouteError = {
 };
 
 export function normalizeRouteError(error: unknown): RouteError {
-  const message = error instanceof Error ? error.message : "Unknown error";
-
   if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {
     return { status: 404, message: "Project not found." };
   }
@@ -37,11 +42,11 @@ export function normalizeRouteError(error: unknown): RouteError {
     };
   }
 
-  if (message.includes("XAI_API_KEY is not configured")) {
-    return { status: 503, message };
+  if (error instanceof Error && error.message.includes("XAI_API_KEY is not configured")) {
+    return { status: 503, message: "Workflow provider is unavailable." };
   }
 
-  return { status: 500, message };
+  return { status: 500, message: "An unexpected error occurred while starting the workflow." };
 }
 
 function normalizeLifecycleStatus(project: { lifecycleStatus?: string }) {
@@ -61,13 +66,41 @@ function notRunnableLifecycleResponse(lifecycleStatus: string) {
   );
 }
 
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  let actor: Awaited<ReturnType<typeof requireAuthenticatedActor>> | null = null;
+  const action = {
+    action: "workflow_run",
+    resourceType: "project",
+    resourceId: "unknown",
+  };
+
   try {
     const { id } = await params;
-    const project = await loadProject(id);
+    action.resourceId = id;
+
+    actor = await requireAuthenticatedActor(request, action);
+
+    let project;
+    try {
+      project = await loadProject(id);
+    } catch (error) {
+      if (typeof error === "object" && error && "code" in error && error.code === "ENOENT") {
+        concealedNotFound("workflow_project_not_found");
+      }
+      throw error;
+    }
+
+    authorizeWorkflowAction({
+      actor,
+      project,
+      engagementId: id,
+      action: "run",
+    });
+
     const lifecycleStatus = normalizeLifecycleStatus(project);
 
     if (lifecycleStatus !== "active") {
+      await recordDeny(actor, action, "workflow_lifecycle_not_runnable");
       return notRunnableLifecycleResponse(lifecycleStatus);
     }
 
@@ -77,17 +110,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     });
 
     if (blockingRequests.length > 0) {
+      await recordDeny(actor, action, "workflow_blocking_input_required");
       return NextResponse.json(
         {
           error: "Human input is required before this workflow can continue.",
-          blockingRequests: blockingRequests.slice(0, 8).map((request) => ({
-            id: request.id,
-            title: request.title,
-            prompt: request.prompt,
-            relatedField: request.relatedField || null,
-            requiredToContinue: request.requiredToContinue,
-            status: request.status,
-          })),
+          blockingRequestCount: blockingRequests.length,
         },
         { status: 409 },
       );
@@ -97,6 +124,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     if (isActiveRun(project)) {
       const active = getActiveRunSnapshot(project);
+      await recordDeny(actor, action, "workflow_run_already_active");
       return NextResponse.json(
         {
           error: "Workflow is already running for this project.",
@@ -122,9 +150,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         console.log("workflow-progress", event.type, event.department || project.id);
       },
     }).catch((backgroundError) => {
-      const message = backgroundError instanceof Error ? backgroundError.message : "Unknown background workflow error";
-      console.error("workflow-run-background-error", project.id, message);
+      console.error("workflow-run-background-error", project.id, backgroundError instanceof Error ? backgroundError.name : "Error");
     });
+
+    await recordAllow(actor, action, "workflow_run_started");
 
     return NextResponse.json(
       {
@@ -135,6 +164,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       { status: 202 },
     );
   } catch (error) {
+    if (isSecurityRouteError(error)) {
+      if (error.status !== 401) {
+        await recordDeny(actor, action, error.reasonCode);
+      }
+      return toSecurityErrorResponse(error);
+    }
+
     const normalized = normalizeRouteError(error);
     return NextResponse.json(
       normalized.fieldErrors
