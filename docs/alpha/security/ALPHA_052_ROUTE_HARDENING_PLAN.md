@@ -22,6 +22,8 @@ Current baseline for planning:
 - ALPHA-052 B3A workflow run/start status: COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`
 - ALPHA-052 B3B workflow resume status: NOT STARTED
 - ALPHA-052 B3B transaction-boundary design status: COMPLETE (`docs/alpha/security/ALPHA_052_B3B_RESUME_TRANSACTION_DESIGN.md`)
+- ALPHA-052 B3B supersession status: PR #48 SUPERSEDED — UNMERGED; replacement must start from clean `main`
+- Alpha persistence constraint: single serving instance plus persistent durable filesystem (ADR-004); multi-instance file-backed serving prohibited
 - ALPHA-052 B3C workflow abort status: NOT STARTED
 - Security follow-up: Issue #42 satisfied by explicit audit-failure coverage in `services/security-route-guards.test.ts`
 - Build-warning follow-up: Issue #43

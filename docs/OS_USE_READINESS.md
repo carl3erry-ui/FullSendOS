@@ -143,6 +143,8 @@ Scenario: `Hardware Brewery Acquisition Review`
 
 - No authentication/authorization layer for multi-tenant client-facing deployment.
 - Local file-backed storage only; no built-in backup/restore automation.
+- Current Alpha deployment is restricted to one serving instance with a persistent durable filesystem. Multi-instance serving is prohibited while file-backed coordination is active.
+- The current filesystem persistence model is not approved for production-grade multi-instance coordination; see ADR-004 in `docs/DECISIONS.md`.
 - No DOCX/PPTX export yet.
 - No client portal delivery path yet.
 - No email/share workflow yet.
@@ -157,6 +159,7 @@ Scenario: `Hardware Brewery Acquisition Review`
 - `production-blocking`: Missing auth and access control for external/client-facing deployment.
 - `production-blocking`: No formal backup/restore and data retention policy automation.
 - `production-blocking`: No hardened deployment checklist (domain/HTTPS/secret manager/ops monitoring) implemented in-repo.
+- `production-blocking`: No governed shared durable coordination mechanism with proven cross-instance atomic fencing and recovery.
 
 ## 15. Recommended next fixes
 
@@ -199,6 +202,9 @@ Scenario: `Hardware Brewery Acquisition Review`
 - [ ] Confirm `XAI_MODEL` and `XAI_DEFAULT_MODEL` are aligned.
 - [ ] Confirm `NODE_ENV` and fallback expectation (`XAI_DEV_FALLBACK`) are intentional.
 - [ ] Confirm data storage location (`data/*`) is known to operator.
+- [ ] Confirm exactly one application serving instance handles all Alpha requests.
+- [ ] Confirm the Alpha state filesystem is persistent across ordinary process restart.
+- [ ] Confirm horizontal scaling and independent replicas are disabled while file-backed coordination is active.
 - [ ] Confirm no secrets in logs during startup and workflow runs.
 - [ ] Confirm backup approach for `data/` before real client usage.
 - [ ] Confirm user access model for who can run/edit/share outputs.

@@ -5,6 +5,15 @@ Status: DESIGN RESOLUTION COMPLETE; B3B IMPLEMENTATION NOT STARTED
 Starting main commit: `a5b4ef1ad0b9628ddffcbadd054b94225e5eddd5`
 Route: `POST /api/engagements/[id]/workflow/resume`
 
+PMO deployment/persistence resolution (2026-08-26):
+
+- ADR-004 in `docs/DECISIONS.md` approves the current file-backed Alpha only as one serving instance using a persistent durable filesystem.
+- Multi-instance serving is prohibited while filesystem-backed state and claims are used.
+- B3B design is APPROVED; implementation remains NOT STARTED.
+- PR #48 (`feature/alpha-052-b3b-workflow-resume-security`, head `a172070bbbe58dd3acc12e1fdd2b93c1a53659dc`) is SUPERSEDED — UNMERGED and must not merge.
+- Replacement B3B implementation must start from clean `main` and implement this durable resume-operation lifecycle.
+- Automatic lease expiry, takeover, ambiguous retry, task/provider/tool re-execution, continuation replay, new public pause states, and mutating recovery endpoints remain not approved.
+
 ## 1. Executive Summary
 
 The merged resume path is not safe against concurrent replay. Two requests can both read the same pause as `waiting_for_approval`, both read the linked task as approved and queued, and both enter `AgentExecutor.execute`. The executor's duplicate check is also read-before-write, so both requests can pass it before either persists `running`. Both may create execution records, invoke providers or tools, persist output, and, in the worst interleaving, launch continuation.

@@ -11,6 +11,8 @@ B3B design resolution (2026-08-26):
 - The approved design uses a durable exclusive resume-operation claim, revalidation under claim, no external execution before claim, and forward recovery after execution may have started.
 - Automatic lease expiry, automatic task re-execution, automatic continuation replay, and new public pause states are not approved.
 - B3B implementation remains NOT STARTED. Protected handlers remain 12 and remaining handlers remain 34.
+- ADR-004 approves only a single-serving-instance Alpha deployment with persistent durable file-backed state; multi-instance serving is prohibited.
+- PR #48 is SUPERSEDED — UNMERGED and must not merge. Replacement B3B implementation must start from clean `main` under the approved design.
 
 Implementation update (2026-08-15):
 - B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`.

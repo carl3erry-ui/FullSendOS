@@ -42,7 +42,7 @@ Legend:
 | `/api/engagements/[id]/exports/[exportId]/download` | `GET` | `PARTIAL` | Scoped download only; filenames must stay safe | Project ownership + export ownership | `B5` | `TBD` | `loadProject`, `getDeliverableExport` | `TBD` | Pending ALPHA-052-05 |
 | `/api/engagements/[id]/human-input` | `GET` | `PARTIAL` | Scoped read only | Project ownership + engagement ID | `B7` | `TBD` | `listHumanInputRequests({ engagementId })` | `TBD` | Pending ALPHA-052-08 |
 | `/api/engagements/[id]/run` | `POST` | `FULL` | `internal_admin` allowed after stored ownership validation; `internal_operator` and `client_user` denied | Stored project `clientId`; engagement alias delegates with route ID as the canonical project/engagement ID | `B3A` | `PASS` | `app/api/projects/[id]/run/route.ts`, `lib/security/workflow-authorization.ts`, `services/workflow-run-security.test.ts`, `services/workflow-run-route.test.ts` | `#47` | Protected now (ALPHA-052 B3A) |
-| `/api/engagements/[id]/workflow/resume` | `POST` | `PARTIAL` | Internal admin/internal operator only | Project ownership + pause state ownership | `B3` | `TBD` | `loadProject`, `loadPauseState`, `findActivePauseForProject` | `TBD` | Pending ALPHA-052-04 |
+| `/api/engagements/[id]/workflow/resume` | `POST` | `PARTIAL` | Planned: `internal_admin` only; `internal_operator` and `client_user` denied | Stored project `clientId` plus strict pause/project/task/workflow linkage and durable claim fencing | `B3B` | `DESIGN PASS; IMPLEMENTATION TBD` | `docs/alpha/security/ALPHA_052_B3B_RESUME_TRANSACTION_DESIGN.md`, ADR-004 in `docs/DECISIONS.md` | `#48 SUPERSEDED — UNMERGED; replacement TBD` | B3B NOT STARTED; replacement must start from clean `main` |
 
 ## Human Input
 

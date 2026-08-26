@@ -8,7 +8,7 @@ Status legend:
 
 Unknown planning fields remain TBD by design.
 
-Current ALPHA-052 security note (2026-08-15): ALPHA-052 remains IN PROGRESS. B3 readiness is COMPLETE and B3A workflow run/start security is COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`. B3B resume and B3C abort are NOT STARTED. Protected handlers: 12. Remaining handlers: 34. Evidence: `app/api/projects/[id]/run/route.ts`, `lib/security/workflow-authorization.ts`, `services/workflow-run-security.test.ts`, and `services/workflow-run-route.test.ts`.
+Current ALPHA-052 security note (2026-08-26): ALPHA-052 remains IN PROGRESS. B3 readiness and the B3B transaction design are APPROVED; B3A workflow run/start security is COMPLETE and merged. B3B implementation and B3C abort are NOT STARTED. PR #48 is SUPERSEDED — UNMERGED; replacement B3B implementation must start from clean `main` under `docs/alpha/security/ALPHA_052_B3B_RESUME_TRANSACTION_DESIGN.md` and ADR-004. Current Alpha file-backed deployment is restricted to one serving instance with a persistent durable filesystem; multi-instance serving is prohibited. Protected handlers: 12. Remaining handlers: 34.
 
 | DoD ID | Definition of Done Item | Current Status | Supporting Files | Future GitHub Issue | Future Branch | Future PR | Acceptance Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |

@@ -16,6 +16,17 @@ Rule:
 - [ ] Stale run and duplicate-run handling are validated. (ALPHA-020, ALPHA-022)
 - [ ] Abort behavior for running and non-running workflows is validated. (ALPHA-023)
 
+## Deployment And Persistence
+
+- [ ] Controlled Alpha deployment uses exactly one application serving instance. (ALPHA-052, ADR-004)
+- [ ] Project, workflow-pause, task/execution, and resume-operation state use persistent storage that survives ordinary process restart. (ALPHA-052, ALPHA-056, ADR-004)
+- [ ] Deployment evidence confirms no horizontal/multi-instance serving while file-backed coordination is active. (ALPHA-052, ADR-004)
+- [ ] Backup and controlled recovery procedures for the Alpha data volume are reviewed. (ALPHA-056, ADR-004)
+
+Controlled Alpha/internal/pilot deployment is permitted only as a single serving instance with a persistent durable filesystem. Multi-instance production deployment is NOT APPROVED with the current file-backed persistence model.
+
+Before production-grade horizontal deployment, evidence must demonstrate shared durable workflow coordination, cross-instance atomic fencing, a codified deployment topology, persistence recovery validation, and production concurrency testing. The eventual shared persistence technology remains a future architecture decision.
+
 ## Product
 
 - [ ] Core user journey is validated from client selection to export. (ALPHA-013, ALPHA-014, ALPHA-015, ALPHA-017, ALPHA-018)
