@@ -12,6 +12,7 @@ import {
   claimResumeOperation,
   loadResumeOperation,
   releaseResumeOperationBeforeExecution,
+  type ResumeOperationPhase,
 } from "./workflow-resume-operation-store";
 import { buildPauseState } from "./workflow-resume";
 import { loadPauseState, markPauseResumedWithClaim, savePauseState } from "./workflow-pause-store";
@@ -29,6 +30,53 @@ function claimInput(pauseId: string) {
     taskId: `task-${pauseId}`,
     actorId: "admin-operation-test",
   };
+}
+
+async function operationAtPhase(pauseId: string, phase: ResumeOperationPhase) {
+  const result = await claimResumeOperation(claimInput(pauseId));
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error("claim failed");
+  const claimId = result.operation.claimId;
+  const path: ResumeOperationPhase[] = [
+    "claimed",
+    "execution_committed",
+    "task_completed",
+    "pause_finalized",
+    "continuation_committed",
+  ];
+  if (phase === "failed" || phase === "recovery_required") {
+    await advanceResumeOperation({
+      pauseId,
+      claimId,
+      expectedPhase: "claimed",
+      nextPhase: "execution_committed",
+    });
+    await advanceResumeOperation({
+      pauseId,
+      claimId,
+      expectedPhase: "execution_committed",
+      nextPhase: phase,
+    });
+    return { claimId };
+  }
+  const targetIndex = phase === "completed" ? path.length - 1 : path.indexOf(phase);
+  for (let index = 0; index < targetIndex; index += 1) {
+    await advanceResumeOperation({
+      pauseId,
+      claimId,
+      expectedPhase: path[index],
+      nextPhase: path[index + 1],
+    });
+  }
+  if (phase === "completed") {
+    await advanceResumeOperation({
+      pauseId,
+      claimId,
+      expectedPhase: "continuation_committed",
+      nextPhase: phase,
+    });
+  }
+  return { claimId };
 }
 
 test.after(async () => {
@@ -166,4 +214,65 @@ test("partial operation evidence remains an exclusive conflict", async () => {
   if (result.ok) return;
   assert.equal(result.code, "already_claimed");
   assert.equal(result.operation, null);
+});
+
+test("resume operation store permits every governed legal phase transition", async () => {
+  const legal: Array<[ResumeOperationPhase, ResumeOperationPhase]> = [
+    ["claimed", "execution_committed"],
+    ["execution_committed", "task_completed"],
+    ["execution_committed", "failed"],
+    ["execution_committed", "recovery_required"],
+    ["task_completed", "pause_finalized"],
+    ["task_completed", "recovery_required"],
+    ["pause_finalized", "continuation_committed"],
+    ["pause_finalized", "completed"],
+    ["pause_finalized", "recovery_required"],
+    ["continuation_committed", "completed"],
+    ["continuation_committed", "failed"],
+    ["continuation_committed", "recovery_required"],
+  ];
+
+  for (const [from, to] of legal) {
+    const pauseId = `legal-${from}-${to}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { claimId } = await operationAtPhase(pauseId, from);
+    const updated = await advanceResumeOperation({ pauseId, claimId, expectedPhase: from, nextPhase: to });
+    assert.equal(updated.phase, to);
+  }
+});
+
+test("resume operation store rejects skipped, backward, sibling, and terminal reopening transitions", async () => {
+  const illegal: Array<[ResumeOperationPhase, ResumeOperationPhase]> = [
+    ["claimed", "completed"],
+    ["claimed", "task_completed"],
+    ["execution_committed", "claimed"],
+    ["task_completed", "execution_committed"],
+    ["completed", "execution_committed"],
+    ["completed", "claimed"],
+    ["failed", "claimed"],
+    ["recovery_required", "claimed"],
+  ];
+
+  for (const [from, to] of illegal) {
+    const pauseId = `illegal-${from}-${to}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const { claimId } = await operationAtPhase(pauseId, from);
+    await assert.rejects(
+      advanceResumeOperation({ pauseId, claimId, expectedPhase: from, nextPhase: to }),
+      (error: unknown) => error instanceof ResumeOperationFenceError && error.code === "illegal_transition",
+    );
+    assert.equal((await loadResumeOperation(pauseId))?.phase, from);
+  }
+});
+
+test("resume operation store rejects a correct claim with the wrong expected phase", async () => {
+  const pauseId = `wrong-expected-${Date.now()}`;
+  const { claimId } = await operationAtPhase(pauseId, "execution_committed");
+  await assert.rejects(
+    advanceResumeOperation({
+      pauseId,
+      claimId,
+      expectedPhase: "claimed",
+      nextPhase: "execution_committed",
+    }),
+    (error: unknown) => error instanceof ResumeOperationFenceError && error.code === "phase_mismatch",
+  );
 });

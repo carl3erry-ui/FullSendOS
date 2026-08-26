@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,8 +13,13 @@ import { globalProviderRegistry } from "../ai/provider-registry";
 import { createEmptyProject } from "../src/schemas/projectSchema.js";
 import { saveProject } from "../src/storage/projectStore.js";
 import { buildPauseState, resumeWorkflowAfterApproval } from "./workflow-resume";
-import { loadPauseState, savePauseState } from "./workflow-pause-store";
-import { loadResumeOperation } from "./workflow-resume-operation-store";
+import { loadPauseState, markPauseResumedWithClaim, savePauseState } from "./workflow-pause-store";
+import {
+  advanceResumeOperation,
+  claimResumeOperation,
+  loadResumeOperation,
+  type ResumeOperationPhase,
+} from "./workflow-resume-operation-store";
 import { createTestAuthHeader } from "./test-auth";
 import { createTestNextRequest } from "./test-next-request";
 import {
@@ -131,6 +137,91 @@ function expectedContext(fixture: Fixture) {
     workflowRunId: fixture.workflowRunId,
     agentTaskId: fixture.taskId,
   };
+}
+
+async function seedPersistedOperation(fixture: Fixture, targetPhase: ResumeOperationPhase) {
+  process.env.WORKFLOW_RESUME_INSTANCE_ID_OVERRIDE = randomUUID();
+  const claim = await claimResumeOperation({
+    pauseId: fixture.pauseId,
+    projectId: fixture.project.id,
+    engagementId: fixture.project.id,
+    workflowRunId: fixture.workflowRunId,
+    taskId: fixture.taskId,
+    actorId: "restart-admin",
+  });
+  delete process.env.WORKFLOW_RESUME_INSTANCE_ID_OVERRIDE;
+  assert.equal(claim.ok, true);
+  if (!claim.ok) throw new Error("failed to seed operation");
+  const claimId = claim.operation.claimId;
+
+  if (targetPhase === "claimed") return claim.operation;
+  await advanceResumeOperation({
+    pauseId: fixture.pauseId,
+    claimId,
+    expectedPhase: "claimed",
+    nextPhase: "execution_committed",
+  });
+  if (targetPhase === "execution_committed") return loadResumeOperation(fixture.pauseId);
+
+  if (targetPhase === "failed" || targetPhase === "recovery_required") {
+    await advanceResumeOperation({
+      pauseId: fixture.pauseId,
+      claimId,
+      expectedPhase: "execution_committed",
+      nextPhase: targetPhase,
+      failureCode: `seed_${targetPhase}`,
+    });
+    return loadResumeOperation(fixture.pauseId);
+  }
+
+  const executionId = `exec-restart-${fixture.taskId}`;
+  const now = new Date().toISOString();
+  await globalExecutionStore.saveExecution({
+    id: executionId,
+    agentTaskId: fixture.taskId,
+    agentId: "researcher",
+    provider: "mock",
+    model: "mock-1.0",
+    status: "completed",
+    attempt: 1,
+    startedAt: now,
+    completedAt: now,
+  });
+  const task = await globalTaskStore.loadTask(fixture.taskId);
+  await globalTaskStore.saveTask({ ...task, status: "completed", output: "{}", completedAt: now, updatedAt: now });
+  await advanceResumeOperation({
+    pauseId: fixture.pauseId,
+    claimId,
+    expectedPhase: "execution_committed",
+    nextPhase: "task_completed",
+    executionId,
+  });
+  if (targetPhase === "task_completed") return loadResumeOperation(fixture.pauseId);
+
+  await markPauseResumedWithClaim({ id: fixture.pauseId, claimId, resumedBy: "restart-admin" });
+  await advanceResumeOperation({
+    pauseId: fixture.pauseId,
+    claimId,
+    expectedPhase: "task_completed",
+    nextPhase: "pause_finalized",
+  });
+  if (targetPhase === "pause_finalized") return loadResumeOperation(fixture.pauseId);
+
+  await advanceResumeOperation({
+    pauseId: fixture.pauseId,
+    claimId,
+    expectedPhase: "pause_finalized",
+    nextPhase: "continuation_committed",
+  });
+  if (targetPhase === "continuation_committed") return loadResumeOperation(fixture.pauseId);
+
+  await advanceResumeOperation({
+    pauseId: fixture.pauseId,
+    claimId,
+    expectedPhase: "continuation_committed",
+    nextPhase: targetPhase,
+  });
+  return loadResumeOperation(fixture.pauseId);
 }
 
 test.afterEach(() => {
@@ -535,6 +626,196 @@ test("provider failure retains failed operation and cannot automatically retry",
     assert.equal(providerCalls, 1);
   } finally {
     globalProviderRegistry.register("mock", originalProvider);
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation releases an abandoned claimed operation without external execution", async () => {
+  const fixture = await createFixture("restart-claimed");
+  await seedPersistedOperation(fixture, "claimed");
+  const originalProvider = globalProviderRegistry.resolve("mock");
+  let providerCalls = 0;
+  globalProviderRegistry.register("mock", {
+    async generateText(request) { providerCalls += 1; return originalProvider.generateText(request); },
+    async generateStructuredResult(request, schema) { providerCalls += 1; return originalProvider.generateStructuredResult(request, schema); },
+  });
+  try {
+    const reconciled = await postWorkflowResume(
+      makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+      { params: Promise.resolve({ id: fixture.project.id }) },
+    );
+    assert.equal(reconciled.status, 409);
+    assert.equal(await loadResumeOperation(fixture.pauseId), null);
+    assert.equal(providerCalls, 0);
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, 0);
+
+    const resumed = await postWorkflowResume(
+      makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+      { params: Promise.resolve({ id: fixture.project.id }) },
+    );
+    assert.equal(resumed.status, 200);
+    assert.equal(providerCalls, 1);
+  } finally {
+    globalProviderRegistry.register("mock", originalProvider);
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation marks execution_committed ambiguity recovery_required without replay", async () => {
+  const fixture = await createFixture("restart-execution-committed");
+  await seedPersistedOperation(fixture, "execution_committed");
+  const originalProvider = globalProviderRegistry.resolve("mock");
+  let providerCalls = 0;
+  globalProviderRegistry.register("mock", {
+    async generateText(request) { providerCalls += 1; return originalProvider.generateText(request); },
+    async generateStructuredResult(request, schema) { providerCalls += 1; return originalProvider.generateStructuredResult(request, schema); },
+  });
+  try {
+    const response = await postWorkflowResume(
+      makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+      { params: Promise.resolve({ id: fixture.project.id }) },
+    );
+    assert.equal(response.status, 409);
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "recovery_required");
+    assert.equal(providerCalls, 0);
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, 0);
+  } finally {
+    globalProviderRegistry.register("mock", originalProvider);
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation forward-finalizes task_completed without task re-execution", async () => {
+  const fixture = await createFixture("restart-task-completed");
+  await seedPersistedOperation(fixture, "task_completed");
+  const executionCount = (await globalExecutionStore.listByTaskId(fixture.taskId)).length;
+  try {
+    const response = await postWorkflowResume(
+      makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+      { params: Promise.resolve({ id: fixture.project.id }) },
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await loadPauseState(fixture.pauseId)).status, "resumed");
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "completed");
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, executionCount);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation completes pause_finalized without continuation and without task execution", async () => {
+  const fixture = await createFixture("restart-pause-finalized");
+  await seedPersistedOperation(fixture, "pause_finalized");
+  const executionCount = (await globalExecutionStore.listByTaskId(fixture.taskId)).length;
+  try {
+    const response = await postWorkflowResume(
+      makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+      { params: Promise.resolve({ id: fixture.project.id }) },
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "completed");
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, executionCount);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation commits and hands off required continuation once without task replay", async () => {
+  const fixture = await createFixture("restart-pause-continuation", { pendingStepIds: ["publishing"] });
+  await seedPersistedOperation(fixture, "pause_finalized");
+  const executionCount = (await globalExecutionStore.listByTaskId(fixture.taskId)).length;
+  let continuationCalls = 0;
+  try {
+    const result = await resumeWorkflowAfterApproval(fixture.pauseId, {
+      resumedBy: "resume-v2-admin",
+      expectedContext: expectedContext(fixture),
+      invokeModel: async () => { continuationCalls += 1; return { text: "{}" }; },
+      transactionHooks: {
+        afterContinuationCommitted: async () => {
+          assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "continuation_committed");
+        },
+      },
+    });
+    assert.equal(result.ok, true);
+    assert.equal(continuationCalls >= 1, true);
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "failed");
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, executionCount);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation never replays continuation_committed ambiguity", async () => {
+  const fixture = await createFixture("restart-continuation-committed", { pendingStepIds: ["publishing"] });
+  await seedPersistedOperation(fixture, "continuation_committed");
+  let continuationCalls = 0;
+  try {
+    const result = await resumeWorkflowAfterApproval(fixture.pauseId, {
+      resumedBy: "resume-v2-admin",
+      expectedContext: expectedContext(fixture),
+      invokeModel: async () => { continuationCalls += 1; return { text: "{}" }; },
+    });
+    assert.equal(result.ok, false);
+    assert.equal(continuationCalls, 0);
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "recovery_required");
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation treats completed failed and recovery_required operations as side-effect-free terminal conflicts", async () => {
+  for (const phase of ["completed", "failed", "recovery_required"] as const) {
+    const fixture = await createFixture(`restart-terminal-${phase}`);
+    await seedPersistedOperation(fixture, phase);
+    const executionCount = (await globalExecutionStore.listByTaskId(fixture.taskId)).length;
+    try {
+      const response = await postWorkflowResume(
+        makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader),
+        { params: Promise.resolve({ id: fixture.project.id }) },
+      );
+      assert.equal(response.status, 409);
+      assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, phase);
+      assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, executionCount);
+    } finally {
+      await cleanupFixture(fixture);
+    }
+  }
+});
+
+test("simultaneous restart reconciliation finalizes task_completed exactly once", async () => {
+  const fixture = await createFixture("restart-concurrent-reconciliation");
+  await seedPersistedOperation(fixture, "task_completed");
+  const executionCount = (await globalExecutionStore.listByTaskId(fixture.taskId)).length;
+  try {
+    const responses = await Promise.all([
+      postWorkflowResume(makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader), {
+        params: Promise.resolve({ id: fixture.project.id }),
+      }),
+      postWorkflowResume(makeRequest(fixture.project.id, { pauseStateId: fixture.pauseId }, adminHeader), {
+        params: Promise.resolve({ id: fixture.project.id }),
+      }),
+    ]);
+    assert.deepEqual(responses.map((response) => response.status).sort(), [200, 409]);
+    assert.equal((await loadPauseState(fixture.pauseId)).status, "resumed");
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "completed");
+    assert.equal((await globalExecutionStore.listByTaskId(fixture.taskId)).length, executionCount);
+  } finally {
+    await cleanupFixture(fixture);
+  }
+});
+
+test("restart reconciliation failure becomes recovery_required without backward transition or replay", async () => {
+  const fixture = await createFixture("restart-reconciliation-failure", { pendingStepIds: ["publishing"] });
+  await seedPersistedOperation(fixture, "pause_finalized");
+  const result = await resumeWorkflowAfterApproval(fixture.pauseId, {
+    resumedBy: "resume-v2-admin",
+    expectedContext: expectedContext(fixture),
+    transactionHooks: { afterContinuationCommitted: () => { throw new Error("reconciliation handoff interruption"); } },
+  });
+  try {
+    assert.equal(result.ok, false);
+    assert.equal((await loadResumeOperation(fixture.pauseId))?.phase, "recovery_required");
+  } finally {
     await cleanupFixture(fixture);
   }
 });
