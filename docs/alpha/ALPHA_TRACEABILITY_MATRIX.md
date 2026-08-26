@@ -8,7 +8,7 @@ Status legend:
 
 Unknown planning fields remain TBD by design.
 
-Current ALPHA-052 security note (2026-08-15): ALPHA-052 remains IN PROGRESS. B3 readiness is COMPLETE and B3A workflow run/start security is COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`. B3B resume and B3C abort are NOT STARTED. Protected handlers: 12. Remaining handlers: 34. Evidence: `app/api/projects/[id]/run/route.ts`, `lib/security/workflow-authorization.ts`, `services/workflow-run-security.test.ts`, and `services/workflow-run-route.test.ts`.
+Current ALPHA-052 security note (2026-08-26): ALPHA-052 remains IN PROGRESS. B3 readiness, B3A run/start, and B3B workflow resume security are COMPLETE; B3B is implemented on `feature/alpha-052-b3b-workflow-resume-security` with atomic pause claiming and concurrent replay prevention. B3C abort is NOT STARTED. Protected handlers: 13. Remaining handlers: 33. Evidence: `app/api/engagements/[id]/workflow/resume/route.ts`, `lib/security/workflow-authorization.ts`, `services/workflow-pause-store.ts`, `services/workflow-resume.ts`, and `services/workflow-resume-security.test.ts`.
 
 | DoD ID | Definition of Done Item | Current Status | Supporting Files | Future GitHub Issue | Future Branch | Future PR | Acceptance Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- |

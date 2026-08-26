@@ -7,12 +7,12 @@ Prerequisite merge: PR #41 at `e704e9e2f5cb988ac1e5470a9d08581b3f3f00ed`
 
 ## 1) Executive Summary
 
-ALPHA-052-01 is merged and the security foundation is stable. ALPHA-052-02 B1, ALPHA-052-03A, ALPHA-052-03B, and B3A are complete, and the remaining work is the governed hardening of the 34 route files that are not fully protected yet.
+ALPHA-052-01 is merged and the security foundation is stable. ALPHA-052-02 B1, ALPHA-052-03A, ALPHA-052-03B, B3A, and B3B are complete, and the remaining work is the governed hardening of the 33 route files that are not fully protected yet.
 
 Current baseline for planning:
 - Route files in scope: 46
-- Fully protected handlers on `main`: 12
-- Remaining route files to harden: 34
+- Fully protected handlers after B3B: 13
+- Remaining route files to harden: 33
 - ALPHA-052 status: IN PROGRESS
 - ALPHA-052-01 status: COMPLETE
 - ALPHA-052-03 readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_03_AGENT_TASK_READINESS_REVIEW.md`)
@@ -20,7 +20,7 @@ Current baseline for planning:
 - ALPHA-052-03B approval control hardening status: COMPLETE (approve/reject/request-revision)
 - ALPHA-052 B3 workflow-control readiness review status: COMPLETE (`docs/alpha/security/ALPHA_052_B3_WORKFLOW_CONTROL_READINESS_REVIEW.md`)
 - ALPHA-052 B3A workflow run/start status: COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`
-- ALPHA-052 B3B workflow resume status: NOT STARTED
+- ALPHA-052 B3B workflow resume status: COMPLETE on `feature/alpha-052-b3b-workflow-resume-security`
 - ALPHA-052 B3C workflow abort status: NOT STARTED
 - Security follow-up: Issue #42 satisfied by explicit audit-failure coverage in `services/security-route-guards.test.ts`
 - Build-warning follow-up: Issue #43
@@ -49,7 +49,7 @@ Route families discovered in the current repository:
 | `/api/deliverable-templates` | 1 | None | Public template metadata exposure | Safe reference endpoint, but should remain low-risk and read-only. |
 | `/api/demo/**` | 1 | Hardened | Internal-only operational control | Already protected in the foundation merge. |
 
-Current handler inventory remains 46 total. The twelve protected handlers after B3A are:
+Current handler inventory remains 46 total. The thirteen protected handlers after B3B are:
 - `GET /api/clients/[clientId]/data-room/files`
 - `POST /api/human-input/[id]/answer`
 - `POST /api/human-input/[id]/confirm`
@@ -62,6 +62,7 @@ Current handler inventory remains 46 total. The twelve protected handlers after 
 - `POST /api/demo/seed`
 - `POST /api/projects/[id]/run`
 - `POST /api/engagements/[id]/run`
+- `POST /api/engagements/[id]/workflow/resume`
 
 ## 3) Route Security Policy Matrix
 
@@ -107,7 +108,7 @@ Batch size target: 3 to 7 related handlers.
 | B1 | ALPHA-052-02 | `/api/human-input/[id]/confirm`, `/api/human-input/[id]/reject`, `/api/human-input/[id]/skip` | Critical workflow-steering mutations | `internal_admin` allowed; `internal_operator` denied until assignment model; `client_user` only for stored matching client | Human-input request `clientId` + `engagementId` | `requireAuthenticatedActor`, `requireClientAccess`, deny `internal_operator` until assignment model exists | 401, 403, 404, ownership, audit, invalid-body tests | Low-medium | Small | ALPHA-052-01 helpers | All three routes enforce tenant-safe auth and generic error policy |
 | B2A | ALPHA-052-03A | `/api/agent-tasks/[id]/run` | Critical execution control | `internal_admin` only; `internal_operator` denied until assignment model exists; `client_user` denied | Stored task `projectId` + stored project `clientId` with linkage integrity checks | `requireAuthenticatedActor`, `resolveAgentTaskRunOwnership`, `authorizeAgentTaskAction` | 401, 403, 404, linkage integrity, execution precondition, audit, redaction tests | Medium | Small-medium | ALPHA-052-01 helpers; task ownership model | COMPLETE: run executes only after authn/authz + ownership resolution with safe responses |
 | B2B | ALPHA-052-03B | `/api/agent-tasks/[id]/approve`, `/api/agent-tasks/[id]/reject`, `/api/agent-tasks/[id]/request-revision` | Critical approval/revision controls | `internal_admin` allowed after stored ownership and linkage checks; `internal_operator` denied until assignment model exists; `client_user` denied | Task `projectId` + stored project `clientId` with linkage integrity checks | `requireAuthenticatedActor`, `resolveAgentTaskRunOwnership`, `authorizeAgentTaskAction` | PASS: 401, 403, 404, linkage integrity, audit, overwrite semantics, and safe-response tests in `services/security-route-guards.test.ts` | Medium | Small-medium | B2A helper patterns | COMPLETE: approval/revision controls are tenant-safe and deny-by-default |
-| B3 | ALPHA-052-04 | `/api/engagements/[id]/run`, `/api/engagements/[id]/abort`, `/api/engagements/[id]/workflow/resume`, `/api/projects/[id]/run` | Workflow execution controls | `internal_admin` only; `internal_operator` denied until a durable assignment model exists; `client_user` denied | Stored project `clientId`; resume also requires strict stored pause/task linkage | `requireAuthenticatedActor`, narrow workflow authorization helper | 401, 403, concealed 404, stored ownership/linkage, existing workflow-state contracts, zero-side-effect denial, audit isolation, response redaction, replay/race tests | High | Split B3A/B3B/B3C | Batch B2 helper patterns; pause/task/project stores | READINESS COMPLETE. B3A COMPLETE for both run aliases; B3B resume and B3C abort NOT STARTED. B3 overall remains IN PROGRESS |
+| B3 | ALPHA-052-04 | `/api/engagements/[id]/run`, `/api/engagements/[id]/abort`, `/api/engagements/[id]/workflow/resume`, `/api/projects/[id]/run` | Workflow execution controls | `internal_admin` only; `internal_operator` denied until a durable assignment model exists; `client_user` denied | Stored project `clientId`; resume also requires strict stored pause/task/run linkage and exclusive claim | `requireAuthenticatedActor`, narrow workflow authorization helper, pause claim | 401, 403, concealed 404, stored ownership/linkage, existing workflow-state contracts, zero-side-effect denial, audit isolation, response redaction, replay/race tests | High | Split B3A/B3B/B3C | Batch B2 helper patterns; pause/task/project stores | READINESS COMPLETE. B3A and B3B COMPLETE; B3C abort NOT STARTED. B3 overall remains IN PROGRESS |
 | B4 | ALPHA-052-05 | `/api/clients/[clientId]/data-room/files`, `/api/clients/[clientId]/data-room/files/[fileId]`, `/api/clients/[clientId]/data-room/files/[fileId]/process` | File upload, metadata mutation, and file processing | `internal_admin`, `internal_operator` within client scope, `client_user` only for client-safe surfaces where allowed | Client ID + file metadata ownership | `requireAuthenticatedActor`, `requireClientAccess` | 401, 403, 404, upload, metadata, archive, process, audit tests | Medium-high | Medium | Client file ownership rules | File handlers are tenant-bound and do not leak storage internals |
 | B5 | ALPHA-052-06 | `/api/engagements/[id]/data-room`, `/api/engagements/[id]/data-room/[fileId]`, `/api/engagements/[id]/data-room/[fileId]/process`, `/api/engagements/[id]/exports/[exportId]/download` | Engagement-scoped file/download exposure | `internal_admin`, `internal_operator` within scope | Stored project ownership + engagement-linked file/export ownership | `requireAuthenticatedActor`, `requireEngagementAccess` | 401, 403, 404, concealment, safe download filename, audit tests | High | Medium | Batch B3 or shared engagement helper | Engagement data room and download routes respect tenant boundaries and redaction rules |
 | B6 | ALPHA-052-07 | `/api/projects/[id]`, `/api/projects/[id]/exports`, `/api/projects/[id]/exports/[exportId]` | Project lifecycle and export management | `internal_admin`, `internal_operator` within scope | Stored project `clientId` and export ownership | `requireAuthenticatedActor`, `requireEngagementAccess` | 401, 403, 404, lifecycle, export, validation, audit tests | High | Medium | Batch B3; export store ownership rules | Project lifecycle and export routes become deny-by-default and tenant-safe |
@@ -217,8 +218,8 @@ ALPHA-052 can move toward completion only when all are true:
 | Metric | Value |
 | --- | ---: |
 | Total route files | 46 |
-| Already hardened handlers | 12 |
-| Remaining route files | 34 |
+| Already hardened handlers | 13 |
+| Remaining route files | 33 |
 | Critical-risk families | Human-input mutations, agent-task controls, workflow controls, demo seed, project run |
 | High-risk families | File upload/download, export download, lifecycle mutation routes |
 | Medium-risk families | Tenant-bound reads and detail surfaces |

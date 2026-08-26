@@ -1,7 +1,7 @@
 # ALPHA-052 B3 Workflow Control Readiness Review
 
 Date: 2026-08-15
-Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B AND B3C NOT STARTED
+Status: READINESS REVIEW COMPLETE; B3A AND B3B COMPLETE; B3C NOT STARTED
 Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
 
@@ -10,7 +10,14 @@ Implementation update (2026-08-15):
 - Authentication, stored project `clientId` ownership, admin-only policy, concealed missing-resource handling, metadata-only audit, zero-side-effect denial, blocking-input redaction, and sanitized generic errors are implemented.
 - Existing lifecycle, blocking-input, duplicate-run, stale recovery, asynchronous 202, and terminal/failed rerun semantics are preserved.
 - Validation after focused-review remediation: TypeScript 0 errors; targeted workflow run tests 32/32; security tests 73/73; full tests 638/638; build pass with 10 warnings.
-- Protected handlers: 12. Remaining handlers: 34. B3B resume and B3C abort remain untouched and NOT STARTED.
+B3B implementation update (2026-08-26):
+- `POST /api/engagements/[id]/workflow/resume` is protected on `feature/alpha-052-b3b-workflow-resume-security`.
+- Authentication and stored project authorization precede body parsing, pause/task lookup, mutation, and execution.
+- Stored project `clientId` is authoritative; pause project/engagement, task, approval-target, and workflow-run links must agree.
+- An exclusive filesystem claim is acquired atomically before task execution and held through continuation handoff. Concurrent replay returns the existing 409 contract and produces exactly one execution.
+- Handled precondition failures release the claim for a later valid retry. Process-crash orphan claims fail closed and require controlled operational recovery; they are never auto-expired into potentially duplicate external execution.
+- Validation: TypeScript 0 errors; targeted resume 79/79; security 73/73; full 653/653; build pass with 10 warnings.
+- Protected handlers: 13. Remaining handlers: 33. B3C abort remains unchanged and NOT STARTED.
 
 ## 1. Executive Summary
 
@@ -37,7 +44,7 @@ Recommended delivery is three PRs: B3A for both run aliases, B3B for resume, and
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `POST` | `/api/projects/[id]/run` | `app/api/projects/[id]/run/route.ts` | FULL in B3A: authn, stored ownership, admin-only authz, audit, redaction, safe errors | CRITICAL | Yes: stale failure, active run, department results, deliverables, terminal status | Yes, background | Provider calls directly; downstream department execution and persistence; no formal agent-step invocation in this route | No |
 | `POST` | `/api/engagements/[id]/run` | `app/api/engagements/[id]/run/route.ts` | FULL in B3A: delegates exactly to protected project run | CRITICAL | Same as project run | Yes, background | Same as project run | No |
-| `POST` | `/api/engagements/[id]/workflow/resume` | `app/api/engagements/[id]/workflow/resume/route.ts` | PARTIAL: stored project/pause checks and approval-state checks; no authn/authz | CRITICAL | Yes: task, execution, pause, project run, departments, deliverables | Yes, agent execution followed by optional background continuation | Agent executor, provider, task/execution stores, and continuation provider calls | Yes |
+| `POST` | `/api/engagements/[id]/workflow/resume` | `app/api/engagements/[id]/workflow/resume/route.ts` | FULL in B3B: authn, stored ownership/linkage, admin-only authz, atomic claim, audit, redaction, safe errors | CRITICAL | Yes: task, execution, pause, project run, departments, deliverables | Yes, agent execution followed by optional background continuation | Agent executor, provider, task/execution stores, and continuation provider calls | Yes |
 | `POST` | `/api/engagements/[id]/abort` | `app/api/engagements/[id]/abort/route.ts` | PARTIAL: stored project and active-state check; no authn/authz | CRITICAL | Yes: project status, active run, running audit entries, warnings | No; it does not stop already-running work | No new calls, but existing background work may continue | No |
 
 ### Investigated but excluded
@@ -50,10 +57,10 @@ Recommended delivery is three PRs: B3A for both run aliases, B3B for resume, and
 ### Exact proposed B3 scope
 
 - B3A: COMPLETE for both public run aliases through their one shared handler.
-- B3B: workflow resume only.
+- B3B: COMPLETE for workflow resume with atomic claim/replay protection.
 - B3C: abort only, retaining its status-recording contract and explicit limitations.
 
-Protected handlers are 12 and remaining handlers are 34 on `main` after PR #47.
+Protected handlers are 13 and remaining handlers are 33 after B3B implementation.
 
 ## 3. Current Protection State and Handler Flow
 
@@ -459,4 +466,4 @@ B3 implementation is acceptable only when:
 6. Focused security re-review and merge B3C.
 7. Update handler counts and ALPHA-052 progress only after each implementation merge.
 
-B3 readiness result: **READY**. B3A is COMPLETE on its governed feature branch; B3 overall remains IN PROGRESS, subject to the B3B atomic resume design gate and the explicit B3C status-only boundary.
+B3 readiness result: **READY**. B3A and B3B are COMPLETE; B3 overall remains IN PROGRESS subject to the explicit B3C status-only boundary.
