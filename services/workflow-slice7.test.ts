@@ -45,6 +45,8 @@ import {
   findActivePauseForProject,
   markPauseResumed,
   markPauseCancelled,
+  claimPauseForResume,
+  WorkflowPauseClaimError,
 } from "../services/workflow-pause-store";
 
 // Resume
@@ -698,6 +700,70 @@ test("PausedWorkflowState saves and loads correctly", async () => {
   assert.ok(loaded.pausedAt);
   assert.equal(loaded.agentTaskId, "task-roundtrip");
   assert.equal(loaded.requiredApprovalTarget, "agent_task:task-roundtrip");
+});
+
+test("pause resume claim is exclusive and token owner can release it", async () => {
+  const pauseId = `pause-exclusive-claim-${Date.now()}`;
+  await savePauseState(buildPauseState({
+    pauseId,
+    workflowRunId: "run-exclusive-claim",
+    projectId: "project-exclusive-claim",
+    engagementId: "project-exclusive-claim",
+    stepId: "step-exclusive-claim",
+    agentTaskId: "task-exclusive-claim",
+  }));
+
+  const claim = await claimPauseForResume(pauseId);
+  await assert.rejects(
+    claimPauseForResume(pauseId),
+    (error: unknown) => error instanceof WorkflowPauseClaimError && error.code === "already_claimed",
+  );
+
+  await claim.release();
+  const nextClaim = await claimPauseForResume(pauseId);
+  await nextClaim.release();
+});
+
+test("claimed pause rejects replay before approved task execution", async () => {
+  const taskId = `task-claimed-replay-${Date.now()}`;
+  const now = nowStr();
+  await globalTaskStore.saveTask({
+    id: taskId,
+    agentId: "researcher",
+    title: "Claimed Replay Task",
+    objective: "Prove replay cannot execute",
+    status: "queued",
+    approvalStatus: "approved",
+    priority: "high",
+    provider: "mock",
+    model: "mock-1.0",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const pauseId = `pause-claimed-replay-${Date.now()}`;
+  await savePauseState(buildPauseState({
+    pauseId,
+    workflowRunId: "run-claimed-replay",
+    projectId: "project-claimed-replay",
+    engagementId: "project-claimed-replay",
+    stepId: "step-claimed-replay",
+    agentTaskId: taskId,
+  }));
+
+  const claim = await claimPauseForResume(pauseId);
+  try {
+    const replayResult = await resumeWorkflowAfterApproval(pauseId);
+    assert.equal(replayResult.ok, false);
+    if (replayResult.ok) return;
+    assert.equal(replayResult.code, "already_resumed");
+
+    const task = await globalTaskStore.loadTask(taskId);
+    assert.equal(task.status, "queued");
+    assert.equal(task.output, undefined);
+  } finally {
+    await claim.release();
+  }
 });
 
 // ---------------------------------------------------------------------------
