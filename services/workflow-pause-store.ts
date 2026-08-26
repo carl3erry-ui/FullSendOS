@@ -11,7 +11,9 @@
 
 import fs from "fs/promises";
 import path from "path";
+import { randomUUID } from "node:crypto";
 import { PausedWorkflowStateSchema, type PausedWorkflowState } from "./workflow-step-schema";
+import { assertResumeOperationOwner } from "./workflow-resume-operation-store";
 
 export type { PausedWorkflowState };
 
@@ -35,7 +37,25 @@ function pauseFilePath(id: string): string {
 export async function savePauseState(state: PausedWorkflowState): Promise<void> {
   await ensureDir();
   const validated = PausedWorkflowStateSchema.parse(state);
-  await fs.writeFile(pauseFilePath(validated.id), JSON.stringify(validated, null, 2), "utf-8");
+  const file = pauseFilePath(validated.id);
+  const tempFile = `${file}.tmp-${process.pid}-${randomUUID()}`;
+  const handle = await fs.open(tempFile, "wx", 0o600);
+  try {
+    await handle.writeFile(JSON.stringify(validated, null, 2), "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await fs.rename(tempFile, file);
+  let directoryHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
+  try {
+    directoryHandle = await fs.open(PAUSE_DIR, "r");
+    await directoryHandle.sync();
+  } catch {
+    // Some filesystems do not support directory fsync; the file itself is synced.
+  } finally {
+    await directoryHandle?.close();
+  }
 }
 
 /**
@@ -147,6 +167,32 @@ export async function markPauseResumed(
     resumedBy,
   };
 
+  await savePauseState(updated);
+  return updated;
+}
+
+export async function markPauseResumedWithClaim(input: {
+  id: string;
+  claimId: string;
+  resumedBy: string;
+}): Promise<PausedWorkflowState> {
+  await assertResumeOperationOwner({
+    pauseId: input.id,
+    claimId: input.claimId,
+    expectedPhase: "task_completed",
+  });
+
+  const state = await loadPauseState(input.id);
+  if (state.status !== "waiting_for_approval") {
+    throw new Error("Workflow pause cannot be finalized from its current state.");
+  }
+
+  const updated: PausedWorkflowState = {
+    ...state,
+    status: "resumed",
+    resumedAt: new Date().toISOString(),
+    resumedBy: input.resumedBy,
+  };
   await savePauseState(updated);
   return updated;
 }

@@ -27,12 +27,20 @@ import { globalExecutionStore } from "../agents/execution-store";
 import { globalProviderRegistry } from "../ai/provider-registry";
 import {
   loadPauseState,
-  markPauseResumed,
+  markPauseResumedWithClaim,
   markPauseCancelled,
   type PausedWorkflowState,
 } from "./workflow-pause-store";
 import { continueWorkflowAfterResume, type ContinuationResult } from "./workflow-continuation";
 import type { AuditRunEntry } from "../types/project";
+import {
+  advanceResumeOperation,
+  claimResumeOperation,
+  loadResumeOperation,
+  markResumeOperationRecoveryRequired,
+  releaseResumeOperationBeforeExecution,
+  type WorkflowResumeOperation,
+} from "./workflow-resume-operation-store";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -75,9 +83,18 @@ export async function resumeWorkflowAfterApproval(
     resumedBy?: string;
     invokeModel?: (args: { department: string; prompt: string; model: string }) => Promise<{ text: string }>;
     continuationModel?: string;
+    expectedContext?: {
+      projectId: string;
+      engagementId: string;
+      workflowRunId: string;
+      agentTaskId: string;
+    };
+    transactionHooks?: Partial<Record<
+      "afterClaim" | "afterExecutionCommitted" | "afterTaskCompleted" | "afterPauseFinalized" | "afterContinuationCommitted",
+      (operation: WorkflowResumeOperation) => void | Promise<void>
+    >>;
   } = {},
 ): Promise<ResumeResult> {
-  // 1. Load the paused state
   let pauseState: PausedWorkflowState;
   try {
     pauseState = await loadPauseState(pauseStateId);
@@ -85,7 +102,6 @@ export async function resumeWorkflowAfterApproval(
     return { ok: false, reason: `Paused workflow state not found: "${pauseStateId}"`, code: "pause_not_found" };
   }
 
-  // 2. Validate it is still waiting
   if (pauseState.status !== "waiting_for_approval") {
     return {
       ok: false,
@@ -94,7 +110,6 @@ export async function resumeWorkflowAfterApproval(
     };
   }
 
-  // 3. Validate there is an agent task associated
   if (!pauseState.agentTaskId) {
     return {
       ok: false,
@@ -103,7 +118,6 @@ export async function resumeWorkflowAfterApproval(
     };
   }
 
-  // 4. Load and validate the task
   let task;
   try {
     task = await globalTaskStore.loadTask(pauseState.agentTaskId);
@@ -115,7 +129,6 @@ export async function resumeWorkflowAfterApproval(
     };
   }
 
-  // 5. Validate approval was granted
   if (task.approvalStatus !== "approved") {
     return {
       ok: false,
@@ -124,9 +137,90 @@ export async function resumeWorkflowAfterApproval(
     };
   }
 
+  if (
+    options.expectedContext
+    && (
+      pauseState.projectId !== options.expectedContext.projectId
+      || pauseState.engagementId !== options.expectedContext.engagementId
+      || pauseState.workflowRunId !== options.expectedContext.workflowRunId
+      || pauseState.agentTaskId !== options.expectedContext.agentTaskId
+      || task.projectId !== options.expectedContext.projectId
+      || task.engagementId !== options.expectedContext.engagementId
+      || (task.workflowRunId && task.workflowRunId !== options.expectedContext.workflowRunId)
+    )
+  ) {
+    return { ok: false, reason: "Stored workflow linkage is invalid.", code: "invalid_state" };
+  }
+
+  const claim = await claimResumeOperation({
+    pauseId: pauseState.id,
+    projectId: pauseState.projectId,
+    engagementId: pauseState.engagementId,
+    workflowRunId: pauseState.workflowRunId,
+    taskId: task.id,
+    actorId: options.resumedBy ?? "system",
+  });
+  if (!claim.ok) {
+    return { ok: false, reason: "Workflow resume is already in progress or completed.", code: "already_resumed" };
+  }
+
+  const { claimId } = claim.operation;
+  let currentPhase = claim.operation.phase;
+
+  const failRecoveryRequired = async (failureCode: string) => {
+    if (currentPhase === "claimed") {
+      await releaseResumeOperationBeforeExecution({ pauseId: pauseStateId, claimId });
+      return;
+    }
+    try {
+      const operation = await markResumeOperationRecoveryRequired({
+        pauseId: pauseStateId,
+        claimId,
+        expectedPhase: currentPhase,
+        failureCode,
+      });
+      currentPhase = operation.phase;
+    } catch {
+      // Existing durable evidence is retained; never delete or replay after execution commitment.
+    }
+  };
+
+  try {
+    await options.transactionHooks?.afterClaim?.(claim.operation);
+
+    pauseState = await loadPauseState(pauseStateId);
+    task = await globalTaskStore.loadTask(pauseState.agentTaskId ?? "");
+    if (
+      pauseState.status !== "waiting_for_approval"
+      || task.approvalStatus !== "approved"
+      || pauseState.agentTaskId !== claim.operation.taskId
+      || pauseState.projectId !== claim.operation.projectId
+      || pauseState.engagementId !== claim.operation.engagementId
+      || pauseState.workflowRunId !== claim.operation.workflowRunId
+      || (
+        options.expectedContext
+        && (
+          task.projectId !== claim.operation.projectId
+          || task.engagementId !== claim.operation.engagementId
+          || (task.workflowRunId && task.workflowRunId !== claim.operation.workflowRunId)
+        )
+      )
+    ) {
+      await releaseResumeOperationBeforeExecution({ pauseId: pauseStateId, claimId });
+      return { ok: false, reason: "Workflow resume preconditions changed.", code: "invalid_state" };
+    }
+
+    let operation = await advanceResumeOperation({
+      pauseId: pauseStateId,
+      claimId,
+      expectedPhase: "claimed",
+      nextPhase: "execution_committed",
+    });
+    currentPhase = operation.phase;
+    await options.transactionHooks?.afterExecutionCommitted?.(operation);
+
   const resumedAt = new Date().toISOString();
 
-  // 6. Execute the task via AgentExecutor
   const executor = new AgentExecutor({
     taskStore: globalTaskStore,
     executionStore: globalExecutionStore,
@@ -139,7 +233,6 @@ export async function resumeWorkflowAfterApproval(
 
   const completedAt = new Date().toISOString();
 
-  // 7. Build audit entry for the resume event
   const auditEntry: AuditRunEntry = {
     department: "agent-step",
     type: "agent",
@@ -157,76 +250,112 @@ export async function resumeWorkflowAfterApproval(
   };
 
   if (!execution.ok) {
-    // Task execution failed after approval — mark pause cancelled
     await markPauseCancelled(
       pauseStateId,
-      `Execution failed after approval: ${execution.error?.message}`,
+      "Agent task execution failed after approval.",
     );
-
-    // Update task status to failed
-    await globalTaskStore.saveTask({
-      ...task,
-      status: "failed",
-      error: execution.error?.message,
-      updatedAt: completedAt,
+    operation = await advanceResumeOperation({
+      pauseId: pauseStateId,
+      claimId,
+      expectedPhase: "execution_committed",
+      nextPhase: "failed",
+      failureCode: "task_execution_failed",
+      ...(execution.execution?.id && { executionId: execution.execution.id }),
     });
+    currentPhase = operation.phase;
 
     return {
       ok: false,
-      reason: `Agent task execution failed: ${execution.error?.message}`,
+      reason: "Agent task execution failed.",
       code: "execution_failed",
     };
   }
 
-  // 8. Update task to completed
   await globalTaskStore.saveTask({
-    ...task,
+    ...execution.task,
     status: "completed",
     output: JSON.stringify(execution.output),
     updatedAt: completedAt,
   });
 
-  // 9. Mark pause state as resumed
-  const resumedPause = await markPauseResumed(pauseStateId, options.resumedBy);
+    operation = await advanceResumeOperation({
+      pauseId: pauseStateId,
+      claimId,
+      expectedPhase: "execution_committed",
+      nextPhase: "task_completed",
+      executionId: execution.execution.id,
+    });
+    currentPhase = operation.phase;
+    await options.transactionHooks?.afterTaskCompleted?.(operation);
 
-  // 10. Trigger pipeline continuation if there are pending PIPELINE departments
+    const resumedPause = await markPauseResumedWithClaim({
+      id: pauseStateId,
+      claimId,
+      resumedBy: options.resumedBy ?? "system",
+    });
+    operation = await advanceResumeOperation({
+      pauseId: pauseStateId,
+      claimId,
+      expectedPhase: "task_completed",
+      nextPhase: "pause_finalized",
+    });
+    currentPhase = operation.phase;
+    await options.transactionHooks?.afterPauseFinalized?.(operation);
+
   let continuation: ContinuationResult | null = null;
 
   if (pauseState.pendingStepIds.length > 0) {
+      operation = await advanceResumeOperation({
+        pauseId: pauseStateId,
+        claimId,
+        expectedPhase: "pause_finalized",
+        nextPhase: "continuation_committed",
+      });
+      currentPhase = operation.phase;
+      await options.transactionHooks?.afterContinuationCommitted?.(operation);
+
     if (options.invokeModel) {
-      // Synchronous continuation (test path — invokeModel controls AI calls)
       continuation = await continueWorkflowAfterResume(pauseStateId, {
         invokeModel: options.invokeModel,
         model: options.continuationModel,
       });
+        operation = await advanceResumeOperation({
+          pauseId: pauseStateId,
+          claimId,
+          expectedPhase: "continuation_committed",
+          nextPhase: continuation.ok ? "completed" : "failed",
+          ...(!continuation.ok && { failureCode: "continuation_failed" }),
+        });
+        currentPhase = operation.phase;
     } else {
-      // Asynchronous background continuation (production path)
       continueWorkflowAfterResume(pauseStateId, {
         model: options.continuationModel,
-      }).then((result) => {
-        if (!result.ok) {
-          console.error(
-            "workflow-continuation-failed",
-            pauseStateId,
-            result.reason,
-          );
-        } else {
-          console.log(
-            "workflow-continuation-complete",
-            pauseStateId,
-            result.projectStatus,
-          );
-        }
-      }).catch((err: unknown) => {
-        console.error(
-          "workflow-continuation-error",
-          pauseStateId,
-          err instanceof Error ? err.message : String(err),
-        );
+      }).then(async (result) => {
+        await advanceResumeOperation({
+          pauseId: pauseStateId,
+          claimId,
+          expectedPhase: "continuation_committed",
+          nextPhase: result.ok ? "completed" : "failed",
+          ...(!result.ok && { failureCode: "continuation_failed" }),
+        });
+      }).catch(async () => {
+        await markResumeOperationRecoveryRequired({
+          pauseId: pauseStateId,
+          claimId,
+          expectedPhase: "continuation_committed",
+          failureCode: "continuation_outcome_ambiguous",
+        }).catch(() => undefined);
       });
-      // Continuation started in background — not yet complete
       continuation = null;
     }
+    } else {
+      operation = await advanceResumeOperation({
+        pauseId: pauseStateId,
+        claimId,
+        expectedPhase: "pause_finalized",
+        nextPhase: "completed",
+      });
+      currentPhase = operation.phase;
   }
 
   return {
@@ -236,6 +365,16 @@ export async function resumeWorkflowAfterApproval(
     auditEntry,
     continuation,
   };
+  } catch {
+    await failRecoveryRequired(`resume_${currentPhase}_interrupted`);
+    return {
+      ok: false,
+      reason: currentPhase === "claimed"
+        ? "Workflow resume preconditions failed."
+        : "Workflow resume requires recovery review.",
+      code: currentPhase === "claimed" ? "invalid_state" : "execution_failed",
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
