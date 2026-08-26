@@ -11,6 +11,7 @@
 
 import fs from "fs/promises";
 import path from "path";
+import { randomUUID } from "crypto";
 import { PausedWorkflowStateSchema, type PausedWorkflowState } from "./workflow-step-schema";
 
 export type { PausedWorkflowState };
@@ -27,6 +28,72 @@ function pauseFilePath(id: string): string {
     throw new Error(`Invalid pause state id: "${id}"`);
   }
   return path.join(PAUSE_DIR, `${id}.json`);
+}
+
+function resumeClaimFilePath(id: string): string {
+  pauseFilePath(id);
+  return path.join(PAUSE_DIR, `${id}.resume-claim`);
+}
+
+export class WorkflowPauseClaimError extends Error {
+  readonly code: "already_claimed";
+
+  constructor() {
+    super("Workflow resume is already in progress.");
+    this.code = "already_claimed";
+  }
+}
+
+export type WorkflowPauseResumeClaim = {
+  pauseState: PausedWorkflowState;
+  release: () => Promise<void>;
+};
+
+export async function claimPauseForResume(id: string): Promise<WorkflowPauseResumeClaim> {
+  await ensureDir();
+  const claimPath = resumeClaimFilePath(id);
+  const token = randomUUID();
+  let handle: Awaited<ReturnType<typeof fs.open>>;
+
+  try {
+    handle = await fs.open(claimPath, "wx");
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && error.code === "EEXIST") {
+      throw new WorkflowPauseClaimError();
+    }
+    throw error;
+  }
+
+  try {
+    await handle.writeFile(JSON.stringify({ token, claimedAt: new Date().toISOString() }), "utf8");
+  } finally {
+    await handle.close();
+  }
+
+  try {
+    const pauseState = await loadPauseState(id);
+    let released = false;
+
+    return {
+      pauseState,
+      release: async () => {
+        if (released) return;
+        released = true;
+
+        try {
+          const claim = JSON.parse(await fs.readFile(claimPath, "utf8")) as { token?: unknown };
+          if (claim.token === token) {
+            await fs.rm(claimPath, { force: true });
+          }
+        } catch {
+          // Missing or malformed claims fail closed and are never removed by a non-owner.
+        }
+      },
+    };
+  } catch (error) {
+    await fs.rm(claimPath, { force: true });
+    throw error;
+  }
 }
 
 /**

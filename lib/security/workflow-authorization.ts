@@ -1,12 +1,27 @@
 import type { AuthenticatedActor } from "./types";
-import { forbidden } from "./security-response";
+import { concealedNotFound, forbidden } from "./security-response";
 
 type WorkflowProjectRecord = {
   id: string;
   clientId?: string | null;
 };
 
-export type WorkflowAction = "run";
+type WorkflowPauseRecord = {
+  projectId: string;
+  engagementId: string;
+  workflowRunId: string;
+  agentTaskId?: string;
+  requiredApprovalTarget: string;
+};
+
+type WorkflowTaskRecord = {
+  id: string;
+  projectId?: string | null;
+  engagementId?: string | null;
+  workflowRunId?: string | null;
+};
+
+export type WorkflowAction = "run" | "resume";
 
 export function authorizeWorkflowAction(input: {
   actor: AuthenticatedActor;
@@ -23,7 +38,7 @@ export function authorizeWorkflowAction(input: {
     forbidden("workflow_engagement_project_mismatch");
   }
 
-  if (input.action !== "run") {
+  if (input.action !== "run" && input.action !== "resume") {
     forbidden("workflow_action_unsupported");
   }
 
@@ -36,4 +51,31 @@ export function authorizeWorkflowAction(input: {
   }
 
   forbidden("client_user_internal_control_denied");
+}
+
+export function validateWorkflowResumeLinkage(input: {
+  project: WorkflowProjectRecord;
+  pauseState: WorkflowPauseRecord;
+  task: WorkflowTaskRecord;
+}): void {
+  const { project, pauseState, task } = input;
+  if (pauseState.projectId !== project.id || pauseState.engagementId !== project.id) {
+    concealedNotFound("workflow_pause_project_linkage_mismatch");
+  }
+
+  if (
+    !pauseState.agentTaskId
+    || pauseState.agentTaskId !== task.id
+    || pauseState.requiredApprovalTarget !== `agent_task:${task.id}`
+  ) {
+    concealedNotFound("workflow_pause_task_linkage_mismatch");
+  }
+
+  if (task.projectId !== project.id || task.engagementId !== project.id) {
+    concealedNotFound("workflow_task_project_linkage_mismatch");
+  }
+
+  if (task.workflowRunId && task.workflowRunId !== pauseState.workflowRunId) {
+    concealedNotFound("workflow_run_linkage_mismatch");
+  }
 }

@@ -26,10 +26,11 @@ import { globalAgentRegistry, globalInstanceRegistry } from "../agents/registry"
 import { globalExecutionStore } from "../agents/execution-store";
 import { globalProviderRegistry } from "../ai/provider-registry";
 import {
-  loadPauseState,
+  claimPauseForResume,
   markPauseResumed,
   markPauseCancelled,
   type PausedWorkflowState,
+  WorkflowPauseClaimError,
 } from "./workflow-pause-store";
 import { continueWorkflowAfterResume, type ContinuationResult } from "./workflow-continuation";
 import type { AuditRunEntry } from "../types/project";
@@ -75,15 +76,27 @@ export async function resumeWorkflowAfterApproval(
     resumedBy?: string;
     invokeModel?: (args: { department: string; prompt: string; model: string }) => Promise<{ text: string }>;
     continuationModel?: string;
+    expectedContext?: {
+      projectId: string;
+      engagementId: string;
+      agentTaskId: string;
+      workflowRunId?: string | null;
+    };
   } = {},
 ): Promise<ResumeResult> {
-  // 1. Load the paused state
-  let pauseState: PausedWorkflowState;
+  let claim: Awaited<ReturnType<typeof claimPauseForResume>>;
   try {
-    pauseState = await loadPauseState(pauseStateId);
-  } catch {
+    claim = await claimPauseForResume(pauseStateId);
+  } catch (error) {
+    if (error instanceof WorkflowPauseClaimError) {
+      return { ok: false, reason: "Workflow resume is already in progress.", code: "already_resumed" };
+    }
     return { ok: false, reason: `Paused workflow state not found: "${pauseStateId}"`, code: "pause_not_found" };
   }
+
+  const pauseState: PausedWorkflowState = claim.pauseState;
+
+  try {
 
   // 2. Validate it is still waiting
   if (pauseState.status !== "waiting_for_approval") {
@@ -103,6 +116,21 @@ export async function resumeWorkflowAfterApproval(
     };
   }
 
+  if (
+    options.expectedContext
+    && (
+      pauseState.projectId !== options.expectedContext.projectId
+      || pauseState.engagementId !== options.expectedContext.engagementId
+      || pauseState.agentTaskId !== options.expectedContext.agentTaskId
+      || (
+        options.expectedContext.workflowRunId
+        && pauseState.workflowRunId !== options.expectedContext.workflowRunId
+      )
+    )
+  ) {
+    return { ok: false, reason: "Stored workflow linkage is invalid.", code: "invalid_state" };
+  }
+
   // 4. Load and validate the task
   let task;
   try {
@@ -113,6 +141,17 @@ export async function resumeWorkflowAfterApproval(
       reason: `Agent task "${pauseState.agentTaskId}" not found.`,
       code: "task_not_found",
     };
+  }
+
+  if (
+    options.expectedContext
+    && (
+      task.projectId !== options.expectedContext.projectId
+      || task.engagementId !== options.expectedContext.engagementId
+      || (task.workflowRunId && task.workflowRunId !== pauseState.workflowRunId)
+    )
+  ) {
+    return { ok: false, reason: "Stored agent-task linkage is invalid.", code: "invalid_state" };
   }
 
   // 5. Validate approval was granted
@@ -236,6 +275,9 @@ export async function resumeWorkflowAfterApproval(
     auditEntry,
     continuation,
   };
+  } finally {
+    await claim.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
