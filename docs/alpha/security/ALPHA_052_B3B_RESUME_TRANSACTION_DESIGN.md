@@ -1,7 +1,7 @@
 # ALPHA-052 B3B Workflow Resume Transaction-Boundary Design
 
 Date: 2026-08-26
-Status: DESIGN RESOLUTION COMPLETE; B3B IMPLEMENTED / TESTED — AWAITING REVIEW
+Status: DESIGN RESOLUTION COMPLETE; B3B IMPLEMENTED / TESTED — READY FOR RE-REVIEW
 Starting main commit: `a5b4ef1ad0b9628ddffcbadd054b94225e5eddd5`
 Route: `POST /api/engagements/[id]/workflow/resume`
 
@@ -9,7 +9,7 @@ PMO deployment/persistence resolution (2026-08-26):
 
 - ADR-004 in `docs/DECISIONS.md` approves the current file-backed Alpha only as one serving instance using a persistent durable filesystem.
 - Multi-instance serving is prohibited while filesystem-backed state and claims are used.
-- B3B design is APPROVED; replacement implementation evidence is recorded below as IMPLEMENTED / TESTED — AWAITING REVIEW.
+- B3B design is APPROVED; replacement implementation evidence is recorded below as IMPLEMENTED / TESTED — READY FOR RE-REVIEW.
 - PR #48 (`feature/alpha-052-b3b-workflow-resume-security`, head `a172070bbbe58dd3acc12e1fdd2b93c1a53659dc`) is SUPERSEDED — UNMERGED and must not merge.
 - Replacement B3B implementation must start from clean `main` and implement this durable resume-operation lifecycle.
 - Automatic lease expiry, takeover, ambiguous retry, task/provider/tool re-execution, continuation replay, new public pause states, and mutating recovery endpoints remain not approved.
@@ -24,6 +24,16 @@ Replacement implementation evidence (2026-08-26):
 - Production execution-capable caller review: the secured resume API route is the only non-test caller of `resumeWorkflowAfterApproval`; all execution-capable production entry is bounded by authn/authz/linkage checks.
 - Validation: TypeScript 0 errors; focused B3B 82/82; claim/concurrency 7/7; security 73/73; full 663/663; build PASS with 10 warnings.
 - This evidence is awaiting focused security/transaction review. It is not accepted, merged, released, or production-ready. B3C remains NOT STARTED.
+
+Focused review remediation (2026-08-26):
+
+- The operation store centrally enforces the legal phase graph and rejects skipped, backward, sibling, terminal reopening, stale-claim, and wrong-expected-phase transitions.
+- Restart reconciliation is fenced by an exclusive reconciliation lock and the original claim ID. Persisted `claimed` evidence can be released only after zero-execution proof; `execution_committed` ambiguity becomes `recovery_required`; `task_completed` forward-finalizes the pause without re-execution; `pause_finalized` completes or commits one continuation handoff; `continuation_committed` ambiguity becomes `recovery_required`; terminal phases remain side-effect-free.
+- Live same-instance claims cannot be mistaken for abandoned restart claims; boot-instance ownership differentiates active work under ADR-004 without lease/takeover semantics.
+- No public pause states, recovery endpoint, automatic task/provider/tool replay, automatic ambiguous continuation replay, or new role authority was introduced.
+- Validation after remediation: TypeScript 0; focused B3B 91/91; claim/phase/concurrency 10/10; phase-transition 3/3; restart/reconciliation 9/9; security 73/73; full 675/675; build PASS with 10 warnings.
+- Completed, failed, and recovery-required records remain retained with non-sensitive metadata. Retention lifecycle remains FOLLOW-UP TECHNICAL DEBT.
+- PR #49 remains open/unmerged and is READY FOR RE-REVIEW; accepted-main truth remains 12/34 until merge, while branch truth is 13/33.
 
 ## 1. Executive Summary
 

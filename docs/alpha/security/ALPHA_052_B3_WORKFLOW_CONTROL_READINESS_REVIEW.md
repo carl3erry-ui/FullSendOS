@@ -1,7 +1,7 @@
 # ALPHA-052 B3 Workflow Control Readiness Review
 
 Date: 2026-08-15
-Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B IMPLEMENTED / TESTED — AWAITING REVIEW; B3C NOT STARTED
+Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B IMPLEMENTED / TESTED — READY FOR RE-REVIEW; B3C NOT STARTED
 Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
 
@@ -16,8 +16,8 @@ B3B design resolution (2026-08-26):
 
 B3B replacement implementation update (2026-08-26):
 - `feature/alpha-052-b3b-workflow-resume-security-v2` implements the governed durable transaction design fresh from `main`; no PR #48 commits were reused.
-- Status: IMPLEMENTED / TESTED — AWAITING REVIEW. It is not accepted, merged, released, or production-ready.
-- Validation: TypeScript 0; focused B3B 82/82; claim/concurrency 7/7; security 73/73; full 663/663; build PASS with 10 warnings.
+- Status: IMPLEMENTED / TESTED — READY FOR RE-REVIEW. It is not accepted, merged, released, or production-ready.
+- Validation after review remediation: TypeScript 0; focused B3B 91/91; claim/phase/concurrency 10/10; phase-transition 3/3; restart/reconciliation 9/9; security 73/73; full 675/675; build PASS with 10 warnings.
 - Protected handlers after B3B: 13. Remaining handlers: 33. B3C remains NOT STARTED; B3 overall and ALPHA-052 remain IN PROGRESS.
 
 Implementation update (2026-08-15):
