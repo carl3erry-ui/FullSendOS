@@ -16,6 +16,17 @@ export const ResumeOperationPhaseSchema = z.enum([
 
 export type ResumeOperationPhase = z.infer<typeof ResumeOperationPhaseSchema>;
 
+const LEGAL_PHASE_TRANSITIONS: Readonly<Record<ResumeOperationPhase, readonly ResumeOperationPhase[]>> = {
+  claimed: ["execution_committed"],
+  execution_committed: ["task_completed", "failed", "recovery_required"],
+  task_completed: ["pause_finalized", "recovery_required"],
+  pause_finalized: ["continuation_committed", "completed", "recovery_required"],
+  continuation_committed: ["completed", "failed", "recovery_required"],
+  completed: [],
+  failed: [],
+  recovery_required: [],
+};
+
 export const WorkflowResumeOperationSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   operationId: z.string().uuid(),
@@ -27,6 +38,7 @@ export const WorkflowResumeOperationSchema = z.object({
   taskId: z.string().min(1),
   actorId: z.string().min(1),
   actorRole: z.literal("internal_admin"),
+  ownerInstanceId: z.string().uuid(),
   phase: ResumeOperationPhaseSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -36,12 +48,19 @@ export const WorkflowResumeOperationSchema = z.object({
 
 export type WorkflowResumeOperation = z.infer<typeof WorkflowResumeOperationSchema>;
 
+const BOOT_INSTANCE_ID = randomUUID();
+
+export function getResumeRuntimeInstanceId(): string {
+  const override = process.env.WORKFLOW_RESUME_INSTANCE_ID_OVERRIDE;
+  return override ? z.string().uuid().parse(override) : BOOT_INSTANCE_ID;
+}
+
 export type ResumeOperationClaimResult =
   | { ok: true; operation: WorkflowResumeOperation }
   | { ok: false; code: "already_claimed"; operation: WorkflowResumeOperation | null };
 
 export class ResumeOperationFenceError extends Error {
-  readonly code: "claim_mismatch" | "phase_mismatch" | "operation_not_found";
+  readonly code: "claim_mismatch" | "phase_mismatch" | "illegal_transition" | "operation_not_found";
 
   constructor(code: ResumeOperationFenceError["code"]) {
     super(code);
@@ -66,6 +85,10 @@ function sanitizeId(id: string): string {
 
 function operationPath(pauseId: string): string {
   return new URL(`${sanitizeId(pauseId)}.json`, `file://${operationDirectory()}/`).pathname;
+}
+
+function reconciliationLockPath(pauseId: string): string {
+  return new URL(`${sanitizeId(pauseId)}.reconcile-lock`, `file://${operationDirectory()}/`).pathname;
 }
 
 const openFile = fs.open.bind(fs);
@@ -147,6 +170,7 @@ export async function claimResumeOperation(input: {
     taskId: input.taskId,
     actorId: input.actorId,
     actorRole: "internal_admin",
+    ownerInstanceId: getResumeRuntimeInstanceId(),
     phase: "claimed",
     createdAt: now,
     updatedAt: now,
@@ -183,6 +207,9 @@ export async function advanceResumeOperation(input: {
 
   const expected = Array.isArray(input.expectedPhase) ? input.expectedPhase : [input.expectedPhase];
   if (!expected.includes(current.phase)) throw new ResumeOperationFenceError("phase_mismatch");
+  if (!LEGAL_PHASE_TRANSITIONS[current.phase].includes(input.nextPhase)) {
+    throw new ResumeOperationFenceError("illegal_transition");
+  }
 
   const updated = WorkflowResumeOperationSchema.parse({
     ...current,
@@ -193,6 +220,55 @@ export async function advanceResumeOperation(input: {
   });
   await atomicReplace(operationPath(input.pauseId), updated);
   return updated;
+}
+
+export type ResumeReconciliationClaim =
+  | { ok: true; reconciliationId: string; release: () => Promise<void> }
+  | { ok: false; code: "already_reconciling" };
+
+export async function claimResumeReconciliation(pauseId: string): Promise<ResumeReconciliationClaim> {
+  const file = reconciliationLockPath(pauseId);
+  const reconciliationId = randomUUID();
+  let handle: Awaited<ReturnType<typeof fs.open>>;
+  try {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    handle = await openFile(file, "wx", 0o600);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "EEXIST") {
+      return { ok: false, code: "already_reconciling" };
+    }
+    throw error;
+  }
+
+  try {
+    await handle.writeFile(JSON.stringify({ reconciliationId, createdAt: new Date().toISOString() }), "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await syncDirectory(path.dirname(file));
+
+  let released = false;
+  return {
+    ok: true,
+    reconciliationId,
+    release: async () => {
+      if (released) return;
+      let readHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
+      try {
+        readHandle = await openFile(file, "r");
+        const stored = JSON.parse(await readHandle.readFile("utf8")) as { reconciliationId?: unknown };
+        if (stored.reconciliationId !== reconciliationId) {
+          throw new ResumeOperationFenceError("claim_mismatch");
+        }
+      } finally {
+        await readHandle?.close();
+      }
+      await fs.rm(file);
+      await syncDirectory(path.dirname(file));
+      released = true;
+    },
+  };
 }
 
 export async function assertResumeOperationOwner(input: {
