@@ -1,7 +1,7 @@
 # ALPHA-052 B3 Workflow Control Readiness Review
 
 Date: 2026-08-15
-Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B AND B3C NOT STARTED
+Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B IMPLEMENTED / TESTED — READY FOR RE-REVIEW; B3C NOT STARTED
 Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
 
@@ -10,9 +10,15 @@ B3B design resolution (2026-08-26):
 - Persistence decision: CURRENT PAUSE STORE REQUIRES NARROW EXTENSION.
 - The approved design uses a durable exclusive resume-operation claim, revalidation under claim, no external execution before claim, and forward recovery after execution may have started.
 - Automatic lease expiry, automatic task re-execution, automatic continuation replay, and new public pause states are not approved.
-- B3B implementation remains NOT STARTED. Protected handlers remain 12 and remaining handlers remain 34.
+- B3B design was approved with implementation not started; current replacement implementation status is recorded below.
 - ADR-004 approves only a single-serving-instance Alpha deployment with persistent durable file-backed state; multi-instance serving is prohibited.
 - PR #48 is SUPERSEDED — UNMERGED and must not merge. Replacement B3B implementation must start from clean `main` under the approved design.
+
+B3B replacement implementation update (2026-08-26):
+- `feature/alpha-052-b3b-workflow-resume-security-v2` implements the governed durable transaction design fresh from `main`; no PR #48 commits were reused.
+- Status: IMPLEMENTED / TESTED — READY FOR RE-REVIEW. It is not accepted, merged, released, or production-ready.
+- Validation after review remediation: TypeScript 0; focused B3B 91/91; claim/phase/concurrency 10/10; phase-transition 3/3; restart/reconciliation 9/9; security 73/73; full 675/675; build PASS with 10 warnings.
+- Protected handlers after B3B: 13. Remaining handlers: 33. B3C remains NOT STARTED; B3 overall and ALPHA-052 remain IN PROGRESS.
 
 Implementation update (2026-08-15):
 - B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`.
