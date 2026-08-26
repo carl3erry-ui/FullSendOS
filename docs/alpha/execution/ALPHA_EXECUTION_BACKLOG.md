@@ -8,7 +8,7 @@ Execution policy:
 - Every future pull request must reference one or more ALPHA IDs.
 - Every completed pull request must include DoD items satisfied, acceptance evidence, files modified, tests updated, and remaining dependencies.
 
-Current ALPHA-052 implementation note (2026-08-15): B3 readiness is COMPLETE. B3A workflow run/start security is COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`. B3B resume and B3C abort are NOT STARTED. ALPHA-052 remains IN PROGRESS with 12 protected handlers and 34 remaining handlers. Post-merge validation: TypeScript 0 errors, targeted tests 32/32, security tests 73/73, full tests 638/638, and production build pass with 10 warnings.
+Current ALPHA-052 implementation note (2026-08-26): B3 readiness is COMPLETE. B3A workflow run/start security is COMPLETE; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`. B3B workflow resume transaction design is complete in `docs/alpha/security/ALPHA_052_B3B_RESUME_TRANSACTION_DESIGN.md`; B3B implementation and B3C abort remain NOT STARTED. The B3B design requires a durable exclusive resume-operation claim and forward recovery, and prohibits automatic replay after external execution may have started. ALPHA-052 remains IN PROGRESS with 12 protected handlers and 34 remaining handlers.
 
 | ALPHA ID | Requirement Title | Description | Current Status | Priority | Estimated Complexity | Dependencies | Future GitHub Issue | Future Branch Name | Acceptance Criteria | Acceptance Evidence | PMO Approval Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

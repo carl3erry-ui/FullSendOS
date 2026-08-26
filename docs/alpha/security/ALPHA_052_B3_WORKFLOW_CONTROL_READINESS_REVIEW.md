@@ -5,6 +5,13 @@ Status: READINESS REVIEW COMPLETE; B3A COMPLETE; B3B AND B3C NOT STARTED
 Starting main commit: `6de324773b1ffd5187ed81f343f217983e17b748`
 Scope: ALPHA-052-04 / B3 workflow mutation and execution controls
 
+B3B design resolution (2026-08-26):
+- Workflow resume transaction-boundary design is complete in `docs/alpha/security/ALPHA_052_B3B_RESUME_TRANSACTION_DESIGN.md`.
+- Persistence decision: CURRENT PAUSE STORE REQUIRES NARROW EXTENSION.
+- The approved design uses a durable exclusive resume-operation claim, revalidation under claim, no external execution before claim, and forward recovery after execution may have started.
+- Automatic lease expiry, automatic task re-execution, automatic continuation replay, and new public pause states are not approved.
+- B3B implementation remains NOT STARTED. Protected handlers remain 12 and remaining handlers remain 34.
+
 Implementation update (2026-08-15):
 - B3A protects `POST /api/projects/[id]/run` and its exact `POST /api/engagements/[id]/run` alias; PR #47 merged to `main` at `aab56e39f6905771f147494470418b72c36ce4f9`.
 - Authentication, stored project `clientId` ownership, admin-only policy, concealed missing-resource handling, metadata-only audit, zero-side-effect denial, blocking-input redaction, and sanitized generic errors are implemented.
